@@ -1,0 +1,1458 @@
+const bcrypt = require("bcryptjs");
+
+const User = require("../models/user");
+const Restaurant = require("../models/restaurant");
+const Token = require("../services/tokenService");
+const Email = require("../services/emailService");
+
+// ============================================================
+// CADASTRO COMPLETO DO RESTAURANTE
+// ============================================================
+
+exports.register = async (req, res) => {
+
+    try {
+
+        const {
+            nome,
+            email,
+            telefone,
+            cnpj,
+            categoria,
+
+            responsavel,
+            cpf,
+            senha,
+
+            cep,
+            rua,
+            numero,
+            complemento,
+            bairro,
+            cidade,
+            estado,
+
+            banco,
+            agencia,
+            conta,
+            pix
+        } = req.body;
+
+        // ====================================================
+        // VALIDAÇÕES
+        // ====================================================
+
+        if (!nome || !email || !senha || !telefone) {
+            return res.status(400).json({
+                erro:
+                    "Nome, email, senha e telefone são obrigatórios"
+            });
+        }
+
+        if (!cnpj) {
+            return res.status(400).json({
+                erro: "CNPJ é obrigatório"
+            });
+        }
+
+        if (!responsavel || !cpf) {
+            return res.status(400).json({
+                erro:
+                    "Responsável e CPF são obrigatórios"
+            });
+        }
+
+        if (
+            !cep ||
+            !rua ||
+            !numero ||
+            !bairro ||
+            !cidade ||
+            !estado
+        ) {
+            return res.status(400).json({
+                erro:
+                    "O endereço completo é obrigatório"
+            });
+        }
+
+        if (
+            !banco ||
+            !agencia ||
+            !conta ||
+            !pix
+        ) {
+            return res.status(400).json({
+                erro:
+                    "Os dados de recebimento são obrigatórios"
+            });
+        }
+
+        // ====================================================
+        // NORMALIZAÇÃO
+        // ====================================================
+
+        const emailNormalizado =
+            String(email)
+                .trim()
+                .toLowerCase();
+
+        const cnpjNormalizado =
+            String(cnpj)
+                .replace(/\D/g, "");
+
+        // ====================================================
+        // VERIFICAR EMAIL
+        // ====================================================
+
+        const usuarioExistente =
+            await User.buscarPorEmail(
+                emailNormalizado
+            );
+
+        if (usuarioExistente) {
+            return res.status(409).json({
+                erro:
+                    "Este email já está cadastrado"
+            });
+        }
+
+        // ====================================================
+        // VERIFICAR CNPJ
+        // ====================================================
+
+        const restaurantes =
+            await Restaurant.listar();
+
+        const cnpjExistente =
+            restaurantes.find(
+                restaurante =>
+                    String(restaurante.cnpj)
+                        .replace(/\D/g, "") ===
+                    cnpjNormalizado
+            );
+
+        if (cnpjExistente) {
+            return res.status(409).json({
+                erro:
+                    "Este CNPJ já está cadastrado"
+            });
+        }
+
+        // ====================================================
+        // IDS
+        // ====================================================
+
+        const agora = Date.now();
+
+        const restauranteId =
+            `rest_${agora}`;
+
+        const usuarioId =
+            `user_${agora}`;
+
+        // ====================================================
+        // HASH DA SENHA
+        // ====================================================
+
+        const senhaHash =
+            await bcrypt.hash(
+                senha,
+                10
+            );
+
+        // ====================================================
+        // RESTAURANTE
+        // ====================================================
+
+        const restaurante = {
+
+            id: restauranteId,
+
+            nome:
+                String(nome).trim(),
+
+            cnpj:
+                String(cnpj).trim(),
+
+            categoria:
+                categoria
+                    ? String(categoria).trim()
+                    : "Restaurante",
+
+            email:
+                emailNormalizado,
+
+            telefone:
+                String(telefone).trim(),
+
+            responsavel:
+                String(responsavel).trim(),
+
+            cpf:
+                String(cpf).trim(),
+
+            endereco: {
+
+                cep:
+                    String(cep).trim(),
+
+                rua:
+                    String(rua).trim(),
+
+                numero:
+                    String(numero).trim(),
+
+                complemento:
+                    complemento
+                        ? String(complemento).trim()
+                        : "",
+
+                bairro:
+                    String(bairro).trim(),
+
+                cidade:
+                    String(cidade).trim(),
+
+                estado:
+                    String(estado).trim()
+            },
+
+            pagamento: {
+
+                banco:
+                    String(banco).trim(),
+
+                agencia:
+                    String(agencia).trim(),
+
+                conta:
+                    String(conta).trim(),
+
+                pix:
+                    String(pix).trim()
+            },
+
+            status: "FECHADO",
+
+            online: false,
+
+            aberto: false,
+
+            criadoEm:
+                new Date().toISOString(),
+
+            atualizadoEm:
+                new Date().toISOString()
+        };
+
+        // ====================================================
+        // SALVAR RESTAURANTE
+        // ====================================================
+
+        await Restaurant.criar(
+            restaurante
+        );
+
+        // ====================================================
+        // USUÁRIO
+        // ====================================================
+
+        const usuario = {
+
+            id: usuarioId,
+
+            nome:
+                String(responsavel).trim(),
+
+            email:
+                emailNormalizado,
+
+            telefone:
+                String(telefone).trim(),
+
+            cpf:
+                String(cpf).trim(),
+
+            senha:
+                senhaHash,
+
+            tipo:
+                "RESTAURANTE",
+
+            restauranteId:
+                restauranteId,
+
+            criadoEm:
+                new Date().toISOString(),
+
+            atualizadoEm:
+                new Date().toISOString()
+        };
+
+        // ====================================================
+        // SALVAR USUÁRIO
+        // ====================================================
+
+        await User.criar(
+            usuario
+        );
+
+        // ====================================================
+        // RESPOSTA
+        // ====================================================
+
+        return res.status(201).json({
+
+            sucesso: true,
+
+            mensagem:
+                "Restaurante criado com sucesso",
+
+            usuario: {
+
+                id:
+                    usuario.id,
+
+                nome:
+                    usuario.nome,
+
+                email:
+                    usuario.email,
+
+                telefone:
+                    usuario.telefone,
+
+                tipo:
+                    usuario.tipo,
+
+                restauranteId:
+                    usuario.restauranteId
+            },
+
+            restaurante: {
+
+                id:
+                    restaurante.id,
+
+                nome:
+                    restaurante.nome,
+
+                cnpj:
+                    restaurante.cnpj,
+
+                categoria:
+                    restaurante.categoria,
+
+                status:
+                    restaurante.status,
+
+                online:
+                    restaurante.online
+            }
+        });
+
+    } catch (error) {
+
+        console.error(
+            "ERRO NO CADASTRO:",
+            error
+        );
+
+        return res.status(500).json({
+
+            erro:
+                "Erro interno ao cadastrar restaurante",
+
+            detalhe:
+                error.message
+        });
+    }
+};
+
+// ============================================================
+// LOGIN
+// ============================================================
+
+exports.login = async (req, res) => {
+
+    try {
+
+        const {
+            email,
+            senha
+        } = req.body;
+
+        // ====================================================
+        // VALIDAÇÃO
+        // ====================================================
+
+        if (!email || !senha) {
+
+            return res.status(400).json({
+                erro:
+                    "Email e senha são obrigatórios"
+            });
+        }
+
+        // ============================================================
+// EXCLUIR CONTA DO CLIENTE
+// ============================================================
+
+exports.excluirConta = async (req, res) => {
+
+    try {
+
+        const usuarioId = req.usuario?.id;
+
+        if (!usuarioId) {
+            return res.status(401).json({
+                erro: "Usuário não autenticado"
+            });
+        }
+
+        const usuario = await User.buscarPorId(usuarioId);
+
+        if (!usuario) {
+            return res.status(404).json({
+                erro: "Usuário não encontrado"
+            });
+        }
+
+        // ====================================================
+        // GARANTIR QUE É CLIENTE
+        // ====================================================
+
+        const tipoUsuario =
+            String(usuario.tipo || "")
+                .trim()
+                .toUpperCase();
+
+        if (tipoUsuario !== "CLIENTE") {
+            return res.status(403).json({
+                erro:
+                    "Esta conta não é uma conta de cliente."
+            });
+        }
+
+        // ====================================================
+        // EXCLUIR CONTA
+        // ====================================================
+
+        const excluido =
+            await User.excluir(usuarioId);
+
+        if (!excluido) {
+            return res.status(500).json({
+                erro:
+                    "Não foi possível excluir a conta."
+            });
+        }
+
+        return res.status(200).json({
+
+            sucesso: true,
+
+            mensagem:
+                "Conta excluída com sucesso."
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "ERRO AO EXCLUIR CONTA DO CLIENTE:",
+            error
+        );
+
+        return res.status(500).json({
+
+            erro:
+                "Erro interno ao excluir conta.",
+
+            detalhe:
+                error.message
+
+        });
+    }
+};
+
+        // ====================================================
+        // NORMALIZAR EMAIL
+        // ====================================================
+
+        const emailNormalizado =
+            String(email)
+                .trim()
+                .toLowerCase();
+
+        // ====================================================
+        // BUSCAR USUÁRIO
+        // ====================================================
+
+        const usuario =
+            await User.buscarPorEmail(
+                emailNormalizado
+            );
+
+        if (!usuario) {
+
+            return res.status(401).json({
+                erro:
+                    "Email ou senha incorretos"
+            });
+        }
+
+        // ====================================================
+        // VALIDAR SENHA
+        // ====================================================
+
+        const senhaValida =
+            await bcrypt.compare(
+                senha,
+                usuario.senha
+            );
+
+        if (!senhaValida) {
+
+            return res.status(401).json({
+                erro:
+                    "Email ou senha incorretos"
+            });
+        }
+
+        // ====================================================
+        // VERIFICAR RESTAURANTE
+        // ====================================================
+
+        let restaurante = null;
+
+        if (
+            usuario.tipo === "RESTAURANTE"
+        ) {
+
+            if (!usuario.restauranteId) {
+
+                return res.status(403).json({
+
+                    erro:
+                        "Esta conta de restaurante não possui restaurante vinculado."
+                });
+            }
+
+            restaurante =
+                await Restaurant.buscarPorId(
+                    usuario.restauranteId
+                );
+
+            if (!restaurante) {
+
+                return res.status(403).json({
+
+                    erro:
+                        "O restaurante vinculado a esta conta não existe mais. Cadastre o restaurante novamente."
+                });
+            }
+        }
+
+        // ====================================================
+        // CRIAR TOKEN
+        // ====================================================
+
+        const token =
+            Token.criarToken({
+
+                id:
+                    usuario.id,
+
+                nome:
+                    usuario.nome,
+
+                email:
+                    usuario.email,
+
+                tipo:
+                    usuario.tipo,
+
+                restauranteId:
+                    usuario.restauranteId
+            });
+
+        // ====================================================
+        // RESPOSTA
+        // ====================================================
+
+        return res.status(200).json({
+
+            sucesso: true,
+
+            mensagem:
+                "Login realizado com sucesso",
+
+            token,
+
+            usuario: {
+
+                id:
+                    usuario.id,
+
+                nome:
+                    usuario.nome,
+
+                email:
+                    usuario.email,
+
+                telefone:
+                    usuario.telefone,
+
+                cpf:
+                    usuario.cpf,
+
+                tipo:
+                    usuario.tipo,
+
+                restauranteId:
+                    usuario.restauranteId
+            },
+
+            restaurante:
+                restaurante
+                    ? {
+                        id:
+                            restaurante.id,
+
+                        nome:
+                            restaurante.nome,
+
+                        categoria:
+                            restaurante.categoria,
+
+                        status:
+                            restaurante.status,
+
+                        online:
+                            restaurante.online,
+
+                        aberto:
+                            restaurante.aberto
+                    }
+                    : null
+        });
+
+    } catch (error) {
+
+        console.error(
+            "ERRO NO LOGIN:",
+            error
+        );
+
+        return res.status(500).json({
+
+            erro:
+                "Erro interno no login",
+
+            detalhe:
+                error.message
+        });
+    }
+};
+
+// ============================================================
+// VALIDAR CÓDIGO
+// ============================================================
+
+exports.validarCodigoRecuperacao = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const {
+            email,
+            codigo
+        } = req.body;
+
+        if (!email || !codigo) {
+            return res.status(400).json({
+                erro:
+                    "Email e código são obrigatórios"
+            });
+        }
+
+        const usuario =
+            await User.buscarPorCodigoRecuperacao(
+                email,
+                codigo
+            );
+
+        if (!usuario) {
+            return res.status(400).json({
+                erro:
+                    "Código inválido ou expirado"
+            });
+        }
+
+        return res.status(200).json({
+
+            sucesso: true,
+
+            mensagem:
+                "Código validado com sucesso",
+
+            usuarioId:
+                usuario.id
+        });
+
+    } catch (error) {
+
+        console.error(
+            "ERRO AO VALIDAR CÓDIGO:",
+            error
+        );
+
+        return res.status(500).json({
+            erro:
+                "Erro interno ao validar código"
+        });
+    }
+};
+
+// ============================================================
+// REDEFINIR SENHA
+// ============================================================
+
+exports.redefinirSenha = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const {
+            email,
+            codigo,
+            novaSenha
+        } = req.body;
+
+        if (
+            !email ||
+            !codigo ||
+            !novaSenha
+        ) {
+            return res.status(400).json({
+                erro:
+                    "Email, código e nova senha são obrigatórios"
+            });
+        }
+
+        if (String(novaSenha).length < 6) {
+            return res.status(400).json({
+                erro:
+                    "A nova senha deve ter pelo menos 6 caracteres"
+            });
+        }
+
+        const usuario =
+            await User.buscarPorCodigoRecuperacao(
+                email,
+                codigo
+            );
+
+        if (!usuario) {
+            return res.status(400).json({
+                erro:
+                    "Código inválido ou expirado"
+            });
+        }
+
+        const novaSenhaHash =
+            await bcrypt.hash(
+                novaSenha,
+                10
+            );
+
+        await User.atualizarSenha(
+            usuario.id,
+            novaSenhaHash
+        );
+
+        await User.limparCodigoRecuperacao(
+            usuario.id
+        );
+
+        return res.status(200).json({
+
+            sucesso: true,
+
+            mensagem:
+                "Senha redefinida com sucesso"
+        });
+
+    } catch (error) {
+
+        console.error(
+            "ERRO AO REDEFINIR SENHA:",
+            error
+        );
+
+        return res.status(500).json({
+            erro:
+                "Erro interno ao redefinir senha"
+        });
+    }
+};
+
+// ============================================================
+// ALTERAR SENHA
+// ============================================================
+
+exports.alterarSenha = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const {
+            senhaAtual,
+            novaSenha
+        } = req.body;
+
+        if (
+            !senhaAtual ||
+            !novaSenha
+        ) {
+            return res.status(400).json({
+                erro:
+                    "Senha atual e nova senha são obrigatórias"
+            });
+        }
+
+        if (String(novaSenha).length < 6) {
+            return res.status(400).json({
+                erro:
+                    "A nova senha deve ter pelo menos 6 caracteres"
+            });
+        }
+
+        const usuarioId =
+            req.usuario?.id;
+
+        if (!usuarioId) {
+            return res.status(401).json({
+                erro:
+                    "Usuário não autenticado"
+            });
+        }
+
+        const usuario =
+            await User.buscarPorId(
+                usuarioId
+            );
+
+        if (!usuario) {
+            return res.status(404).json({
+                erro:
+                    "Usuário não encontrado"
+            });
+        }
+
+        const senhaValida =
+            await bcrypt.compare(
+                senhaAtual,
+                usuario.senha
+            );
+
+        if (!senhaValida) {
+            return res.status(400).json({
+                erro:
+                    "Senha atual incorreta"
+            });
+        }
+
+        const novaSenhaHash =
+            await bcrypt.hash(
+                novaSenha,
+                10
+            );
+
+        await User.atualizarSenha(
+            usuario.id,
+            novaSenhaHash
+        );
+
+        return res.status(200).json({
+
+            sucesso: true,
+
+            mensagem:
+                "Senha alterada com sucesso"
+        });
+
+    } catch (error) {
+
+        console.error(
+            "ERRO AO ALTERAR SENHA:",
+            error
+        );
+
+        return res.status(500).json({
+            erro:
+                "Erro interno ao alterar senha"
+        });
+    }
+};
+
+// ============================================================
+// BUSCAR PERFIL
+// ============================================================
+
+exports.perfil = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const usuarioId =
+            req.usuario?.id;
+
+        if (!usuarioId) {
+            return res.status(401).json({
+                erro:
+                    "Usuário não autenticado"
+            });
+        }
+
+        const usuario =
+            await User.buscarPorId(
+                usuarioId
+            );
+
+        if (!usuario) {
+            return res.status(404).json({
+                erro:
+                    "Usuário não encontrado"
+            });
+        }
+
+        // ====================================================
+        // NÃO ENVIAR SENHA
+        // ====================================================
+
+        const usuarioSeguro = {
+            id:
+                usuario.id,
+
+            nome:
+                usuario.nome,
+
+            email:
+                usuario.email,
+
+            telefone:
+                usuario.telefone,
+
+            cpf:
+                usuario.cpf,
+
+            tipo:
+                usuario.tipo,
+
+            restauranteId:
+                usuario.restauranteId,
+
+            endereco:
+                usuario.endereco || null,
+
+            criadoEm:
+                usuario.criadoEm,
+
+            atualizadoEm:
+                usuario.atualizadoEm
+        };
+
+        return res.status(200).json({
+            sucesso: true,
+            usuario: usuarioSeguro
+        });
+
+    } catch (error) {
+
+        console.error(
+            "ERRO AO BUSCAR PERFIL:",
+            error
+        );
+
+        return res.status(500).json({
+            erro:
+                "Erro interno ao buscar perfil"
+        });
+    }
+};
+
+// ============================================================
+// ATUALIZAR PERFIL
+// ============================================================
+
+exports.atualizarPerfil = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const usuarioId =
+            req.usuario?.id;
+
+        if (!usuarioId) {
+            return res.status(401).json({
+                erro:
+                    "Usuário não autenticado"
+            });
+        }
+
+        const {
+            nome,
+            telefone,
+            email,
+            cpf
+        } = req.body;
+
+        // ====================================================
+        // VERIFICAR EMAIL
+        // ====================================================
+
+        if (email) {
+
+            const emailNormalizado =
+                String(email)
+                    .trim()
+                    .toLowerCase();
+
+            const usuarioExistente =
+                await User.buscarPorEmail(
+                    emailNormalizado
+                );
+
+            if (
+                usuarioExistente &&
+                String(usuarioExistente.id) !==
+                String(usuarioId)
+            ) {
+                return res.status(409).json({
+                    erro:
+                        "Este email já está cadastrado"
+                });
+            }
+        }
+
+        const usuarioAtualizado =
+            await User.atualizarPerfil(
+                usuarioId,
+                {
+                    nome,
+                    telefone,
+                    email,
+                    cpf
+                }
+            );
+
+        if (!usuarioAtualizado) {
+            return res.status(404).json({
+                erro:
+                    "Usuário não encontrado"
+            });
+        }
+
+        return res.status(200).json({
+
+            sucesso: true,
+
+            mensagem:
+                "Perfil atualizado com sucesso",
+
+            usuario: {
+
+                id:
+                    usuarioAtualizado.id,
+
+                nome:
+                    usuarioAtualizado.nome,
+
+                email:
+                    usuarioAtualizado.email,
+
+                telefone:
+                    usuarioAtualizado.telefone,
+
+                cpf:
+                    usuarioAtualizado.cpf,
+
+                tipo:
+                    usuarioAtualizado.tipo,
+
+                restauranteId:
+                    usuarioAtualizado.restauranteId
+            }
+        });
+
+    } catch (error) {
+
+        console.error(
+            "ERRO AO ATUALIZAR PERFIL:",
+            error
+        );
+
+        return res.status(500).json({
+            erro:
+                "Erro interno ao atualizar perfil"
+        });
+    }
+};
+
+// ============================================================
+// ATUALIZAR ENDEREÇO
+// ============================================================
+
+exports.atualizarEndereco = async (
+    req,
+    res
+) => {
+
+    try {
+
+        const usuarioId =
+            req.usuario?.id;
+
+        if (!usuarioId) {
+            return res.status(401).json({
+                erro:
+                    "Usuário não autenticado"
+            });
+        }
+
+        const endereco = {
+
+            cep:
+                req.body.cep,
+
+            rua:
+                req.body.rua,
+
+            numero:
+                req.body.numero,
+
+            bairro:
+                req.body.bairro,
+
+            complemento:
+                req.body.complemento,
+
+            cidade:
+                req.body.cidade,
+
+            estado:
+                req.body.estado
+        };
+
+        const usuarioAtualizado =
+            await User.atualizarEndereco(
+                usuarioId,
+                endereco
+            );
+
+        if (!usuarioAtualizado) {
+            return res.status(404).json({
+                erro:
+                    "Usuário não encontrado"
+            });
+        }
+
+        return res.status(200).json({
+
+            sucesso: true,
+
+            mensagem:
+                "Endereço atualizado com sucesso",
+
+            endereco:
+                usuarioAtualizado.endereco
+        });
+
+    } catch (error) {
+
+        console.error(
+            "ERRO AO ATUALIZAR ENDEREÇO:",
+            error
+        );
+
+        return res.status(500).json({
+            erro:
+                "Erro interno ao atualizar endereço"
+        });
+    }
+};
+
+const crypto = require("crypto");
+
+
+// ============================================================
+// SOLICITAR RECUPERAÇÃO DE SENHA
+// ============================================================
+
+exports.solicitarRecuperacao = async (req, res) => {
+
+    try {
+
+        console.log("");
+        console.log("==========================================");
+        console.log("🔐 ROTA DE RECUPERAÇÃO CHAMADA");
+        console.log("==========================================");
+
+        // ======================================================
+        // EMAIL
+        // ======================================================
+
+        const email =
+            String(req.body.email || "")
+                .trim()
+                .toLowerCase();
+
+        console.log("📧 Email recebido:", email);
+
+        // ======================================================
+        // VALIDAR EMAIL
+        // ======================================================
+
+        if (!email) {
+
+            console.log("❌ Email não informado");
+
+            return res.status(400).json({
+                erro: "Informe seu email"
+            });
+
+        }
+
+        // ======================================================
+        // BUSCAR USUÁRIO
+        // ======================================================
+
+        console.log("🔎 Procurando usuário...");
+
+        const usuario =
+            await User.buscarPorEmail(email);
+
+        if (!usuario) {
+
+            console.log(
+                "❌ Usuário não encontrado:",
+                email
+            );
+
+            return res.status(404).json({
+                erro: "Email não encontrado"
+            });
+
+        }
+
+        console.log(
+            "✅ Usuário encontrado:",
+            usuario.id
+        );
+
+        // ======================================================
+        // GERAR CÓDIGO
+        // ======================================================
+
+        const codigo =
+            Math.floor(
+                100000 +
+                Math.random() * 900000
+            ).toString();
+
+        console.log(
+            "🔐 Código de recuperação:",
+            codigo
+        );
+
+        // ======================================================
+// EXPIRAÇÃO DO CÓDIGO
+// ======================================================
+
+// Código válido por 10 minutos
+const expiracao =
+    Date.now() + (10 * 60 * 1000);
+
+await User.salvarCodigoRecuperacao(
+    usuario.id,
+    codigo,
+    expiracao
+);
+
+        console.log(
+            "💾 Código salvo no usuário"
+        );
+
+        // ======================================================
+        // ENVIAR EMAIL
+        // ======================================================
+
+        console.log(
+            "📨 Iniciando envio do email..."
+        );
+
+        await Email.enviarCodigoRecuperacao(
+            email,
+            codigo
+        );
+
+        console.log(
+            "✅ Email enviado com sucesso!"
+        );
+
+        console.log(
+            "=========================================="
+        );
+
+        // ======================================================
+        // RESPOSTA
+        // ======================================================
+
+        return res.status(200).json({
+
+            sucesso: true,
+
+            mensagem:
+                "Código de recuperação enviado para seu email"
+
+        });
+
+    } catch (error) {
+
+        console.error("");
+        console.error(
+            "❌❌❌ ERRO AO ENVIAR EMAIL ❌❌❌"
+        );
+
+        console.error(
+            error
+        );
+
+        console.error(
+            "Mensagem:",
+            error.message
+        );
+
+        console.error(
+            "=========================================="
+        );
+
+        return res.status(500).json({
+
+            erro:
+                "Não foi possível enviar o email de recuperação",
+
+            detalhe:
+                error.message
+
+        });
+
+    }
+
+};
+
+// ============================================================
+// EXCLUIR CONTA CLIENTE
+// ============================================================
+
+exports.excluirConta = async (req, res) => {
+
+    try {
+
+        const usuarioId = req.usuario?.id;
+
+
+        if (!usuarioId) {
+
+            return res.status(401).json({
+                erro:
+                    "Usuário não autenticado"
+            });
+
+        }
+
+
+        const usuario =
+            await User.buscarPorId(usuarioId);
+
+
+
+        if (!usuario) {
+
+            return res.status(404).json({
+                erro:
+                    "Usuário não encontrado"
+            });
+
+        }
+
+
+
+        const tipo =
+            String(usuario.tipo)
+            .toUpperCase();
+
+
+
+        if (tipo !== "CLIENTE") {
+
+            return res.status(403).json({
+                erro:
+                    "Somente clientes podem excluir a conta"
+            });
+
+        }
+
+
+
+        await User.excluir(usuarioId);
+
+
+
+        return res.status(200).json({
+
+            sucesso:true,
+
+            mensagem:
+                "Conta excluída com sucesso"
+
+        });
+
+
+
+    } catch(error){
+
+
+        console.error(
+            "ERRO EXCLUIR CONTA:",
+            error
+        );
+
+
+        return res.status(500).json({
+
+            erro:
+                "Erro ao excluir conta",
+
+            detalhe:
+                error.message
+
+        });
+
+
+    }
+
+};

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "558730065555",
+    "project_id": "foodjet-8ed17",
+    "storage_bucket": "foodjet-8ed17.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:558730065555:android:f6dca7e8e2d8c4870eff66",
+        "android_client_info": {
+          "package_name": "com.example.app_restaurante"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBuAcXNEOcUq-0GMEQBAsnCSZYWxGyNy7Q"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

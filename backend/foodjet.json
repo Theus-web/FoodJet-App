@@ -1,0 +1,128 @@
+{
+  "usuarios": [
+    {
+      "id": 1784355543711,
+      "nome": "Matheus",
+      "email": "matheus@email.com",
+      "senha": "$2b$10$bLPZOz1grkcDtQW5L/izm.NNh6Nn.oVcCx8BcRvtM0MAAw3yG/2HO",
+      "tipo": "CLIENTE"
+    },
+    {
+      "id": 1784419869838,
+      "nome": "Matheus Admin",
+      "email": "admin@foodjet.com",
+      "senha": "$2b$10$JFJnBT2LWHM2kl1ocqJcIewYBOn4.0NYuri5aJD8.UMWVc1Gf8QMS",
+      "tipo": "ADMIN"
+    },
+    {
+      "id": 1784692187728,
+      "nome": "Matheus",
+      "email": "teste@foodjet.com",
+      "senha": "$2b$10$I/NDacxqPoHBKblVjVZ7aeyuUZU6c7PpA.rW3mXPLmDvAkmRXU4fi",
+      "tipo": "CLIENTE"
+    },
+    {
+      "id": 1785159450992,
+      "nome": "zheus",
+      "email": "matheus.oficialdev@gmail.com",
+      "senha": "$2b$10$kLmkN9mv.QFj5t/Y076lZeSUyFi4KzdAOiccOw/pX2S6jqCNiz.na",
+      "tipo": "CLIENTE",
+      "telefone": "31989733089",
+      "cpf": "",
+      "endereco": {}
+    },
+    {
+      "id": 1786463691786,
+      "nome": "Glacier Açaí",
+      "email": "fumanci1@gmail.com",
+      "senha": "$2b$10$HGwFwA82tVu.b0obtTlwPO7drfv8eJcn7a5nYwlH8RwviBtGwYC5C",
+      "tipo": "CLIENTE",
+      "telefone": "31989733089",
+      "cpf": "",
+      "endereco": {},
+      "atualizadoEm": "2026-08-14T04:04:33.362Z"
+    },
+    {
+      "id": "user_1786542500158",
+      "nome": "Sara",
+      "email": "fumanci2@gmail.com",
+      "telefone": "31989733089",
+      "cpf": "15399573652",
+      "senha": "$2b$10$RhXGz86HoyyQl4Acj.UcFOGppaIivUS5fL/LXzcR2dC8jLvq8eL46",
+      "tipo": "RESTAURANTE",
+      "restauranteId": "rest_1786542500158",
+      "criadoEm": "2026-08-12T13:48:24.243Z",
+      "atualizadoEm": "2026-08-14T04:18:16.367Z"
+    }
+  ],
+  "restaurantes": [
+    {
+      "id": "rest_1786542500158",
+      "nome": "sarete",
+      "cnpj": "62501403000187",
+      "categoria": "Restaurante",
+      "email": "fumanci2@gmail.com",
+      "telefone": "31989733089",
+      "responsavel": "Sara",
+      "cpf": "15399573652",
+      "endereco": {
+        "cep": "35164363",
+        "rua": "Rua Minneápolis",
+        "numero": "45",
+        "complemento": "Loja",
+        "bairro": "Bethânia",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": {
+        "banco": "Nu",
+        "agencia": "3750",
+        "conta": "05482755",
+        "pix": "31989733089"
+      },
+      "status": "FECHADO",
+      "online": false,
+      "aberto": false,
+      "criadoEm": "2026-08-12T13:48:23.805Z",
+      "atualizadoEm": "2026-08-13T15:25:48.752Z"
+    }
+  ],
+  "produtos": [],
+  "pedidos": [
+    {
+      "id": 1784423963411,
+      "clienteId": 1784355543711,
+      "restauranteId": 0,
+      "itens": [],
+      "pagamento": "PIX",
+      "status": "AGUARDANDO",
+      "total": 0
+    },
+    {
+      "id": 1784423982050,
+      "clienteId": 1784355543711,
+      "restauranteId": 0,
+      "itens": [],
+      "pagamento": "PIX",
+      "status": "AGUARDANDO",
+      "total": 0
+    }
+  ],
+  "entregadores": [
+    {
+      "id": 1784404409649,
+      "nome": "Carlos Motoboy",
+      "telefone": "31999999999",
+      "veiculo": "Moto",
+      "online": false
+    },
+    {
+      "id": 1784404938929,
+      "nome": "Carlos Motoboy",
+      "telefone": "31999999999",
+      "veiculo": "Moto",
+      "online": false
+    }
+  ],
+  "pagamentos": []
+}
