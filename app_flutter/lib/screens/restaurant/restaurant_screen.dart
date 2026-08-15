@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../config/api.dart';
 import '../cart/cart_screen.dart';
@@ -18,7 +19,7 @@ class RestaurantScreen extends StatefulWidget {
     required this.nome,
     required this.descricao,
     required this.avaliacao,
-    this.restauranteId = '1784400784535',
+    this.restauranteId = '',
   });
 
   @override
@@ -45,7 +46,43 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   @override
   void initState() {
     super.initState();
+
+    _salvarRestauranteSelecionado();
     _carregarProdutos();
+  }
+
+  // ==========================================================
+  // SALVAR RESTAURANTE SELECIONADO
+  // ==========================================================
+
+  Future<void> _salvarRestauranteSelecionado() async {
+    final restauranteId =
+        widget.restauranteId.trim();
+
+    if (restauranteId.isEmpty) {
+      debugPrint(
+        '⚠️ RESTAURANTE SEM ID.',
+      );
+      return;
+    }
+
+    try {
+      final prefs =
+          await SharedPreferences.getInstance();
+
+      await prefs.setString(
+        'restauranteSelecionadoId',
+        restauranteId,
+      );
+
+      debugPrint(
+        '🏪 RESTAURANTE SELECIONADO: $restauranteId',
+      );
+    } catch (e) {
+      debugPrint(
+        '❌ ERRO AO SALVAR RESTAURANTE: $e',
+      );
+    }
   }
 
   // ==========================================================
@@ -61,33 +98,59 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     }
 
     try {
+      final restauranteId =
+          widget.restauranteId.trim();
+
+      if (restauranteId.isEmpty) {
+        throw Exception(
+          'ID do restaurante não informado.',
+        );
+      }
+
       final url = Uri.parse(
         '${Api.baseUrl}/products',
       );
 
-      debugPrint('================================');
-      debugPrint('BUSCANDO PRODUTOS');
-      debugPrint('RESTAURANTE ID: ${widget.restauranteId}');
-      debugPrint('URL: $url');
-      debugPrint('================================');
+      debugPrint(
+        '================================',
+      );
+
+      debugPrint(
+        '🍔 BUSCANDO PRODUTOS',
+      );
+
+      debugPrint(
+        '🏪 RESTAURANTE ID: $restauranteId',
+      );
+
+      debugPrint(
+        '🌐 URL: $url',
+      );
+
+      debugPrint(
+        '================================',
+      );
 
       final resposta = await http
           .get(
             url,
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type':
+                  'application/json',
             },
           )
           .timeout(
-            const Duration(seconds: 15),
+            const Duration(
+              seconds: 15,
+            ),
           );
 
       debugPrint(
-        'STATUS PRODUTOS: ${resposta.statusCode}',
+        '📡 STATUS PRODUTOS: ${resposta.statusCode}',
       );
 
       debugPrint(
-        'RESPOSTA PRODUTOS: ${resposta.body}',
+        '📡 RESPOSTA PRODUTOS: ${resposta.body}',
       );
 
       if (resposta.statusCode < 200 ||
@@ -97,9 +160,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         );
       }
 
-      final resultado = jsonDecode(
-        resposta.body,
-      );
+      final resultado =
+          jsonDecode(resposta.body);
 
       if (resultado is! List) {
         throw Exception(
@@ -111,8 +173,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           .whereType<Map<String, dynamic>>()
           .where(
             (produto) =>
-                produto['restauranteId']?.toString() ==
-                widget.restauranteId,
+                produto['restauranteId']
+                    ?.toString() ==
+                restauranteId,
           )
           .where(
             (produto) =>
@@ -120,7 +183,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           )
           .toList();
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         produtos = produtosApi;
@@ -134,13 +199,16 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       });
     } catch (e) {
       debugPrint(
-        'ERRO AO BUSCAR PRODUTOS: $e',
+        '❌ ERRO AO BUSCAR PRODUTOS: $e',
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         carregandoProdutos = false;
+
         erroProdutos =
             'Não foi possível carregar o cardápio.';
       });
@@ -156,7 +224,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
     for (final produto in produtos) {
       final categoria =
-          produto['categoria']?.toString().trim();
+          produto['categoria']
+              ?.toString()
+              .trim();
 
       if (categoria != null &&
           categoria.isNotEmpty) {
@@ -164,12 +234,14 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       }
     }
 
-    final lista = categoriasSet.toList();
+    final lista =
+        categoriasSet.toList();
 
     lista.sort(
-      (a, b) => a.toLowerCase().compareTo(
-        b.toLowerCase(),
-      ),
+      (a, b) =>
+          a.toLowerCase().compareTo(
+                b.toLowerCase(),
+              ),
     );
 
     return [
@@ -178,8 +250,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     ];
   }
 
-  List<Map<String, dynamic>> get produtosFiltrados {
-    if (categoriaSelecionada == 'Todos') {
+  List<Map<String, dynamic>>
+      get produtosFiltrados {
+    if (categoriaSelecionada ==
+        'Todos') {
       return produtos;
     }
 
@@ -189,7 +263,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               produto['categoria']
                   ?.toString()
                   .toLowerCase() ==
-              categoriaSelecionada.toLowerCase(),
+              categoriaSelecionada
+                  .toLowerCase(),
         )
         .toList();
   }
@@ -203,7 +278,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       favorito = !favorito;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
       SnackBar(
         content: Text(
           favorito
@@ -211,7 +287,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               : '${widget.nome} removido dos favoritos',
         ),
         backgroundColor: laranja,
-        duration: const Duration(seconds: 1),
+        duration:
+            const Duration(seconds: 1),
       ),
     );
   }
@@ -227,9 +304,11 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     String? produtoId,
   }) {
     setState(() {
-      final index = carrinho.indexWhere(
+      final index =
+          carrinho.indexWhere(
         (item) =>
-            item.produtoId == produtoId &&
+            item.produtoId ==
+                produtoId &&
             produtoId != null,
       );
 
@@ -247,13 +326,15 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       }
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
       SnackBar(
         content: Text(
           '$nome adicionado ao carrinho!',
         ),
         backgroundColor: laranja,
-        duration: const Duration(seconds: 1),
+        duration:
+            const Duration(seconds: 1),
       ),
     );
   }
@@ -267,7 +348,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       0,
       (total, item) =>
           total +
-          (item.preco * item.quantidade),
+          (item.preco *
+              item.quantidade),
     );
   }
 
@@ -287,7 +369,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => CartScreen(
+        builder: (context) =>
+            CartScreen(
           itens: carrinho,
         ),
       ),
@@ -302,7 +385,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   // PREÇO
   // ==========================================================
 
-  double _precoProduto(dynamic valor) {
+  double _precoProduto(
+    dynamic valor,
+  ) {
     if (valor is num) {
       return valor.toDouble();
     }
@@ -316,7 +401,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         0;
   }
 
-  String _formatarPreco(double preco) {
+  String _formatarPreco(
+    double preco,
+  ) {
     return 'R\$ ${preco.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 
@@ -324,13 +411,20 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   // URL IMAGEM
   // ==========================================================
 
-  String _urlImagemProduto(String imagem) {
-    if (imagem.startsWith('http://') ||
-        imagem.startsWith('https://')) {
+  String _urlImagemProduto(
+    String imagem,
+  ) {
+    if (imagem.startsWith(
+          'http://',
+        ) ||
+        imagem.startsWith(
+          'https://',
+        )) {
       return imagem;
     }
 
-    final baseUrl = Api.baseUrl.replaceFirst(
+    final baseUrl =
+        Api.baseUrl.replaceFirst(
       RegExp(r'/api/?$'),
       '',
     );
@@ -347,15 +441,22 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   // ==========================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       backgroundColor: fundo,
+
       body: RefreshIndicator(
         color: laranja,
-        onRefresh: _carregarProdutos,
+
+        onRefresh:
+            _carregarProdutos,
+
         child: CustomScrollView(
           physics:
               const AlwaysScrollableScrollPhysics(),
+
           slivers: [
             // ==================================================
             // HEADER
@@ -363,17 +464,29 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
             SliverAppBar(
               expandedHeight: 285,
+
               pinned: true,
+
               elevation: 0,
-              backgroundColor: laranja,
-              foregroundColor: Colors.white,
+
+              backgroundColor:
+                  laranja,
+
+              foregroundColor:
+                  Colors.white,
 
               leading: Padding(
-                padding: const EdgeInsets.all(8),
+                padding:
+                    const EdgeInsets.all(8),
+
                 child: _botaoHeader(
-                  icon: Icons.arrow_back,
+                  icon:
+                      Icons.arrow_back,
+
                   onPressed: () {
-                    Navigator.pop(context);
+                    Navigator.pop(
+                      context,
+                    );
                   },
                 ),
               ),
@@ -383,44 +496,57 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                   icon: favorito
                       ? Icons.favorite
                       : Icons.favorite_border,
-                  onPressed: alternarFavorito,
+
+                  onPressed:
+                      alternarFavorito,
                 ),
 
-                const SizedBox(width: 5),
+                const SizedBox(
+                  width: 5,
+                ),
 
                 _botaoHeader(
-                  icon: Icons.receipt_long,
+                  icon:
+                      Icons.receipt_long,
+
                   onPressed: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (context) =>
-                            const RestaurantOrdersScreen(),
+                        builder:
+                            (context) =>
+                                const RestaurantOrdersScreen(),
                       ),
                     );
                   },
                 ),
 
-                const SizedBox(width: 8),
+                const SizedBox(
+                  width: 8,
+                ),
               ],
 
-              flexibleSpace: FlexibleSpaceBar(
-                background: _cabecalhoRestaurante(),
+              flexibleSpace:
+                  FlexibleSpaceBar(
+                background:
+                    _cabecalhoRestaurante(),
               ),
             ),
 
             // ==================================================
-            // TÍTULO CARDÁPIO
+            // TÍTULO
             // ==================================================
 
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(
+                padding:
+                    const EdgeInsets.fromLTRB(
                   16,
                   25,
                   16,
                   10,
                 ),
+
                 child: Row(
                   children: [
                     const Expanded(
@@ -428,7 +554,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                         'Cardápio',
                         style: TextStyle(
                           fontSize: 23,
-                          fontWeight: FontWeight.bold,
+                          fontWeight:
+                              FontWeight.bold,
                         ),
                       ),
                     ),
@@ -436,25 +563,35 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     if (produtos.isNotEmpty)
                       Container(
                         padding:
-                            const EdgeInsets.symmetric(
+                            const EdgeInsets
+                                .symmetric(
                           horizontal: 10,
                           vertical: 6,
                         ),
-                        decoration: BoxDecoration(
-                          color: const Color(
+
+                        decoration:
+                            BoxDecoration(
+                          color:
+                              const Color(
                             0xFFFFE8D8,
                           ),
                           borderRadius:
-                              BorderRadius.circular(
+                              BorderRadius
+                                  .circular(
                             20,
                           ),
                         ),
+
                         child: Text(
                           '${produtos.length} itens',
-                          style: const TextStyle(
-                            color: laranja,
+                          style:
+                              const TextStyle(
+                            color:
+                                laranja,
                             fontSize: 11,
-                            fontWeight: FontWeight.bold,
+                            fontWeight:
+                                FontWeight
+                                    .bold,
                           ),
                         ),
                       ),
@@ -472,26 +609,36 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               SliverToBoxAdapter(
                 child: SizedBox(
                   height: 55,
-                  child: ListView.separated(
+
+                  child:
+                      ListView.separated(
                     padding:
-                        const EdgeInsets.symmetric(
+                        const EdgeInsets
+                            .symmetric(
                       horizontal: 16,
                     ),
+
                     scrollDirection:
                         Axis.horizontal,
+
                     itemCount:
                         categorias.length,
+
                     separatorBuilder:
                         (_, __) =>
-                            const SizedBox(width: 8),
+                            const SizedBox(
+                      width: 8,
+                    ),
+
                     itemBuilder:
                         (context, index) {
                       final categoria =
-                          categorias[index];
+                          categorias[
+                              index];
 
                       final selecionada =
-                          categoriaSelecionada ==
-                              categoria;
+                          categoria ==
+                              categoriaSelecionada;
 
                       return GestureDetector(
                         onTap: () {
@@ -500,41 +647,63 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                                 categoria;
                           });
                         },
-                        child: AnimatedContainer(
+
+                        child:
+                            AnimatedContainer(
                           duration:
                               const Duration(
-                            milliseconds: 180,
+                            milliseconds:
+                                180,
                           ),
+
                           padding:
                               const EdgeInsets
                                   .symmetric(
                             horizontal: 17,
                             vertical: 10,
                           ),
+
                           decoration:
                               BoxDecoration(
-                            color: selecionada
-                                ? laranja
-                                : Colors.white,
+                            color:
+                                selecionada
+                                    ? laranja
+                                    : Colors.white,
+
                             borderRadius:
-                                BorderRadius.circular(
+                                BorderRadius
+                                    .circular(
                               25,
                             ),
-                            border: Border.all(
-                              color: selecionada
-                                  ? laranja
-                                  : Colors.grey.shade200,
+
+                            border:
+                                Border.all(
+                              color:
+                                  selecionada
+                                      ? laranja
+                                      : Colors
+                                          .grey
+                                          .shade200,
                             ),
                           ),
+
                           child: Center(
                             child: Text(
                               categoria,
-                              style: TextStyle(
-                                color: selecionada
-                                    ? Colors.white
-                                    : Colors.black87,
+
+                              style:
+                                  TextStyle(
+                                color:
+                                    selecionada
+                                        ? Colors
+                                            .white
+                                        : Colors
+                                            .black87,
+
                                 fontWeight:
-                                    FontWeight.w600,
+                                    FontWeight
+                                        .w600,
+
                                 fontSize: 13,
                               ),
                             ),
@@ -547,7 +716,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               ),
 
             const SliverToBoxAdapter(
-              child: SizedBox(height: 10),
+              child:
+                  SizedBox(height: 10),
             ),
 
             // ==================================================
@@ -557,7 +727,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             if (carregandoProdutos)
               const SliverToBoxAdapter(
                 child: Padding(
-                  padding: EdgeInsets.all(60),
+                  padding:
+                      EdgeInsets.all(60),
+
                   child: Center(
                     child:
                         CircularProgressIndicator(
@@ -568,36 +740,45 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               )
             else if (erroProdutos != null)
               SliverToBoxAdapter(
-                child: _estadoErroProdutos(),
+                child:
+                    _estadoErroProdutos(),
               )
             else if (produtos.isEmpty)
               SliverToBoxAdapter(
-                child: _estadoVazioProdutos(),
+                child:
+                    _estadoVazioProdutos(),
               )
-            else if (produtosFiltrados.isEmpty)
+            else if (produtosFiltrados
+                .isEmpty)
               SliverToBoxAdapter(
-                child: _estadoVazioCategoria(),
+                child:
+                    _estadoVazioCategoria(),
               )
             else
               SliverPadding(
                 padding:
-                    const EdgeInsets.fromLTRB(
+                    const EdgeInsets
+                        .fromLTRB(
                   16,
                   5,
                   16,
                   130,
                 ),
+
                 sliver: SliverList(
                   delegate:
                       SliverChildBuilderDelegate(
                     (context, index) {
                       return produtoCard(
                         produto:
-                            produtosFiltrados[index],
+                            produtosFiltrados[
+                                index],
                       );
                     },
+
                     childCount:
-                        produtosFiltrados.length,
+                        produtosFiltrados
+                            .length,
                   ),
                 ),
               ),
@@ -605,63 +786,79 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         ),
       ),
 
-      // ========================================================
-      // CARRINHO
-      // ========================================================
-
       floatingActionButton:
           quantidadeItens > 0
               ? _botaoCarrinho()
               : null,
 
       floatingActionButtonLocation:
-          FloatingActionButtonLocation.centerFloat,
+          FloatingActionButtonLocation
+              .centerFloat,
     );
   }
 
   // ==========================================================
-  // HEADER RESTAURANTE
+  // HEADER
   // ==========================================================
 
   Widget _cabecalhoRestaurante() {
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+      decoration:
+          const BoxDecoration(
+        gradient:
+            LinearGradient(
+          begin:
+              Alignment.topCenter,
+          end:
+              Alignment.bottomCenter,
           colors: [
             laranja,
             Color(0xFFFF9A5A),
           ],
         ),
       ),
+
       child: Column(
         mainAxisAlignment:
             MainAxisAlignment.end,
+
         children: [
           Container(
             width: 105,
             height: 105,
+
             margin:
                 const EdgeInsets.only(
               bottom: 13,
             ),
-            decoration: BoxDecoration(
+
+            decoration:
+                BoxDecoration(
               color: Colors.white,
+
               borderRadius:
-                  BorderRadius.circular(28),
+                  BorderRadius.circular(
+                28,
+              ),
+
               boxShadow: [
                 BoxShadow(
                   color: Colors.black
                       .withValues(
                     alpha: 0.15,
                   ),
+
                   blurRadius: 15,
+
                   offset:
-                      const Offset(0, 7),
+                      const Offset(
+                    0,
+                    7,
+                  ),
                 ),
               ],
             ),
+
             child: const Icon(
               Icons.restaurant,
               color: laranja,
@@ -671,11 +868,17 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
           Text(
             widget.nome,
-            textAlign: TextAlign.center,
+
+            textAlign:
+                TextAlign.center,
+
             maxLines: 1,
+
             overflow:
                 TextOverflow.ellipsis,
-            style: const TextStyle(
+
+            style:
+                const TextStyle(
               color: Colors.white,
               fontSize: 25,
               fontWeight:
@@ -683,49 +886,66 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             ),
           ),
 
-          const SizedBox(height: 5),
+          const SizedBox(
+            height: 5,
+          ),
 
           Padding(
             padding:
-                const EdgeInsets.symmetric(
+                const EdgeInsets
+                    .symmetric(
               horizontal: 25,
             ),
+
             child: Text(
               widget.descricao,
+
               textAlign:
                   TextAlign.center,
+
               maxLines: 1,
+
               overflow:
                   TextOverflow.ellipsis,
+
               style: TextStyle(
                 color: Colors.white
                     .withValues(
                   alpha: 0.9,
                 ),
+
                 fontSize: 13,
               ),
             ),
           ),
 
-          const SizedBox(height: 13),
+          const SizedBox(
+            height: 13,
+          ),
 
           Row(
             mainAxisAlignment:
                 MainAxisAlignment.center,
+
             children: [
               _informacaoHeader(
                 Icons.star_rounded,
                 widget.avaliacao,
               ),
 
-              const SizedBox(width: 12),
+              const SizedBox(
+                width: 12,
+              ),
 
               _informacaoHeader(
-                Icons.access_time_rounded,
+                Icons
+                    .access_time_rounded,
                 '30–45 min',
               ),
 
-              const SizedBox(width: 12),
+              const SizedBox(
+                width: 12,
+              ),
 
               _informacaoHeader(
                 Icons.delivery_dining,
@@ -734,7 +954,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             ],
           ),
 
-          const SizedBox(height: 22),
+          const SizedBox(
+            height: 22,
+          ),
         ],
       ),
     );
@@ -754,13 +976,20 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         horizontal: 10,
         vertical: 7,
       ),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(
+
+      decoration:
+          BoxDecoration(
+        color: Colors.white
+            .withValues(
           alpha: 0.16,
         ),
+
         borderRadius:
-            BorderRadius.circular(20),
+            BorderRadius.circular(
+          20,
+        ),
       ),
+
       child: Row(
         children: [
           Icon(
@@ -768,10 +997,16 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             color: Colors.white,
             size: 15,
           ),
-          const SizedBox(width: 4),
+
+          const SizedBox(
+            width: 4,
+          ),
+
           Text(
             texto,
-            style: const TextStyle(
+
+            style:
+                const TextStyle(
               color: Colors.white,
               fontSize: 11,
               fontWeight:
@@ -796,14 +1031,20 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           const EdgeInsets.symmetric(
         vertical: 8,
       ),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(
+
+      decoration:
+          BoxDecoration(
+        color: Colors.black
+            .withValues(
           alpha: 0.18,
         ),
+
         shape: BoxShape.circle,
       ),
+
       child: IconButton(
         onPressed: onPressed,
+
         icon: Icon(
           icon,
           color: Colors.white,
@@ -818,14 +1059,17 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   // ==========================================================
 
   Widget produtoCard({
-    required Map<String, dynamic> produto,
+    required Map<String, dynamic>
+        produto,
   }) {
     final nome =
-        produto['nome']?.toString() ??
+        produto['nome']
+                ?.toString() ??
             'Produto';
 
     final descricao =
-        produto['descricao']?.toString() ??
+        produto['descricao']
+                ?.toString() ??
             '';
 
     final preco =
@@ -844,41 +1088,64 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           const EdgeInsets.only(
         bottom: 13,
       ),
+
       padding:
           const EdgeInsets.all(12),
-      decoration: BoxDecoration(
+
+      decoration:
+          BoxDecoration(
         color: Colors.white,
+
         borderRadius:
-            BorderRadius.circular(20),
+            BorderRadius.circular(
+          20,
+        ),
+
         border: Border.all(
-          color: Colors.black.withValues(
+          color: Colors.black
+              .withValues(
             alpha: 0.04,
           ),
         ),
+
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(
+            color: Colors.black
+                .withValues(
               alpha: 0.045,
             ),
+
             blurRadius: 12,
+
             offset:
-                const Offset(0, 4),
+                const Offset(
+              0,
+              4,
+            ),
           ),
         ],
       ),
+
       child: Row(
         crossAxisAlignment:
             CrossAxisAlignment.start,
+
         children: [
           ClipRRect(
             borderRadius:
-                BorderRadius.circular(16),
-            child: _imagemProduto(
+                BorderRadius.circular(
+              16,
+            ),
+
+            child:
+                _imagemProduto(
               imagem,
             ),
           ),
 
-          const SizedBox(width: 13),
+          const SizedBox(
+            width: 13,
+          ),
 
           Expanded(
             child: Padding(
@@ -886,15 +1153,22 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                   const EdgeInsets.only(
                 top: 2,
               ),
+
               child: Column(
                 crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    CrossAxisAlignment
+                        .start,
+
                 children: [
                   Text(
                     nome,
+
                     maxLines: 2,
+
                     overflow:
-                        TextOverflow.ellipsis,
+                        TextOverflow
+                            .ellipsis,
+
                     style:
                         const TextStyle(
                       fontSize: 16,
@@ -903,27 +1177,42 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     ),
                   ),
 
-                  if (descricao.isNotEmpty) ...[
-                    const SizedBox(height: 6),
+                  if (descricao
+                      .isNotEmpty) ...[
+                    const SizedBox(
+                      height: 6,
+                    ),
 
                     Text(
                       descricao,
+
                       maxLines: 2,
+
                       overflow:
-                          TextOverflow.ellipsis,
+                          TextOverflow
+                              .ellipsis,
+
                       style: TextStyle(
-                        color:
-                            Colors.grey.shade600,
+                        color: Colors
+                            .grey
+                            .shade600,
+
                         fontSize: 12,
+
                         height: 1.3,
                       ),
                     ),
                   ],
 
-                  const SizedBox(height: 12),
+                  const SizedBox(
+                    height: 12,
+                  ),
 
                   Text(
-                    _formatarPreco(preco),
+                    _formatarPreco(
+                      preco,
+                    ),
+
                     style:
                         const TextStyle(
                       color: laranja,
@@ -942,26 +1231,34 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                 const EdgeInsets.only(
               top: 38,
             ),
+
             child: GestureDetector(
               onTap: () {
                 adicionarProduto(
                   nome: nome,
                   preco: preco,
                   imagem: imagem,
-                  produtoId: produtoId,
+                  produtoId:
+                      produtoId,
                 );
               },
+
               child: Container(
                 width: 40,
                 height: 40,
+
                 decoration:
                     const BoxDecoration(
                   color: laranja,
-                  shape: BoxShape.circle,
+                  shape:
+                      BoxShape.circle,
                 ),
-                child: const Icon(
+
+                child:
+                    const Icon(
                   Icons.add,
-                  color: Colors.white,
+                  color:
+                      Colors.white,
                   size: 25,
                 ),
               ),
@@ -973,7 +1270,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ==========================================================
-  // IMAGEM PRODUTO
+  // IMAGEM
   // ==========================================================
 
   Widget _imagemProduto(
@@ -985,13 +1282,18 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     }
 
     final url =
-        _urlImagemProduto(imagem);
+        _urlImagemProduto(
+      imagem,
+    );
 
     return Image.network(
       url,
+
       width: 105,
       height: 105,
+
       fit: BoxFit.cover,
+
       loadingBuilder:
           (
         context,
@@ -1004,6 +1306,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
         return _loadingImagem();
       },
+
       errorBuilder:
           (
         context,
@@ -1019,11 +1322,17 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return Container(
       width: 105,
       height: 105,
-      decoration: BoxDecoration(
+
+      decoration:
+          BoxDecoration(
         color: fundoImagem,
+
         borderRadius:
-            BorderRadius.circular(16),
+            BorderRadius.circular(
+          16,
+        ),
       ),
+
       child: const Icon(
         Icons.fastfood_rounded,
         color: laranja,
@@ -1036,7 +1345,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return Container(
       width: 105,
       height: 105,
+
       color: fundoImagem,
+
       child: const Center(
         child:
             CircularProgressIndicator(
@@ -1054,65 +1365,97 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   Widget _botaoCarrinho() {
     return GestureDetector(
       onTap: abrirCarrinho,
+
       child: Container(
         height: 58,
+
         margin:
-            const EdgeInsets.symmetric(
+            const EdgeInsets
+                .symmetric(
           horizontal: 18,
         ),
+
         padding:
-            const EdgeInsets.symmetric(
+            const EdgeInsets
+                .symmetric(
           horizontal: 18,
         ),
-        decoration: BoxDecoration(
+
+        decoration:
+            BoxDecoration(
           color: laranja,
+
           borderRadius:
-              BorderRadius.circular(18),
+              BorderRadius.circular(
+            18,
+          ),
+
           boxShadow: [
             BoxShadow(
-              color: laranja.withValues(
+              color: laranja
+                  .withValues(
                 alpha: 0.35,
               ),
+
               blurRadius: 15,
+
               offset:
-                  const Offset(0, 6),
+                  const Offset(
+                0,
+                6,
+              ),
             ),
           ],
         ),
+
         child: Row(
           children: [
             Container(
               width: 38,
               height: 38,
+
               decoration:
                   BoxDecoration(
                 color: Colors.white
                     .withValues(
                   alpha: 0.18,
                 ),
-                shape: BoxShape.circle,
+
+                shape:
+                    BoxShape.circle,
               ),
+
               child: const Icon(
-                Icons.shopping_bag_outlined,
-                color: Colors.white,
+                Icons
+                    .shopping_bag_outlined,
+                color:
+                    Colors.white,
                 size: 21,
               ),
             ),
 
-            const SizedBox(width: 11),
+            const SizedBox(
+              width: 11,
+            ),
 
             Expanded(
               child: Column(
                 mainAxisAlignment:
-                    MainAxisAlignment.center,
+                    MainAxisAlignment
+                        .center,
+
                 crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    CrossAxisAlignment
+                        .start,
+
                 children: [
                   Text(
                     '$quantidadeItens ${quantidadeItens == 1 ? 'item' : 'itens'}',
+
                     style:
                         const TextStyle(
-                      color: Colors.white,
+                      color:
+                          Colors.white,
                       fontSize: 11,
                     ),
                   ),
@@ -1121,9 +1464,11 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     _formatarPreco(
                       totalCarrinho,
                     ),
+
                     style:
                         const TextStyle(
-                      color: Colors.white,
+                      color:
+                          Colors.white,
                       fontSize: 16,
                       fontWeight:
                           FontWeight.bold,
@@ -1135,18 +1480,25 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
             const Text(
               'Ver carrinho',
-              style: TextStyle(
-                color: Colors.white,
+
+              style:
+                  TextStyle(
+                color:
+                    Colors.white,
                 fontWeight:
                     FontWeight.bold,
               ),
             ),
 
-            const SizedBox(width: 5),
+            const SizedBox(
+              width: 5,
+            ),
 
             const Icon(
-              Icons.arrow_forward_ios,
-              color: Colors.white,
+              Icons
+                  .arrow_forward_ios,
+              color:
+                  Colors.white,
               size: 16,
             ),
           ],
@@ -1163,77 +1515,112 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return Container(
       margin:
           const EdgeInsets.all(16),
+
       padding:
           const EdgeInsets.all(30),
-      decoration: BoxDecoration(
+
+      decoration:
+          BoxDecoration(
         color: Colors.white,
+
         borderRadius:
-            BorderRadius.circular(20),
+            BorderRadius.circular(
+          20,
+        ),
       ),
+
       child: Column(
         children: [
           Container(
             width: 70,
             height: 70,
+
             decoration:
                 const BoxDecoration(
               color: fundoImagem,
-              shape: BoxShape.circle,
+              shape:
+                  BoxShape.circle,
             ),
+
             child: const Icon(
-              Icons.cloud_off_rounded,
+              Icons
+                  .cloud_off_rounded,
               color: laranja,
               size: 34,
             ),
           ),
 
-          const SizedBox(height: 15),
+          const SizedBox(
+            height: 15,
+          ),
 
           const Text(
             'Não foi possível carregar o cardápio',
-            textAlign: TextAlign.center,
-            style: TextStyle(
+
+            textAlign:
+                TextAlign.center,
+
+            style:
+                TextStyle(
               fontSize: 17,
               fontWeight:
                   FontWeight.bold,
             ),
           ),
 
-          const SizedBox(height: 7),
+          const SizedBox(
+            height: 7,
+          ),
 
           const Text(
             'Verifique a conexão com o servidor e tente novamente.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
+
+            textAlign:
+                TextAlign.center,
+
+            style:
+                TextStyle(
               color: Colors.black54,
               height: 1.4,
             ),
           ),
 
-          const SizedBox(height: 18),
+          const SizedBox(
+            height: 18,
+          ),
 
           ElevatedButton.icon(
             onPressed:
                 _carregarProdutos,
+
             icon:
-                const Icon(Icons.refresh),
+                const Icon(
+              Icons.refresh,
+            ),
+
             label:
                 const Text(
               'Tentar novamente',
             ),
+
             style:
-                ElevatedButton.styleFrom(
+                ElevatedButton
+                    .styleFrom(
               backgroundColor:
                   laranja,
+
               foregroundColor:
                   Colors.white,
+
               elevation: 0,
+
               padding:
                   const EdgeInsets
                       .symmetric(
                 horizontal: 20,
                 vertical: 13,
               ),
+
               shape:
                   RoundedRectangleBorder(
                 borderRadius:
@@ -1256,47 +1643,68 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return Container(
       margin:
           const EdgeInsets.all(16),
+
       padding:
           const EdgeInsets.all(30),
-      decoration: BoxDecoration(
+
+      decoration:
+          BoxDecoration(
         color: Colors.white,
+
         borderRadius:
-            BorderRadius.circular(20),
+            BorderRadius.circular(
+          20,
+        ),
       ),
+
       child: Column(
         children: [
           Container(
             width: 70,
             height: 70,
+
             decoration:
                 const BoxDecoration(
               color: fundoImagem,
-              shape: BoxShape.circle,
+              shape:
+                  BoxShape.circle,
             ),
+
             child: const Icon(
-              Icons.restaurant_menu_outlined,
+              Icons
+                  .restaurant_menu_outlined,
               color: laranja,
               size: 34,
             ),
           ),
 
-          const SizedBox(height: 15),
+          const SizedBox(
+            height: 15,
+          ),
 
           const Text(
             'Nenhum produto disponível',
-            style: TextStyle(
+
+            style:
+                TextStyle(
               fontSize: 17,
               fontWeight:
                   FontWeight.bold,
             ),
           ),
 
-          const SizedBox(height: 7),
+          const SizedBox(
+            height: 7,
+          ),
 
           const Text(
             'Este restaurante ainda não possui produtos disponíveis.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
+
+            textAlign:
+                TextAlign.center,
+
+            style:
+                TextStyle(
               color: Colors.black54,
               height: 1.4,
             ),
@@ -1314,23 +1722,33 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return Container(
       margin:
           const EdgeInsets.all(16),
+
       padding:
           const EdgeInsets.all(30),
-      decoration: BoxDecoration(
+
+      decoration:
+          BoxDecoration(
         color: Colors.white,
+
         borderRadius:
-            BorderRadius.circular(20),
+            BorderRadius.circular(
+          20,
+        ),
       ),
+
       child: Column(
         children: [
           Container(
             width: 70,
             height: 70,
+
             decoration:
                 const BoxDecoration(
               color: fundoImagem,
-              shape: BoxShape.circle,
+              shape:
+                  BoxShape.circle,
             ),
+
             child: const Icon(
               Icons.search_off_rounded,
               color: laranja,
@@ -1338,12 +1756,18 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             ),
           ),
 
-          const SizedBox(height: 15),
+          const SizedBox(
+            height: 15,
+          ),
 
           const Text(
             'Nenhum produto nesta categoria',
-            textAlign: TextAlign.center,
-            style: TextStyle(
+
+            textAlign:
+                TextAlign.center,
+
+            style:
+                TextStyle(
               fontSize: 17,
               fontWeight:
                   FontWeight.bold,

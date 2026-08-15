@@ -23,10 +23,10 @@ class DeliveryAddressScreen extends StatefulWidget {
 
 class _DeliveryAddressScreenState
     extends State<DeliveryAddressScreen> {
-  final _formKey = GlobalKey<FormState>();
-
   static const Color laranja = Color(0xFFF97316);
-  static const Color fundo = Color(0xFFF7F7F8);
+  static const Color fundo = Color(0xFFF5F5F5);
+
+  final _formKey = GlobalKey<FormState>();
 
   final cepController = TextEditingController();
   final ruaController = TextEditingController();
@@ -47,7 +47,6 @@ class _DeliveryAddressScreenState
     complementoController.dispose();
     cidadeController.dispose();
     estadoController.dispose();
-
     super.dispose();
   }
 
@@ -62,6 +61,7 @@ class _DeliveryAddressScreenState
     );
 
     if (cep.length != 8) {
+      _mensagem('Digite um CEP válido.');
       return;
     }
 
@@ -76,7 +76,11 @@ class _DeliveryAddressScreenState
         'https://viacep.com.br/ws/$cep/json/',
       );
 
-      final response = await http.get(url);
+      final response = await http
+          .get(url)
+          .timeout(
+            const Duration(seconds: 10),
+          );
 
       if (!mounted) return;
 
@@ -90,16 +94,24 @@ class _DeliveryAddressScreenState
 
       final dados = jsonDecode(response.body);
 
-      if (dados['erro'] == true) {
+      if (dados is! Map<String, dynamic>) {
         _mensagem(
-          'CEP não encontrado. Verifique o número informado.',
+          'Resposta inválida do serviço de CEP.',
           erro: true,
         );
+        return;
+      }
 
+      if (dados['erro'] == true) {
         ruaController.clear();
         bairroController.clear();
         cidadeController.clear();
         estadoController.clear();
+
+        _mensagem(
+          'CEP não encontrado. Verifique o número informado.',
+          erro: true,
+        );
 
         return;
       }
@@ -119,12 +131,10 @@ class _DeliveryAddressScreenState
       });
 
       _mensagem(
-        'Endereço encontrado!',
+        'Endereço encontrado com sucesso!',
       );
-    } catch (error) {
-      debugPrint(
-        'ERRO AO BUSCAR CEP: $error',
-      );
+    } catch (e) {
+      debugPrint('ERRO AO BUSCAR CEP: $e');
 
       if (!mounted) return;
 
@@ -146,7 +156,17 @@ class _DeliveryAddressScreenState
   // ============================================================
 
   void continuar() {
+    FocusScope.of(context).unfocus();
+
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    if (widget.itens.isEmpty) {
+      _mensagem(
+        'Seu carrinho está vazio.',
+        erro: true,
+      );
       return;
     }
 
@@ -160,17 +180,12 @@ class _DeliveryAddressScreenState
       'estado': estadoController.text.trim(),
     };
 
-    debugPrint(
-      '📍 ENDEREÇO INFORMADO: $endereco',
-    );
-
-    debugPrint(
-      '🛒 ITENS: ${widget.itens}',
-    );
-
-    debugPrint(
-      '💰 SUBTOTAL: ${widget.subtotal}',
-    );
+    debugPrint('========================================');
+    debugPrint('📍 ENDEREÇO DE ENTREGA');
+    debugPrint('$endereco');
+    debugPrint('🛒 ITENS: ${widget.itens.length}');
+    debugPrint('💰 SUBTOTAL: ${widget.subtotal}');
+    debugPrint('========================================');
 
     Navigator.push(
       context,
@@ -185,7 +200,69 @@ class _DeliveryAddressScreenState
   }
 
   // ============================================================
-  // FORMATAR CEP
+  // CAMPO
+  // ============================================================
+
+  Widget campoTexto({
+    required String label,
+    required TextEditingController controller,
+    bool obrigatorio = true,
+    TextInputType? keyboardType,
+    bool somenteLeitura = false,
+    Widget? prefixIcon,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
+      child: TextFormField(
+        controller: controller,
+        keyboardType: keyboardType,
+        readOnly: somenteLeitura,
+        textInputAction: TextInputAction.next,
+        decoration: InputDecoration(
+          labelText: label,
+          prefixIcon: prefixIcon,
+          filled: true,
+          fillColor:
+              somenteLeitura ? Colors.grey.shade100 : Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(
+              color: Colors.black12,
+            ),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(
+              color: laranja,
+              width: 2,
+            ),
+          ),
+          errorBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(
+              color: Colors.red,
+            ),
+          ),
+        ),
+        validator: obrigatorio
+            ? (value) {
+                if (value == null ||
+                    value.trim().isEmpty) {
+                  return 'Informe $label';
+                }
+
+                return null;
+              }
+            : null,
+      ),
+    );
+  }
+
+  // ============================================================
+  // CEP
   // ============================================================
 
   String formatarCep(String valor) {
@@ -198,76 +275,67 @@ class _DeliveryAddressScreenState
       return numeros;
     }
 
-    return '${numeros.substring(0, 5)}-${numeros.substring(
+    final parte1 = numeros.substring(0, 5);
+    final parte2 = numeros.substring(
       5,
       numeros.length > 8 ? 8 : numeros.length,
-    )}';
+    );
+
+    return '$parte1-$parte2';
   }
 
-  // ============================================================
-  // CAMPO CEP
-  // ============================================================
-
   Widget campoCep() {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 18),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 15),
       child: TextFormField(
         controller: cepController,
         keyboardType: TextInputType.number,
         maxLength: 9,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.w600,
-        ),
+        textInputAction: TextInputAction.next,
         decoration: InputDecoration(
           labelText: 'CEP',
           hintText: '00000-000',
           counterText: '',
+          filled: true,
+          fillColor: Colors.white,
           prefixIcon: const Icon(
-            Icons.location_on_rounded,
+            Icons.location_on_outlined,
             color: laranja,
           ),
           suffixIcon: buscandoCep
               ? const Padding(
-                  padding: EdgeInsets.all(13),
+                  padding: EdgeInsets.all(12),
                   child: SizedBox(
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                      strokeWidth: 2.5,
+                      strokeWidth: 2,
                       color: laranja,
                     ),
                   ),
                 )
               : IconButton(
-                  onPressed: buscarCep,
-                  tooltip: 'Buscar CEP',
                   icon: const Icon(
-                    Icons.search_rounded,
+                    Icons.search,
                     color: laranja,
                   ),
+                  tooltip: 'Buscar CEP',
+                  onPressed: buscarCep,
                 ),
-          filled: true,
-          fillColor: Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 17,
-          ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: BorderSide.none,
+            borderRadius: BorderRadius.circular(12),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(
-              color: Color(0xFFE7E7E7),
+              color: Colors.black12,
             ),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(
               color: laranja,
-              width: 1.8,
+              width: 2,
             ),
           ),
         ),
@@ -314,76 +382,6 @@ class _DeliveryAddressScreenState
   }
 
   // ============================================================
-  // CAMPO
-  // ============================================================
-
-  Widget campoTexto({
-    required String label,
-    required TextEditingController controller,
-    bool obrigatorio = true,
-    TextInputType? keyboardType,
-    bool somenteLeitura = false,
-    IconData? icon,
-  }) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 18),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        readOnly: somenteLeitura,
-        style: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-        ),
-        decoration: InputDecoration(
-          labelText: label,
-          prefixIcon: Icon(
-            icon,
-            color: somenteLeitura
-                ? Colors.grey
-                : laranja,
-          ),
-          filled: true,
-          fillColor: somenteLeitura
-              ? const Color(0xFFF0F0F0)
-              : Colors.white,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 17,
-          ),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: BorderSide.none,
-          ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: const BorderSide(
-              color: Color(0xFFE7E7E7),
-            ),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: const BorderSide(
-              color: laranja,
-              width: 1.8,
-            ),
-          ),
-        ),
-        validator: obrigatorio
-            ? (value) {
-                if (value == null ||
-                    value.trim().isEmpty) {
-                  return 'Informe $label';
-                }
-
-                return null;
-              }
-            : null,
-      ),
-    );
-  }
-
-  // ============================================================
   // MENSAGEM
   // ============================================================
 
@@ -396,100 +394,16 @@ class _DeliveryAddressScreenState
     ScaffoldMessenger.of(context)
         .hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Row(
-          children: [
-            Icon(
-              erro
-                  ? Icons.error_outline_rounded
-                  : Icons.check_circle_outline_rounded,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(mensagem),
-            ),
-          ],
-        ),
-        duration: const Duration(seconds: 2),
+        content: Text(mensagem),
+        duration: const Duration(seconds: 3),
         behavior: SnackBarBehavior.floating,
         backgroundColor:
-            erro ? Colors.redAccent : laranja,
+            erro ? Colors.red.shade700 : Colors.black87,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(12),
         ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // RESUMO
-  // ============================================================
-
-  Widget resumoPedido() {
-    final quantidade = widget.itens.fold<int>(
-      0,
-      (total, item) => total + item.quantidade,
-    );
-
-    return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: const Color(0xFFEAEAEA),
-        ),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: laranja.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: const Icon(
-              Icons.shopping_bag_rounded,
-              color: laranja,
-            ),
-          ),
-          const SizedBox(width: 13),
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Resumo do pedido',
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  '$quantidade ${quantidade == 1 ? 'item' : 'itens'} no carrinho',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.black54,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Text(
-            'R\$ ${widget.subtotal.toStringAsFixed(2).replaceAll('.', ',')}',
-            style: const TextStyle(
-              color: laranja,
-              fontSize: 16,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -502,357 +416,157 @@ class _DeliveryAddressScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: fundo,
-
       appBar: AppBar(
         backgroundColor: laranja,
         foregroundColor: Colors.white,
         elevation: 0,
-        centerTitle: false,
-        titleSpacing: 18,
-        title: const Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Endereço de entrega',
-              style: TextStyle(
-                fontSize: 19,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            SizedBox(height: 2),
-            Text(
-              'Para onde vamos enviar?',
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.white70,
-              ),
-            ),
-          ],
+        title: const Text(
+          'Endereço de Entrega',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
         ),
       ),
-
       body: Form(
         key: _formKey,
         child: SingleChildScrollView(
-          physics:
-              const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(
-            18,
-            20,
-            18,
-            35,
-          ),
+          padding: const EdgeInsets.all(20),
           child: Column(
             crossAxisAlignment:
                 CrossAxisAlignment.start,
             children: [
-              // ==================================================
-              // CABEÇALHO
-              // ==================================================
-
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                    colors: [
-                      laranja,
-                      Colors.orange.shade400,
-                    ],
-                  ),
-                  borderRadius:
-                      BorderRadius.circular(22),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          laranja.withValues(
-                        alpha: 0.22,
-                      ),
-                      blurRadius: 15,
-                      offset:
-                          const Offset(0, 7),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 55,
-                      height: 55,
-                      decoration:
-                          BoxDecoration(
-                        color:
-                            Colors.white.withValues(
-                          alpha: 0.18,
-                        ),
-                        shape:
-                            BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons
-                            .location_on_rounded,
-                        color: Colors.white,
-                        size: 30,
-                      ),
-                    ),
-                    const SizedBox(width: 15),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Onde devemos entregar?',
-                            style: TextStyle(
-                              color:
-                                  Colors.white,
-                              fontSize: 19,
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-                          SizedBox(height: 5),
-                          Text(
-                            'Informe seu endereço para continuar o pedido.',
-                            style: TextStyle(
-                              color:
-                                  Colors.white70,
-                              fontSize: 13,
-                              height: 1.3,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 25),
-
-              // ==================================================
-              // RESUMO PEDIDO
-              // ==================================================
-
-              resumoPedido(),
-
-              const SizedBox(height: 25),
-
               const Text(
-                'Seu endereço',
+                'Onde devemos entregar seu pedido?',
                 style: TextStyle(
-                  fontSize: 20,
+                  color: Colors.black,
+                  fontSize: 22,
                   fontWeight: FontWeight.bold,
-                  color: Colors.black87,
                 ),
               ),
 
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
 
               const Text(
-                'Digite seu CEP e confirme os dados da entrega.',
+                'Digite seu CEP e encontraremos automaticamente seu endereço.',
                 style: TextStyle(
-                  color: Colors.black54,
-                  fontSize: 13,
+                  color: Colors.grey,
+                  fontSize: 15,
                 ),
               ),
 
-              const SizedBox(height: 18),
-
-              // ==================================================
-              // CEP
-              // ==================================================
+              const SizedBox(height: 25),
 
               campoCep(),
-
-              // ==================================================
-              // RUA
-              // ==================================================
 
               campoTexto(
                 label: 'Rua',
                 controller: ruaController,
                 somenteLeitura: buscandoCep,
-                icon:
-                    Icons.signpost_rounded,
+                prefixIcon: const Icon(
+                  Icons.signpost_outlined,
+                  color: laranja,
+                ),
               ),
-
-              // ==================================================
-              // NÚMERO
-              // ==================================================
 
               campoTexto(
                 label: 'Número',
-                controller:
-                    numeroController,
-                keyboardType:
-                    TextInputType.number,
-                icon:
-                    Icons.numbers_rounded,
+                controller: numeroController,
+                keyboardType: TextInputType.number,
+                prefixIcon: const Icon(
+                  Icons.numbers_outlined,
+                  color: laranja,
+                ),
               ),
-
-              // ==================================================
-              // BAIRRO
-              // ==================================================
 
               campoTexto(
                 label: 'Bairro',
-                controller:
-                    bairroController,
+                controller: bairroController,
                 somenteLeitura: buscandoCep,
-                icon:
-                    Icons.location_city_rounded,
+                prefixIcon: const Icon(
+                  Icons.location_city_outlined,
+                  color: laranja,
+                ),
               ),
-
-              // ==================================================
-              // COMPLEMENTO
-              // ==================================================
 
               campoTexto(
                 label: 'Complemento',
-                controller:
-                    complementoController,
+                controller: complementoController,
                 obrigatorio: false,
-                icon:
-                    Icons.home_work_rounded,
+                prefixIcon: const Icon(
+                  Icons.home_work_outlined,
+                  color: laranja,
+                ),
               ),
-
-              // ==================================================
-              // CIDADE
-              // ==================================================
 
               campoTexto(
                 label: 'Cidade',
-                controller:
-                    cidadeController,
+                controller: cidadeController,
                 somenteLeitura: buscandoCep,
-                icon:
-                    Icons.location_city_rounded,
+                prefixIcon: const Icon(
+                  Icons.location_city,
+                  color: laranja,
+                ),
               ),
-
-              // ==================================================
-              // ESTADO
-              // ==================================================
 
               campoTexto(
                 label: 'Estado',
-                controller:
-                    estadoController,
+                controller: estadoController,
                 somenteLeitura: buscandoCep,
-                icon:
-                    Icons.map_rounded,
+                prefixIcon: const Icon(
+                  Icons.map_outlined,
+                  color: laranja,
+                ),
               ),
 
-              const SizedBox(height: 8),
-
-              // ==================================================
-              // BOTÃO
-              // ==================================================
+              const SizedBox(height: 10),
 
               SizedBox(
                 width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
+                child: ElevatedButton.icon(
                   onPressed:
-                      buscandoCep
-                          ? null
-                          : continuar,
-                  style:
-                      ElevatedButton.styleFrom(
+                      buscandoCep ? null : continuar,
+                  icon: const Icon(
+                    Icons.arrow_forward,
+                  ),
+                  label: const Text(
+                    'CONTINUAR',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
                     backgroundColor: laranja,
+                    foregroundColor: Colors.white,
                     disabledBackgroundColor:
                         Colors.orange.shade200,
-                    foregroundColor:
-                        Colors.white,
-                    elevation: 0,
+                    padding:
+                        const EdgeInsets.symmetric(
+                      vertical: 16,
+                    ),
                     shape:
                         RoundedRectangleBorder(
                       borderRadius:
-                          BorderRadius.circular(
-                        16,
-                      ),
+                          BorderRadius.circular(12),
                     ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment
-                            .center,
-                    children: [
-                      const Text(
-                        'CONTINUAR PARA PAGAMENTO',
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Container(
-                        width: 30,
-                        height: 30,
-                        decoration:
-                            BoxDecoration(
-                          color: Colors.white
-                              .withValues(
-                            alpha: 0.18,
-                          ),
-                          shape:
-                              BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons
-                              .arrow_forward_rounded,
-                          size: 18,
-                        ),
-                      ),
-                    ],
                   ),
                 ),
               ),
 
               const SizedBox(height: 15),
 
-              // ==================================================
-              // SEGURANÇA
-              // ==================================================
-
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.symmetric(
-                  vertical: 13,
-                  horizontal: 15,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius:
-                      BorderRadius.circular(14),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons
-                          .lock_outline_rounded,
-                      size: 18,
-                      color: Colors.green,
-                    ),
-                    const SizedBox(width: 9),
-                    Expanded(
-                      child: Text(
-                        'Seu endereço será utilizado somente para realizar a entrega.',
-                        style: TextStyle(
-                          color:
-                              Colors.grey.shade600,
-                          fontSize: 11.5,
-                        ),
-                      ),
-                    ),
-                  ],
+              Center(
+                child: Text(
+                  'Seu endereço será utilizado apenas para realizar a entrega.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 12,
+                  ),
                 ),
               ),
+
+              const SizedBox(height: 20),
             ],
           ),
         ),

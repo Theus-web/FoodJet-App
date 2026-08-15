@@ -26,15 +26,19 @@ class OrderReviewScreen extends StatefulWidget {
       _OrderReviewScreenState();
 }
 
-class _OrderReviewScreenState extends State<OrderReviewScreen> {
+class _OrderReviewScreenState
+    extends State<OrderReviewScreen> {
   static const Color laranja = Color(0xFFF97316);
+  static const Color fundo = Color(0xFFF5F5F5);
 
   bool enviando = false;
 
   // ============================================================
-  // DADOS ATUAIS
+  // IDS ATUAIS DO PROJETO
   // ============================================================
 
+  // Mantidos conforme sua implementação atual.
+  // Depois podemos buscar automaticamente do usuário logado.
   final int clienteId = 1784355543711;
 
   final int restauranteId = 1784400784535;
@@ -48,15 +52,18 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   final double percentualTaxaServico = 0.10;
 
   double get taxaServico {
-    return widget.subtotal * percentualTaxaServico;
+    return widget.subtotal *
+        percentualTaxaServico;
   }
 
   double get totalPedido {
-    return widget.subtotal + taxaServico + taxaEntrega;
+    return widget.subtotal +
+        taxaServico +
+        taxaEntrega;
   }
 
   // ============================================================
-  // FORMATAR PREÇO
+  // PREÇO
   // ============================================================
 
   String formatarPreco(double valor) {
@@ -64,43 +71,63 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   }
 
   // ============================================================
-  // ENDEREÇO COMPLETO
+  // ENDEREÇO
   // ============================================================
 
   String enderecoCompleto() {
+    final rua =
+        widget.endereco['rua'] ?? '';
+
+    final numero =
+        widget.endereco['numero'] ?? '';
+
     final complemento =
         widget.endereco['complemento'] ?? '';
 
+    final bairro =
+        widget.endereco['bairro'] ?? '';
+
+    final cidade =
+        widget.endereco['cidade'] ?? '';
+
+    final estado =
+        widget.endereco['estado'] ?? '';
+
     String resultado =
-        '${widget.endereco['rua'] ?? ''}, '
-        '${widget.endereco['numero'] ?? ''}';
+        '$rua, $numero';
 
     if (complemento.isNotEmpty) {
-      resultado += ' - $complemento';
+      resultado +=
+          ' - $complemento';
     }
 
-    resultado +=
-        '\n${widget.endereco['bairro'] ?? ''}';
+    if (bairro.isNotEmpty) {
+      resultado += '\n$bairro';
+    }
 
-    resultado +=
-        '\n${widget.endereco['cidade'] ?? ''} - '
-        '${widget.endereco['estado'] ?? ''}';
+    if (cidade.isNotEmpty ||
+        estado.isNotEmpty) {
+      resultado +=
+          '\n$cidade - $estado';
+    }
 
     return resultado;
   }
 
   // ============================================================
-  // MONTAR ITENS PARA API
+  // ITENS
   // ============================================================
 
-  List<Map<String, dynamic>> _montarItensPedido() {
+  List<Map<String, dynamic>>
+      _montarItensPedido() {
     return widget.itens.map((item) {
       return {
         'produtoId': item.produtoId,
         'nome': item.nome,
         'preco': item.preco,
         'quantidade': item.quantidade,
-        'subtotal': item.preco * item.quantidade,
+        'subtotal':
+            item.preco * item.quantidade,
       };
     }).toList();
   }
@@ -110,13 +137,14 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   // ============================================================
 
   Future<void> confirmarPedido() async {
-    if (enviando) {
-      return;
-    }
+    if (enviando) return;
+
+    FocusScope.of(context).unfocus();
 
     if (widget.itens.isEmpty) {
       _mensagem(
         'Seu carrinho está vazio.',
+        erro: true,
       );
       return;
     }
@@ -126,7 +154,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     });
 
     try {
-      final itensPedido = _montarItensPedido();
+      final itensPedido =
+          _montarItensPedido();
 
       final pedido = {
         'clienteId': clienteId,
@@ -136,95 +165,64 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
         'pagamento': widget.pagamento,
         'subtotal': widget.subtotal,
         'taxaServico': taxaServico,
-        'percentualTaxaServico': percentualTaxaServico,
+        'percentualTaxaServico':
+            percentualTaxaServico,
         'taxaEntrega': taxaEntrega,
         'total': totalPedido,
       };
 
-      print(
-        '========================================',
-      );
-
-      print(
-        '📦 ENVIANDO PEDIDO PARA API',
-      );
-
-      print(
-        '👤 CLIENTE: $clienteId',
-      );
-
-      print(
-        '🏪 RESTAURANTE: $restauranteId',
-      );
-
-      print(
-        '🛒 ITENS: $itensPedido',
-      );
-
-      print(
-        '📍 ENDEREÇO: ${widget.endereco}',
-      );
-
-      print(
-        '💳 PAGAMENTO: ${widget.pagamento}',
-      );
-
-      print(
-        '💵 SUBTOTAL: ${widget.subtotal}',
-      );
-
-      print(
-        '🧾 TAXA SERVIÇO: $taxaServico',
-      );
-
-      print(
-        '🛵 TAXA ENTREGA: $taxaEntrega',
-      );
-
-      print(
-        '💰 TOTAL: $totalPedido',
-      );
-
-      print(
-        '========================================',
-      );
+      debugPrint('========================================');
+      debugPrint('📦 ENVIANDO PEDIDO PARA API');
+      debugPrint('👤 CLIENTE: $clienteId');
+      debugPrint('🏪 RESTAURANTE: $restauranteId');
+      debugPrint('🛒 ITENS: $itensPedido');
+      debugPrint(
+          '📍 ENDEREÇO: ${widget.endereco}');
+      debugPrint(
+          '💳 PAGAMENTO: ${widget.pagamento}');
+      debugPrint(
+          '💵 SUBTOTAL: ${widget.subtotal}');
+      debugPrint(
+          '🧾 TAXA SERVIÇO: $taxaServico');
+      debugPrint(
+          '🛵 TAXA ENTREGA: $taxaEntrega');
+      debugPrint(
+          '💰 TOTAL: $totalPedido');
+      debugPrint('========================================');
 
       final url = Uri.parse(
         '${Api.baseUrl}/orders',
       );
 
-      print(
-        '🌐 URL PEDIDO: $url',
-      );
+      debugPrint('🌐 URL PEDIDO: $url');
 
       final resposta = await http
           .post(
             url,
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type':
+                  'application/json',
+              'Accept':
+                  'application/json',
             },
             body: jsonEncode(pedido),
           )
           .timeout(
-            const Duration(
-              seconds: 15,
-            ),
+            const Duration(seconds: 15),
           );
 
-      print(
+      debugPrint(
         '📡 STATUS API: ${resposta.statusCode}',
       );
 
-      print(
+      debugPrint(
         '📡 RESPOSTA API: ${resposta.body}',
       );
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       // ========================================================
-      // PEDIDO CRIADO
+      // SUCESSO
       // ========================================================
 
       if (resposta.statusCode == 200 ||
@@ -232,42 +230,51 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
         Map<String, dynamic> dados = {};
 
         try {
-          final resultado = jsonDecode(
-            resposta.body,
-          );
+          final resultado =
+              jsonDecode(resposta.body);
 
-          if (resultado is Map<String, dynamic>) {
+          if (resultado
+              is Map<String, dynamic>) {
             dados = resultado;
           }
         } catch (e) {
-          print(
-            'ERRO AO LER RESPOSTA DO PEDIDO: $e',
+          debugPrint(
+            'ERRO AO DECODIFICAR RESPOSTA: $e',
           );
         }
 
-        final pedidoCriado = dados['pedido'];
+        dynamic pedidoCriado =
+            dados['pedido'];
 
-        if (pedidoCriado is! Map<String, dynamic>) {
+        // Algumas APIs podem retornar
+        // diretamente o objeto do pedido.
+        if (pedidoCriado == null &&
+            dados['id'] != null) {
+          pedidoCriado = dados;
+        }
+
+        if (pedidoCriado
+            is! Map<String, dynamic>) {
           _mensagem(
             'Pedido criado, mas a API não retornou os dados do pedido.',
             erro: true,
           );
-
           return;
         }
 
-        final idRecebido = pedidoCriado['id'];
+        final idRecebido =
+            pedidoCriado['id'];
 
         if (idRecebido == null) {
           _mensagem(
             'Pedido criado, mas não recebemos o ID do pedido.',
             erro: true,
           );
-
           return;
         }
 
-        final pedidoId = int.tryParse(
+        final pedidoId =
+            int.tryParse(
           idRecebido.toString(),
         );
 
@@ -276,12 +283,20 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
             'O ID do pedido retornado pela API é inválido.',
             erro: true,
           );
-
           return;
         }
 
-        print(
-          '🆔 ID DO PEDIDO: $pedidoId',
+        debugPrint(
+          '========================================',
+        );
+        debugPrint(
+          '✅ PEDIDO CRIADO COM SUCESSO',
+        );
+        debugPrint(
+          '🆔 PEDIDO ID: $pedidoId',
+        );
+        debugPrint(
+          '========================================',
         );
 
         // ======================================================
@@ -291,45 +306,51 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => OrderTrackingScreen(
+            builder: (context) =>
+                OrderTrackingScreen(
               pedidoId: pedidoId,
             ),
           ),
         );
-      } else {
-        Map<String, dynamic> erro = {};
 
-        try {
-          final resultado = jsonDecode(
-            resposta.body,
-          );
-
-          if (resultado is Map<String, dynamic>) {
-            erro = resultado;
-          }
-        } catch (_) {}
-
-        final mensagem =
-            erro['erro']?.toString() ??
-            erro['mensagem']?.toString() ??
-            'Não foi possível criar o pedido.';
-
-        _mensagem(
-          mensagem,
-          erro: true,
-        );
-      }
-    } catch (erro) {
-      print(
-        '❌ ERRO AO ENVIAR PEDIDO: $erro',
-      );
-
-      if (!mounted) {
         return;
       }
 
+      // ========================================================
+      // ERRO DA API
+      // ========================================================
+
+      Map<String, dynamic> erro = {};
+
+      try {
+        final resultado =
+            jsonDecode(resposta.body);
+
+        if (resultado
+            is Map<String, dynamic>) {
+          erro = resultado;
+        }
+      } catch (_) {}
+
+      final mensagem =
+          erro['erro']?.toString() ??
+          erro['mensagem']?.toString() ??
+          erro['error']?.toString() ??
+          'Não foi possível criar o pedido.';
+
       _mensagem(
-        'Não foi possível criar o pedido: $erro',
+        mensagem,
+        erro: true,
+      );
+    } catch (erro) {
+      debugPrint(
+        '❌ ERRO AO ENVIAR PEDIDO: $erro',
+      );
+
+      if (!mounted) return;
+
+      _mensagem(
+        'Não foi possível criar o pedido. Verifique sua conexão.',
         erro: true,
       );
     } finally {
@@ -349,31 +370,54 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     String texto, {
     bool erro = false,
   }) {
-    if (!mounted) {
-      return;
-    }
+    if (!mounted) return;
 
     ScaffoldMessenger.of(context)
         .hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          texto,
-        ),
+        content: Text(texto),
         backgroundColor:
-            erro ? Colors.red : laranja,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(
-          seconds: 3,
-        ),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(
-            12,
-          ),
+            erro ? Colors.red.shade700 : laranja,
+        behavior:
+            SnackBarBehavior.floating,
+        duration:
+            const Duration(seconds: 3),
+        shape:
+            RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.circular(12),
         ),
       ),
+    );
+  }
+
+  // ============================================================
+  // CARD
+  // ============================================================
+
+  Widget _card({
+    required Widget child,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: 0.035,
+            ),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: child,
     );
   }
 
@@ -382,13 +426,10 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(
-        0xFFF5F5F5,
-      ),
+      backgroundColor: fundo,
+
       appBar: AppBar(
         backgroundColor: laranja,
         foregroundColor: Colors.white,
@@ -400,10 +441,9 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           ),
         ),
       ),
+
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(
-          20,
-        ),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
@@ -417,153 +457,142 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               ),
             ),
 
-            const SizedBox(
-              height: 20,
-            ),
+            const SizedBox(height: 20),
 
-            // =====================================================
-            // ITENS DO PEDIDO
-            // =====================================================
+            // ==================================================
+            // ITENS
+            // ==================================================
 
             const Text(
               'Itens do pedido',
               style: TextStyle(
-                color: Colors.black,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
 
-            const SizedBox(
-              height: 10,
-            ),
+            const SizedBox(height: 10),
 
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(
-                16,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(
-                  16,
+            _card(
+              child: Column(
+                children:
+                    List.generate(
+                  widget.itens.length,
+                  (index) {
+                    final item =
+                        widget.itens[index];
+
+                    final subtotalItem =
+                        item.preco *
+                            item.quantidade;
+
+                    return Padding(
+                      padding:
+                          EdgeInsets.only(
+                        bottom:
+                            index ==
+                                    widget.itens.length -
+                                        1
+                            ? 0
+                            : 14,
+                      ),
+                      child: Row(
+                        crossAxisAlignment:
+                            CrossAxisAlignment
+                                .start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment:
+                                  CrossAxisAlignment
+                                      .start,
+                              children: [
+                                Text(
+                                  item.nome,
+                                  style:
+                                      const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight:
+                                        FontWeight.bold,
+                                  ),
+                                ),
+                                const SizedBox(
+                                  height: 4,
+                                ),
+                                Text(
+                                  '${item.quantidade}x ${formatarPreco(item.preco)}',
+                                  style:
+                                      const TextStyle(
+                                    color:
+                                        Colors.black54,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Text(
+                            formatarPreco(
+                              subtotalItem,
+                            ),
+                            style:
+                                const TextStyle(
+                              fontSize: 16,
+                              fontWeight:
+                                  FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
-              child: Column(
-                children: widget.itens.map((item) {
-                  final subtotalItem =
-                      item.preco *
-                          item.quantidade;
-
-                  return Padding(
-                    padding:
-                        const EdgeInsets.only(
-                      bottom: 14,
-                    ),
-                    child: Row(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                item.nome,
-                                style:
-                                    const TextStyle(
-                                  color:
-                                      Colors.black,
-                                  fontSize:
-                                      16,
-                                  fontWeight:
-                                      FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(
-                                height: 4,
-                              ),
-                              Text(
-                                '${item.quantidade}x ${formatarPreco(item.preco)}',
-                                style:
-                                    const TextStyle(
-                                  color:
-                                      Colors.black54,
-                                  fontSize:
-                                      14,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Text(
-                          formatarPreco(
-                            subtotalItem,
-                          ),
-                          style:
-                              const TextStyle(
-                            color:
-                                Colors.black,
-                            fontSize:
-                                16,
-                            fontWeight:
-                                FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }).toList(),
-              ),
             ),
 
-            const SizedBox(
-              height: 20,
-            ),
+            const SizedBox(height: 20),
 
-            // =====================================================
+            // ==================================================
             // ENDEREÇO
-            // =====================================================
+            // ==================================================
 
             const Text(
               'Endereço de entrega',
               style: TextStyle(
-                color: Colors.black,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
 
-            const SizedBox(
-              height: 10,
-            ),
+            const SizedBox(height: 10),
 
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(
-                16,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(
-                  16,
-                ),
-              ),
+            _card(
               child: Row(
                 crossAxisAlignment:
                     CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.location_on,
-                    color: laranja,
-                    size: 26,
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration:
+                        BoxDecoration(
+                      color:
+                          const Color(
+                        0xFFFFE8D8,
+                      ),
+                      borderRadius:
+                          BorderRadius.circular(
+                        12,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.location_on,
+                      color: laranja,
+                    ),
                   ),
-                  const SizedBox(
-                    width: 12,
-                  ),
+
+                  const SizedBox(width: 12),
+
                   Expanded(
                     child: Text(
                       enderecoCompleto(),
@@ -580,196 +609,98 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               ),
             ),
 
-            const SizedBox(
-              height: 20,
-            ),
+            const SizedBox(height: 20),
 
-            // =====================================================
+            // ==================================================
             // PAGAMENTO
-            // =====================================================
+            // ==================================================
 
             const Text(
               'Forma de pagamento',
               style: TextStyle(
-                color: Colors.black,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
 
-            const SizedBox(
-              height: 10,
-            ),
+            const SizedBox(height: 10),
 
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(
-                16,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(
-                  16,
-                ),
-              ),
+            _card(
               child: Row(
                 children: [
-                  const Icon(
-                    Icons.payment,
-                    color: laranja,
-                    size: 26,
-                  ),
-                  const SizedBox(
-                    width: 12,
-                  ),
-                  Text(
-                    widget.pagamento,
-                    style:
-                        const TextStyle(
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration:
+                        BoxDecoration(
                       color:
-                          Colors.black,
-                      fontSize:
-                          16,
-                      fontWeight:
-                          FontWeight.bold,
+                          const Color(
+                        0xFFFFE8D8,
+                      ),
+                      borderRadius:
+                          BorderRadius.circular(
+                        12,
+                      ),
+                    ),
+                    child: const Icon(
+                      Icons.payment,
+                      color: laranja,
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  Expanded(
+                    child: Text(
+                      widget.pagamento,
+                      style:
+                          const TextStyle(
+                        fontSize: 16,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
                     ),
                   ),
                 ],
               ),
             ),
 
-            const SizedBox(
-              height: 20,
-            ),
+            const SizedBox(height: 20),
 
-            // =====================================================
-            // VALORES
-            // =====================================================
+            // ==================================================
+            // RESUMO
+            // ==================================================
 
             const Text(
               'Resumo dos valores',
               style: TextStyle(
-                color: Colors.black,
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
               ),
             ),
 
-            const SizedBox(
-              height: 10,
-            ),
+            const SizedBox(height: 10),
 
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(
-                16,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(
-                  16,
-                ),
-              ),
+            _card(
               child: Column(
                 children: [
-                  Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment
-                            .spaceBetween,
-                    children: [
-                      const Text(
-                        'Subtotal',
-                        style:
-                            TextStyle(
-                          color:
-                              Colors.black87,
-                          fontSize:
-                              15,
-                        ),
-                      ),
-                      Text(
-                        formatarPreco(
-                          widget.subtotal,
-                        ),
-                        style:
-                            const TextStyle(
-                          color:
-                              Colors.black87,
-                          fontSize:
-                              15,
-                        ),
-                      ),
-                    ],
+                  _linhaValor(
+                    'Subtotal',
+                    widget.subtotal,
                   ),
 
-                  const SizedBox(
-                    height: 10,
+                  const SizedBox(height: 10),
+
+                  _linhaValor(
+                    'Taxa de serviço',
+                    taxaServico,
                   ),
 
-                  Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment
-                            .spaceBetween,
-                    children: [
-                      const Text(
-                        'Taxa de serviço',
-                        style:
-                            TextStyle(
-                          color:
-                              Colors.black87,
-                          fontSize:
-                              15,
-                        ),
-                      ),
-                      Text(
-                        formatarPreco(
-                          taxaServico,
-                        ),
-                        style:
-                            const TextStyle(
-                          color:
-                              Colors.black87,
-                          fontSize:
-                              15,
-                        ),
-                      ),
-                    ],
-                  ),
+                  const SizedBox(height: 10),
 
-                  const SizedBox(
-                    height: 10,
-                  ),
-
-                  Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment
-                            .spaceBetween,
-                    children: [
-                      const Text(
-                        'Taxa de entrega',
-                        style:
-                            TextStyle(
-                          color:
-                              Colors.black87,
-                          fontSize:
-                              15,
-                        ),
-                      ),
-                      Text(
-                        formatarPreco(
-                          taxaEntrega,
-                        ),
-                        style:
-                            const TextStyle(
-                          color:
-                              Colors.black87,
-                          fontSize:
-                              15,
-                        ),
-                      ),
-                    ],
+                  _linhaValor(
+                    'Taxa de entrega',
+                    taxaEntrega,
                   ),
 
                   const Padding(
@@ -789,10 +720,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                         'Total',
                         style:
                             TextStyle(
-                          color:
-                              Colors.black,
-                          fontSize:
-                              20,
+                          fontSize: 20,
                           fontWeight:
                               FontWeight.bold,
                         ),
@@ -803,10 +731,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                         ),
                         style:
                             const TextStyle(
-                          color:
-                              laranja,
-                          fontSize:
-                              20,
+                          color: laranja,
+                          fontSize: 20,
                           fontWeight:
                               FontWeight.bold,
                         ),
@@ -817,13 +743,11 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               ),
             ),
 
-            const SizedBox(
-              height: 30,
-            ),
+            const SizedBox(height: 30),
 
-            // =====================================================
-            // BOTÃO CONFIRMAR PEDIDO
-            // =====================================================
+            // ==================================================
+            // BOTÃO
+            // ==================================================
 
             SizedBox(
               width: double.infinity,
@@ -841,6 +765,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                       Colors.white,
                   disabledBackgroundColor:
                       Colors.grey.shade400,
+                  elevation: 0,
                   shape:
                       RoundedRectangleBorder(
                     borderRadius:
@@ -848,41 +773,78 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                       14,
                     ),
                   ),
-                  elevation: 0,
                 ),
-                child:
-                    enviando
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child:
-                                CircularProgressIndicator(
-                              strokeWidth: 3,
-                              valueColor:
-                                  AlwaysStoppedAnimation<
-                                      Color>(
-                                Colors.white,
-                              ),
-                            ),
-                          )
-                        : const Text(
-                            'Confirmar Pedido',
+                child: enviando
+                    ? const SizedBox(
+                        width: 25,
+                        height: 25,
+                        child:
+                            CircularProgressIndicator(
+                          strokeWidth: 3,
+                          valueColor:
+                              AlwaysStoppedAnimation<
+                                  Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    : const Row(
+                        mainAxisAlignment:
+                            MainAxisAlignment
+                                .center,
+                        children: [
+                          Icon(
+                            Icons.check_circle_outline,
+                          ),
+                          SizedBox(width: 8),
+                          Text(
+                            'CONFIRMAR PEDIDO',
                             style:
                                 TextStyle(
-                              fontSize: 17,
+                              fontSize: 16,
                               fontWeight:
                                   FontWeight.bold,
                             ),
                           ),
+                        ],
+                      ),
               ),
             ),
 
-            const SizedBox(
-              height: 20,
-            ),
+            const SizedBox(height: 20),
           ],
         ),
       ),
+    );
+  }
+
+  // ============================================================
+  // LINHA VALOR
+  // ============================================================
+
+  Widget _linhaValor(
+    String titulo,
+    double valor,
+  ) {
+    return Row(
+      mainAxisAlignment:
+          MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          titulo,
+          style: const TextStyle(
+            color: Colors.black87,
+            fontSize: 15,
+          ),
+        ),
+        Text(
+          formatarPreco(valor),
+          style: const TextStyle(
+            color: Colors.black87,
+            fontSize: 15,
+          ),
+        ),
+      ],
     );
   }
 }
