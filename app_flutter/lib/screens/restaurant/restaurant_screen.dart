@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -27,18 +26,14 @@ class RestaurantScreen extends StatefulWidget {
       _RestaurantScreenState();
 }
 
-class _RestaurantScreenState
-    extends State<RestaurantScreen> {
-  static const Color laranja =
-      Color(0xFFF97316);
-
-  static const Color fundo =
-      Color(0xFFF5F5F5);
+class _RestaurantScreenState extends State<RestaurantScreen> {
+  static const Color laranja = Color(0xFFF97316);
+  static const Color fundo = Color(0xFFF7F7F8);
+  static const Color fundoImagem = Color(0xFFFFE5D3);
 
   final List<CartItem> carrinho = [];
 
   bool favorito = false;
-
   bool carregandoProdutos = true;
 
   String? erroProdutos;
@@ -50,13 +45,12 @@ class _RestaurantScreenState
   @override
   void initState() {
     super.initState();
-
     _carregarProdutos();
   }
 
-  // ============================================================
+  // ==========================================================
   // BUSCAR PRODUTOS
-  // ============================================================
+  // ==========================================================
 
   Future<void> _carregarProdutos() async {
     if (mounted) {
@@ -71,11 +65,11 @@ class _RestaurantScreenState
         '${Api.baseUrl}/products',
       );
 
-      print('================================');
-      print('BUSCANDO PRODUTOS');
-      print('RESTAURANTE ID: ${widget.restauranteId}');
-      print('URL: $url');
-      print('================================');
+      debugPrint('================================');
+      debugPrint('BUSCANDO PRODUTOS');
+      debugPrint('RESTAURANTE ID: ${widget.restauranteId}');
+      debugPrint('URL: $url');
+      debugPrint('================================');
 
       final resposta = await http
           .get(
@@ -85,16 +79,14 @@ class _RestaurantScreenState
             },
           )
           .timeout(
-            const Duration(
-              seconds: 15,
-            ),
+            const Duration(seconds: 15),
           );
 
-      print(
+      debugPrint(
         'STATUS PRODUTOS: ${resposta.statusCode}',
       );
 
-      print(
+      debugPrint(
         'RESPOSTA PRODUTOS: ${resposta.body}',
       );
 
@@ -105,8 +97,9 @@ class _RestaurantScreenState
         );
       }
 
-      final resultado =
-          jsonDecode(resposta.body);
+      final resultado = jsonDecode(
+        resposta.body,
+      );
 
       if (resultado is! List) {
         throw Exception(
@@ -118,8 +111,7 @@ class _RestaurantScreenState
           .whereType<Map<String, dynamic>>()
           .where(
             (produto) =>
-                produto['restauranteId']
-                    ?.toString() ==
+                produto['restauranteId']?.toString() ==
                 widget.restauranteId,
           )
           .where(
@@ -128,9 +120,7 @@ class _RestaurantScreenState
           )
           .toList();
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         produtos = produtosApi;
@@ -139,18 +129,15 @@ class _RestaurantScreenState
         if (!categorias.contains(
           categoriaSelecionada,
         )) {
-          categoriaSelecionada =
-              'Todos';
+          categoriaSelecionada = 'Todos';
         }
       });
     } catch (e) {
-      print(
+      debugPrint(
         'ERRO AO BUSCAR PRODUTOS: $e',
       );
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         carregandoProdutos = false;
@@ -160,35 +147,27 @@ class _RestaurantScreenState
     }
   }
 
-  // ============================================================
+  // ==========================================================
   // CATEGORIAS
-  // ============================================================
+  // ==========================================================
 
   List<String> get categorias {
-    final categoriasSet =
-        <String>{};
+    final categoriasSet = <String>{};
 
     for (final produto in produtos) {
       final categoria =
-          produto['categoria']
-              ?.toString()
-              .trim();
+          produto['categoria']?.toString().trim();
 
       if (categoria != null &&
           categoria.isNotEmpty) {
-        categoriasSet.add(
-          categoria,
-        );
+        categoriasSet.add(categoria);
       }
     }
 
-    final lista =
-        categoriasSet.toList();
+    final lista = categoriasSet.toList();
 
     lista.sort(
-      (a, b) => a
-          .toLowerCase()
-          .compareTo(
+      (a, b) => a.toLowerCase().compareTo(
         b.toLowerCase(),
       ),
     );
@@ -199,10 +178,8 @@ class _RestaurantScreenState
     ];
   }
 
-  List<Map<String, dynamic>>
-      get produtosFiltrados {
-    if (categoriaSelecionada ==
-        'Todos') {
+  List<Map<String, dynamic>> get produtosFiltrados {
+    if (categoriaSelecionada == 'Todos') {
       return produtos;
     }
 
@@ -212,42 +189,36 @@ class _RestaurantScreenState
               produto['categoria']
                   ?.toString()
                   .toLowerCase() ==
-              categoriaSelecionada
-                  .toLowerCase(),
+              categoriaSelecionada.toLowerCase(),
         )
         .toList();
   }
 
-  // ============================================================
+  // ==========================================================
   // FAVORITO
-  // ============================================================
+  // ==========================================================
 
   void alternarFavorito() {
     setState(() {
       favorito = !favorito;
     });
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           favorito
               ? '${widget.nome} adicionado aos favoritos ❤️'
               : '${widget.nome} removido dos favoritos',
         ),
-        backgroundColor:
-            laranja,
-        duration:
-            const Duration(
-          seconds: 1,
-        ),
+        backgroundColor: laranja,
+        duration: const Duration(seconds: 1),
       ),
     );
   }
 
-  // ============================================================
-  // ADICIONAR PRODUTO REAL AO CARRINHO
-  // ============================================================
+  // ==========================================================
+  // ADICIONAR PRODUTO
+  // ==========================================================
 
   void adicionarProduto({
     required String nome,
@@ -256,11 +227,9 @@ class _RestaurantScreenState
     String? produtoId,
   }) {
     setState(() {
-      final index =
-          carrinho.indexWhere(
+      final index = carrinho.indexWhere(
         (item) =>
-            item.produtoId ==
-                produtoId &&
+            item.produtoId == produtoId &&
             produtoId != null,
       );
 
@@ -269,48 +238,36 @@ class _RestaurantScreenState
       } else {
         carrinho.add(
           CartItem(
-            produtoId:
-                produtoId,
-            nome:
-                nome,
-            preco:
-                preco,
-            imagem:
-                imagem,
+            produtoId: produtoId,
+            nome: nome,
+            preco: preco,
+            imagem: imagem,
           ),
         );
       }
     });
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           '$nome adicionado ao carrinho!',
         ),
-        backgroundColor:
-            laranja,
-        duration:
-            const Duration(
-          seconds: 1,
-        ),
+        backgroundColor: laranja,
+        duration: const Duration(seconds: 1),
       ),
     );
   }
 
-  // ============================================================
-  // TOTAL CARRINHO
-  // ============================================================
+  // ==========================================================
+  // TOTAL
+  // ==========================================================
 
   double get totalCarrinho {
     return carrinho.fold(
       0,
       (total, item) =>
           total +
-          (
-            item.preco *
-            item.quantidade
-          ),
+          (item.preco * item.quantidade),
     );
   }
 
@@ -318,21 +275,19 @@ class _RestaurantScreenState
     return carrinho.fold(
       0,
       (total, item) =>
-          total +
-          item.quantidade,
+          total + item.quantidade,
     );
   }
 
-  // ============================================================
+  // ==========================================================
   // ABRIR CARRINHO
-  // ============================================================
+  // ==========================================================
 
   void abrirCarrinho() {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            CartScreen(
+        builder: (context) => CartScreen(
           itens: carrinho,
         ),
       ),
@@ -343,13 +298,11 @@ class _RestaurantScreenState
     });
   }
 
-  // ============================================================
+  // ==========================================================
   // PREÇO
-  // ============================================================
+  // ==========================================================
 
-  double _precoProduto(
-    dynamic valor,
-  ) {
+  double _precoProduto(dynamic valor) {
     if (valor is num) {
       return valor.toDouble();
     }
@@ -357,42 +310,28 @@ class _RestaurantScreenState
     return double.tryParse(
           valor
                   ?.toString()
-                  .replaceAll(
-                ',',
-                '.',
-              ) ??
+                  .replaceAll(',', '.') ??
               '',
         ) ??
         0;
   }
 
-  String _formatarPreco(
-    double preco,
-  ) {
+  String _formatarPreco(double preco) {
     return 'R\$ ${preco.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 
-  // ============================================================
-  // URL DA IMAGEM
-  // ============================================================
+  // ==========================================================
+  // URL IMAGEM
+  // ==========================================================
 
-  String _urlImagemProduto(
-    String imagem,
-  ) {
-    if (imagem.startsWith(
-          'http://',
-        ) ||
-        imagem.startsWith(
-          'https://',
-        )) {
+  String _urlImagemProduto(String imagem) {
+    if (imagem.startsWith('http://') ||
+        imagem.startsWith('https://')) {
       return imagem;
     }
 
-    final baseUrl =
-        Api.baseUrl.replaceFirst(
-      RegExp(
-        r'/api/?$',
-      ),
+    final baseUrl = Api.baseUrl.replaceFirst(
+      RegExp(r'/api/?$'),
       '',
     );
 
@@ -403,333 +342,150 @@ class _RestaurantScreenState
     return '$baseUrl/$imagem';
   }
 
-  // ============================================================
+  // ==========================================================
   // BUILD
-  // ============================================================
+  // ==========================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          fundo,
-
-      appBar: AppBar(
-        backgroundColor:
-            laranja,
-
-        foregroundColor:
-            Colors.white,
-
-        title: Text(
-          widget.nome,
-          style:
-              const TextStyle(
-            fontWeight:
-                FontWeight.bold,
-          ),
-        ),
-
-        actions: [
-          IconButton(
-            tooltip:
-                favorito
-                    ? 'Remover dos favoritos'
-                    : 'Adicionar aos favoritos',
-
-            icon:
-                Icon(
-              favorito
-                  ? Icons.favorite
-                  : Icons.favorite_border,
-              color:
-                  Colors.white,
-              size:
-                  28,
-            ),
-
-            onPressed:
-                alternarFavorito,
-          ),
-
-          IconButton(
-            tooltip:
-                'Pedidos',
-
-            icon:
-                const Icon(
-              Icons.receipt_long,
-            ),
-
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder:
-                      (context) =>
-                          const RestaurantOrdersScreen(),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
-
-      body:
-          RefreshIndicator(
-        color:
-            laranja,
-
-        onRefresh:
-            _carregarProdutos,
-
-        child:
-            SingleChildScrollView(
+      backgroundColor: fundo,
+      body: RefreshIndicator(
+        color: laranja,
+        onRefresh: _carregarProdutos,
+        child: CustomScrollView(
           physics:
               const AlwaysScrollableScrollPhysics(),
+          slivers: [
+            // ==================================================
+            // HEADER
+            // ==================================================
 
-          padding:
-              const EdgeInsets.only(
-            bottom:
-                100,
-          ),
+            SliverAppBar(
+              expandedHeight: 285,
+              pinned: true,
+              elevation: 0,
+              backgroundColor: laranja,
+              foregroundColor: Colors.white,
 
-          child:
-              Column(
-            children: [
-              // ==================================================
-              // CABEÇALHO
-              // ==================================================
+              leading: Padding(
+                padding: const EdgeInsets.all(8),
+                child: _botaoHeader(
+                  icon: Icons.arrow_back,
+                  onPressed: () {
+                    Navigator.pop(context);
+                  },
+                ),
+              ),
 
-              Container(
-                width:
-                    double.infinity,
-
-                padding:
-                    const EdgeInsets.all(
-                  20,
+              actions: [
+                _botaoHeader(
+                  icon: favorito
+                      ? Icons.favorite
+                      : Icons.favorite_border,
+                  onPressed: alternarFavorito,
                 ),
 
-                color:
-                    Colors.white,
+                const SizedBox(width: 5),
 
-                child:
-                    Column(
+                _botaoHeader(
+                  icon: Icons.receipt_long,
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const RestaurantOrdersScreen(),
+                      ),
+                    );
+                  },
+                ),
+
+                const SizedBox(width: 8),
+              ],
+
+              flexibleSpace: FlexibleSpaceBar(
+                background: _cabecalhoRestaurante(),
+              ),
+            ),
+
+            // ==================================================
+            // TÍTULO CARDÁPIO
+            // ==================================================
+
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(
+                  16,
+                  25,
+                  16,
+                  10,
+                ),
+                child: Row(
                   children: [
-                    Container(
-                      width:
-                          100,
-
-                      height:
-                          100,
-
-                      decoration:
-                          BoxDecoration(
-                        color:
-                            const Color(
-                          0xFFFFB36B,
-                        ),
-
-                        borderRadius:
-                            BorderRadius.circular(
-                          20,
+                    const Expanded(
+                      child: Text(
+                        'Cardápio',
+                        style: TextStyle(
+                          fontSize: 23,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
-
-                      child:
-                          const Icon(
-                        Icons.restaurant,
-                        size:
-                            55,
-                        color:
-                            laranja,
-                      ),
                     ),
 
-                    const SizedBox(
-                      height:
-                          15,
-                    ),
-
-                    Text(
-                      widget.nome,
-
-                      textAlign:
-                          TextAlign.center,
-
-                      style:
-                          const TextStyle(
-                        fontSize:
-                            24,
-                        color:
-                            Colors.black,
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-
-                    const SizedBox(
-                      height:
-                          8,
-                    ),
-
-                    Text(
-                      widget.descricao,
-
-                      textAlign:
-                          TextAlign.center,
-
-                      style:
-                          const TextStyle(
-                        color:
-                            Colors.grey,
-                        fontSize:
-                            14,
-                      ),
-                    ),
-
-                    const SizedBox(
-                      height:
-                          12,
-                    ),
-
-                    Row(
-                      mainAxisAlignment:
-                          MainAxisAlignment.center,
-
-                      children: [
-                        const Icon(
-                          Icons.star,
-                          color:
-                              Colors.orange,
-                          size:
-                              20,
+                    if (produtos.isNotEmpty)
+                      Container(
+                        padding:
+                            const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
                         ),
-
-                        const SizedBox(
-                          width:
-                              5,
-                        ),
-
-                        Text(
-                          widget.avaliacao,
-
-                          style:
-                              const TextStyle(
-                            fontWeight:
-                                FontWeight.bold,
+                        decoration: BoxDecoration(
+                          color: const Color(
+                            0xFFFFE8D8,
+                          ),
+                          borderRadius:
+                              BorderRadius.circular(
+                            20,
                           ),
                         ),
-
-                        const SizedBox(
-                          width:
-                              15,
-                        ),
-
-                        const Icon(
-                          Icons.access_time,
-                          size:
-                              20,
-                          color:
-                              Colors.grey,
-                        ),
-
-                        const SizedBox(
-                          width:
-                              5,
-                        ),
-
-                        const Text(
-                          '30-45 min',
-
-                          style:
-                              TextStyle(
-                            color:
-                                Colors.grey,
+                        child: Text(
+                          '${produtos.length} itens',
+                          style: const TextStyle(
+                            color: laranja,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
-                      ],
-                    ),
+                      ),
                   ],
                 ),
               ),
+            ),
 
-              const SizedBox(
-                height:
-                    20,
-              ),
+            // ==================================================
+            // CATEGORIAS
+            // ==================================================
 
-              const Padding(
-                padding:
-                    EdgeInsets.symmetric(
-                  horizontal:
-                      16,
-                ),
-
-                child:
-                    Align(
-                  alignment:
-                      Alignment.centerLeft,
-
-                  child:
-                      Text(
-                    'Cardápio',
-
-                    style:
-                        TextStyle(
-                      color:
-                          Colors.black,
-                      fontSize:
-                          21,
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(
-                height:
-                    10,
-              ),
-
-              // ==================================================
-              // CATEGORIAS
-              // ==================================================
-
-              if (!carregandoProdutos &&
-                  produtos.isNotEmpty)
-                SizedBox(
-                  height:
-                      44,
-
-                  child:
-                      ListView.separated(
+            if (!carregandoProdutos &&
+                produtos.isNotEmpty)
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 55,
+                  child: ListView.separated(
                     padding:
                         const EdgeInsets.symmetric(
-                      horizontal:
-                          16,
+                      horizontal: 16,
                     ),
-
                     scrollDirection:
                         Axis.horizontal,
-
                     itemCount:
                         categorias.length,
-
                     separatorBuilder:
                         (_, __) =>
-                            const SizedBox(
-                      width:
-                          8,
-                    ),
-
+                            const SizedBox(width: 8),
                     itemBuilder:
-                        (
-                      context,
-                      index,
-                    ) {
+                        (context, index) {
                       final categoria =
                           categorias[index];
 
@@ -737,155 +493,339 @@ class _RestaurantScreenState
                           categoriaSelecionada ==
                               categoria;
 
-                      return ChoiceChip(
-                        label:
-                            Text(
-                          categoria,
-                        ),
-
-                        selected:
-                            selecionada,
-
-                        onSelected:
-                            (_) {
+                      return GestureDetector(
+                        onTap: () {
                           setState(() {
                             categoriaSelecionada =
                                 categoria;
                           });
                         },
-
-                        selectedColor:
-                            laranja,
-
-                        backgroundColor:
-                            Colors.white,
-
-                        labelStyle:
-                            TextStyle(
-                          color:
-                              selecionada
-                                  ? Colors.white
-                                  : Colors.black87,
-
-                          fontWeight:
-                              FontWeight.w600,
-                        ),
-
-                        side:
-                            BorderSide(
-                          color:
-                              selecionada
+                        child: AnimatedContainer(
+                          duration:
+                              const Duration(
+                            milliseconds: 180,
+                          ),
+                          padding:
+                              const EdgeInsets
+                                  .symmetric(
+                            horizontal: 17,
+                            vertical: 10,
+                          ),
+                          decoration:
+                              BoxDecoration(
+                            color: selecionada
+                                ? laranja
+                                : Colors.white,
+                            borderRadius:
+                                BorderRadius.circular(
+                              25,
+                            ),
+                            border: Border.all(
+                              color: selecionada
                                   ? laranja
-                                  : Colors.black12,
+                                  : Colors.grey.shade200,
+                            ),
+                          ),
+                          child: Center(
+                            child: Text(
+                              categoria,
+                              style: TextStyle(
+                                color: selecionada
+                                    ? Colors.white
+                                    : Colors.black87,
+                                fontWeight:
+                                    FontWeight.w600,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ),
                         ),
                       );
                     },
                   ),
                 ),
+              ),
 
-              if (!carregandoProdutos)
-                const SizedBox(
-                  height:
-                      10,
-                ),
+            const SliverToBoxAdapter(
+              child: SizedBox(height: 10),
+            ),
 
-              // ==================================================
-              // PRODUTOS
-              // ==================================================
+            // ==================================================
+            // PRODUTOS
+            // ==================================================
 
-              if (carregandoProdutos)
-                const Padding(
-                  padding:
-                      EdgeInsets.all(
-                    50,
-                  ),
-
-                  child:
-                      Center(
+            if (carregandoProdutos)
+              const SliverToBoxAdapter(
+                child: Padding(
+                  padding: EdgeInsets.all(60),
+                  child: Center(
                     child:
                         CircularProgressIndicator(
-                      color:
-                          laranja,
+                      color: laranja,
                     ),
                   ),
-                )
-              else if (erroProdutos !=
-                  null)
-                _estadoErroProdutos()
-              else if (produtos.isEmpty)
-                _estadoVazioProdutos()
-              else if (produtosFiltrados.isEmpty)
-                _estadoVazioCategoria()
-              else
-                ...produtosFiltrados.map(
-                  (produto) =>
-                      produtoCard(
-                    produto:
-                        produto,
+                ),
+              )
+            else if (erroProdutos != null)
+              SliverToBoxAdapter(
+                child: _estadoErroProdutos(),
+              )
+            else if (produtos.isEmpty)
+              SliverToBoxAdapter(
+                child: _estadoVazioProdutos(),
+              )
+            else if (produtosFiltrados.isEmpty)
+              SliverToBoxAdapter(
+                child: _estadoVazioCategoria(),
+              )
+            else
+              SliverPadding(
+                padding:
+                    const EdgeInsets.fromLTRB(
+                  16,
+                  5,
+                  16,
+                  130,
+                ),
+                sliver: SliverList(
+                  delegate:
+                      SliverChildBuilderDelegate(
+                    (context, index) {
+                      return produtoCard(
+                        produto:
+                            produtosFiltrados[index],
+                      );
+                    },
+                    childCount:
+                        produtosFiltrados.length,
                   ),
                 ),
-
-              const SizedBox(
-                height:
-                    20,
               ),
-            ],
-          ),
+          ],
         ),
       ),
 
-      // ============================================================
+      // ========================================================
       // CARRINHO
-      // ============================================================
+      // ========================================================
 
       floatingActionButton:
-          FloatingActionButton.extended(
-        backgroundColor:
+          quantidadeItens > 0
+              ? _botaoCarrinho()
+              : null,
+
+      floatingActionButtonLocation:
+          FloatingActionButtonLocation.centerFloat,
+    );
+  }
+
+  // ==========================================================
+  // HEADER RESTAURANTE
+  // ==========================================================
+
+  Widget _cabecalhoRestaurante() {
+    return Container(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
             laranja,
-
-        onPressed:
-            abrirCarrinho,
-
-        icon:
-            const Icon(
-          Icons.shopping_cart,
-          color:
-              Colors.white,
+            Color(0xFFFF9A5A),
+          ],
         ),
-
-        label:
-            Text(
-          quantidadeItens == 0
-              ? 'Carrinho'
-              : '$quantidadeItens itens • ${_formatarPreco(totalCarrinho)}',
-
-          style:
-              const TextStyle(
-            color:
-                Colors.white,
-            fontWeight:
-                FontWeight.bold,
+      ),
+      child: Column(
+        mainAxisAlignment:
+            MainAxisAlignment.end,
+        children: [
+          Container(
+            width: 105,
+            height: 105,
+            margin:
+                const EdgeInsets.only(
+              bottom: 13,
+            ),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius:
+                  BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black
+                      .withValues(
+                    alpha: 0.15,
+                  ),
+                  blurRadius: 15,
+                  offset:
+                      const Offset(0, 7),
+                ),
+              ],
+            ),
+            child: const Icon(
+              Icons.restaurant,
+              color: laranja,
+              size: 52,
+            ),
           ),
+
+          Text(
+            widget.nome,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow:
+                TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 25,
+              fontWeight:
+                  FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 5),
+
+          Padding(
+            padding:
+                const EdgeInsets.symmetric(
+              horizontal: 25,
+            ),
+            child: Text(
+              widget.descricao,
+              textAlign:
+                  TextAlign.center,
+              maxLines: 1,
+              overflow:
+                  TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white
+                    .withValues(
+                  alpha: 0.9,
+                ),
+                fontSize: 13,
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 13),
+
+          Row(
+            mainAxisAlignment:
+                MainAxisAlignment.center,
+            children: [
+              _informacaoHeader(
+                Icons.star_rounded,
+                widget.avaliacao,
+              ),
+
+              const SizedBox(width: 12),
+
+              _informacaoHeader(
+                Icons.access_time_rounded,
+                '30–45 min',
+              ),
+
+              const SizedBox(width: 12),
+
+              _informacaoHeader(
+                Icons.delivery_dining,
+                'Entrega',
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 22),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================================
+  // INFORMAÇÃO HEADER
+  // ==========================================================
+
+  Widget _informacaoHeader(
+    IconData icon,
+    String texto,
+  ) {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(
+        horizontal: 10,
+        vertical: 7,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(
+          alpha: 0.16,
+        ),
+        borderRadius:
+            BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            icon,
+            color: Colors.white,
+            size: 15,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            texto,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 11,
+              fontWeight:
+                  FontWeight.w600,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ==========================================================
+  // BOTÃO HEADER
+  // ==========================================================
+
+  Widget _botaoHeader({
+    required IconData icon,
+    required VoidCallback onPressed,
+  }) {
+    return Container(
+      margin:
+          const EdgeInsets.symmetric(
+        vertical: 8,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(
+          alpha: 0.18,
+        ),
+        shape: BoxShape.circle,
+      ),
+      child: IconButton(
+        onPressed: onPressed,
+        icon: Icon(
+          icon,
+          color: Colors.white,
+          size: 21,
         ),
       ),
     );
   }
 
-  // ============================================================
+  // ==========================================================
   // CARD PRODUTO
-  // ============================================================
+  // ==========================================================
 
   Widget produtoCard({
     required Map<String, dynamic> produto,
   }) {
     final nome =
-        produto['nome']
-                ?.toString() ??
+        produto['nome']?.toString() ??
             'Produto';
 
     final descricao =
-        produto['descricao']
-                ?.toString() ??
+        produto['descricao']?.toString() ??
             '';
 
     final preco =
@@ -894,172 +834,137 @@ class _RestaurantScreenState
     );
 
     final imagem =
-        produto['imagem']
-            ?.toString();
+        produto['imagem']?.toString();
+
+    final produtoId =
+        produto['id']?.toString();
 
     return Container(
       margin:
-          const EdgeInsets.symmetric(
-        horizontal:
-            16,
-        vertical:
-            7,
+          const EdgeInsets.only(
+        bottom: 13,
       ),
-
       padding:
-          const EdgeInsets.all(
-        15,
-      ),
-
-      decoration:
-          BoxDecoration(
-        color:
-            const Color(
-          0xFFFFF7F0,
-        ),
-
+          const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius:
-            BorderRadius.circular(
-          16,
+            BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.black.withValues(
+            alpha: 0.04,
+          ),
         ),
-
         boxShadow: [
           BoxShadow(
-            color:
-                Colors.black.withValues(
-              alpha:
-                  0.08,
+            color: Colors.black.withValues(
+              alpha: 0.045,
             ),
-
-            blurRadius:
-                6,
-
+            blurRadius: 12,
             offset:
-                const Offset(
-              0,
-              2,
-            ),
+                const Offset(0, 4),
           ),
         ],
       ),
-
-      child:
-          Row(
+      child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           ClipRRect(
             borderRadius:
-                BorderRadius.circular(
-              12,
-            ),
-
-            child:
-                _imagemProduto(
+                BorderRadius.circular(16),
+            child: _imagemProduto(
               imagem,
             ),
           ),
 
-          const SizedBox(
-            width:
-                15,
-          ),
+          const SizedBox(width: 13),
 
           Expanded(
-            child:
-                Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-
-              children: [
-                Text(
-                  nome,
-
-                  maxLines:
-                      2,
-
-                  overflow:
-                      TextOverflow.ellipsis,
-
-                  style:
-                      const TextStyle(
-                    color:
-                        Colors.black,
-                    fontSize:
-                        17,
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
-                ),
-
-                const SizedBox(
-                  height:
-                      5,
-                ),
-
-                if (descricao.isNotEmpty)
+            child: Padding(
+              padding:
+                  const EdgeInsets.only(
+                top: 2,
+              ),
+              child: Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
                   Text(
-                    descricao,
-
-                    maxLines:
-                        2,
-
+                    nome,
+                    maxLines: 2,
                     overflow:
                         TextOverflow.ellipsis,
-
                     style:
                         const TextStyle(
-                      color:
-                          Colors.black,
-                      fontSize:
-                          12,
+                      fontSize: 16,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
 
-                const SizedBox(
-                  height:
-                      8,
-                ),
+                  if (descricao.isNotEmpty) ...[
+                    const SizedBox(height: 6),
 
-                Text(
-                  _formatarPreco(
-                    preco,
-                  ),
+                    Text(
+                      descricao,
+                      maxLines: 2,
+                      overflow:
+                          TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color:
+                            Colors.grey.shade600,
+                        fontSize: 12,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
 
-                  style:
-                      const TextStyle(
-                    color:
-                        laranja,
-                    fontSize:
-                        16,
-                    fontWeight:
-                        FontWeight.bold,
+                  const SizedBox(height: 12),
+
+                  Text(
+                    _formatarPreco(preco),
+                    style:
+                        const TextStyle(
+                      color: laranja,
+                      fontSize: 17,
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
 
-          IconButton(
-            onPressed: () {
-              adicionarProduto(
-                nome:
-                    nome,
-                preco:
-                    preco,
-                imagem:
-                    imagem,
-                produtoId:
-                    produto['id']
-                        ?.toString(),
-              );
-            },
-
-            icon:
-                const Icon(
-              Icons.add_circle,
-              color:
-                  laranja,
-              size:
-                  34,
+          Padding(
+            padding:
+                const EdgeInsets.only(
+              top: 38,
+            ),
+            child: GestureDetector(
+              onTap: () {
+                adicionarProduto(
+                  nome: nome,
+                  preco: preco,
+                  imagem: imagem,
+                  produtoId: produtoId,
+                );
+              },
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration:
+                    const BoxDecoration(
+                  color: laranja,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.add,
+                  color: Colors.white,
+                  size: 25,
+                ),
+              ),
             ),
           ),
         ],
@@ -1067,57 +972,26 @@ class _RestaurantScreenState
     );
   }
 
-  // ============================================================
-  // IMAGEM
-  // ============================================================
+  // ==========================================================
+  // IMAGEM PRODUTO
+  // ==========================================================
 
   Widget _imagemProduto(
     String? imagem,
   ) {
     if (imagem == null ||
         imagem.isEmpty) {
-      return Container(
-        width:
-            80,
-
-        height:
-            80,
-
-        color:
-            const Color(
-          0xFFFFB36B,
-        ),
-
-        child:
-            const Icon(
-          Icons.fastfood,
-
-          color:
-              laranja,
-
-          size:
-              35,
-        ),
-      );
+      return _placeholderImagem();
     }
 
     final url =
-        _urlImagemProduto(
-      imagem,
-    );
+        _urlImagemProduto(imagem);
 
     return Image.network(
       url,
-
-      width:
-          80,
-
-      height:
-          80,
-
-      fit:
-          BoxFit.cover,
-
+      width: 105,
+      height: 105,
+      fit: BoxFit.cover,
       loadingBuilder:
           (
         context,
@@ -1128,172 +1002,245 @@ class _RestaurantScreenState
           return child;
         }
 
-        return Container(
-          width:
-              80,
-
-          height:
-              80,
-
-          color:
-              const Color(
-            0xFFFFB36B,
-          ),
-
-          child:
-              const Center(
-            child:
-                CircularProgressIndicator(
-              strokeWidth:
-                  2,
-
-              color:
-                  laranja,
-            ),
-          ),
-        );
+        return _loadingImagem();
       },
-
       errorBuilder:
           (
         context,
         error,
         stackTrace,
       ) {
-        return Container(
-          width:
-              80,
-
-          height:
-              80,
-
-          color:
-              const Color(
-            0xFFFFB36B,
-          ),
-
-          child:
-              const Icon(
-            Icons.fastfood,
-
-            color:
-                laranja,
-
-            size:
-                35,
-          ),
-        );
+        return _placeholderImagem();
       },
     );
   }
 
-  // ============================================================
+  Widget _placeholderImagem() {
+    return Container(
+      width: 105,
+      height: 105,
+      decoration: BoxDecoration(
+        color: fundoImagem,
+        borderRadius:
+            BorderRadius.circular(16),
+      ),
+      child: const Icon(
+        Icons.fastfood_rounded,
+        color: laranja,
+        size: 40,
+      ),
+    );
+  }
+
+  Widget _loadingImagem() {
+    return Container(
+      width: 105,
+      height: 105,
+      color: fundoImagem,
+      child: const Center(
+        child:
+            CircularProgressIndicator(
+          strokeWidth: 2,
+          color: laranja,
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================
+  // BOTÃO CARRINHO
+  // ==========================================================
+
+  Widget _botaoCarrinho() {
+    return GestureDetector(
+      onTap: abrirCarrinho,
+      child: Container(
+        height: 58,
+        margin:
+            const EdgeInsets.symmetric(
+          horizontal: 18,
+        ),
+        padding:
+            const EdgeInsets.symmetric(
+          horizontal: 18,
+        ),
+        decoration: BoxDecoration(
+          color: laranja,
+          borderRadius:
+              BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: laranja.withValues(
+                alpha: 0.35,
+              ),
+              blurRadius: 15,
+              offset:
+                  const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 38,
+              height: 38,
+              decoration:
+                  BoxDecoration(
+                color: Colors.white
+                    .withValues(
+                  alpha: 0.18,
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.shopping_bag_outlined,
+                color: Colors.white,
+                size: 21,
+              ),
+            ),
+
+            const SizedBox(width: 11),
+
+            Expanded(
+              child: Column(
+                mainAxisAlignment:
+                    MainAxisAlignment.center,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$quantidadeItens ${quantidadeItens == 1 ? 'item' : 'itens'}',
+                    style:
+                        const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                    ),
+                  ),
+
+                  Text(
+                    _formatarPreco(
+                      totalCarrinho,
+                    ),
+                    style:
+                        const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            const Text(
+              'Ver carrinho',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(width: 5),
+
+            const Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white,
+              size: 16,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================
   // ERRO
-  // ============================================================
+  // ==========================================================
 
   Widget _estadoErroProdutos() {
     return Container(
       margin:
-          const EdgeInsets.symmetric(
-        horizontal:
-            16,
-      ),
-
+          const EdgeInsets.all(16),
       padding:
-          const EdgeInsets.all(
-        30,
-      ),
-
-      decoration:
-          BoxDecoration(
-        color:
-            Colors.white,
-
+          const EdgeInsets.all(30),
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
+            BorderRadius.circular(20),
       ),
-
-      child:
-          Column(
+      child: Column(
         children: [
-          const Icon(
-            Icons
-                .cloud_off_rounded,
-
-            size:
-                55,
-
-            color:
-                Colors.black26,
+          Container(
+            width: 70,
+            height: 70,
+            decoration:
+                const BoxDecoration(
+              color: fundoImagem,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.cloud_off_rounded,
+              color: laranja,
+              size: 34,
+            ),
           ),
 
-          const SizedBox(
-            height:
-                12,
-          ),
+          const SizedBox(height: 15),
 
           const Text(
             'Não foi possível carregar o cardápio',
-
-            textAlign:
-                TextAlign.center,
-
-            style:
-                TextStyle(
-              fontSize:
-                  17,
-
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 17,
               fontWeight:
                   FontWeight.bold,
             ),
           ),
 
-          const SizedBox(
-            height:
-                6,
-          ),
+          const SizedBox(height: 7),
 
           const Text(
             'Verifique a conexão com o servidor e tente novamente.',
-
-            textAlign:
-                TextAlign.center,
-
-            style:
-                TextStyle(
-              color:
-                  Colors.black54,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.black54,
+              height: 1.4,
             ),
           ),
 
-          const SizedBox(
-            height:
-                16,
-          ),
+          const SizedBox(height: 18),
 
           ElevatedButton.icon(
             onPressed:
                 _carregarProdutos,
-
             icon:
-                const Icon(
-              Icons.refresh,
-            ),
-
+                const Icon(Icons.refresh),
             label:
                 const Text(
               'Tentar novamente',
             ),
-
             style:
                 ElevatedButton.styleFrom(
               backgroundColor:
                   laranja,
-
               foregroundColor:
                   Colors.white,
+              elevation: 0,
+              padding:
+                  const EdgeInsets
+                      .symmetric(
+                horizontal: 20,
+                vertical: 13,
+              ),
+              shape:
+                  RoundedRectangleBorder(
+                borderRadius:
+                    BorderRadius.circular(
+                  13,
+                ),
+              ),
             ),
           ),
         ],
@@ -1301,81 +1248,57 @@ class _RestaurantScreenState
     );
   }
 
-  // ============================================================
+  // ==========================================================
   // VAZIO
-  // ============================================================
+  // ==========================================================
 
   Widget _estadoVazioProdutos() {
     return Container(
       margin:
-          const EdgeInsets.symmetric(
-        horizontal:
-            16,
-      ),
-
+          const EdgeInsets.all(16),
       padding:
-          const EdgeInsets.all(
-        30,
-      ),
-
-      decoration:
-          BoxDecoration(
-        color:
-            Colors.white,
-
+          const EdgeInsets.all(30),
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
+            BorderRadius.circular(20),
       ),
-
-      child:
-          const Column(
+      child: Column(
         children: [
-          Icon(
-            Icons
-                .restaurant_menu_outlined,
-
-            size:
-                55,
-
-            color:
-                Colors.black26,
+          Container(
+            width: 70,
+            height: 70,
+            decoration:
+                const BoxDecoration(
+              color: fundoImagem,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.restaurant_menu_outlined,
+              color: laranja,
+              size: 34,
+            ),
           ),
 
-          SizedBox(
-            height:
-                12,
-          ),
+          const SizedBox(height: 15),
 
-          Text(
+          const Text(
             'Nenhum produto disponível',
-
-            style:
-                TextStyle(
-              fontSize:
-                  17,
-
+            style: TextStyle(
+              fontSize: 17,
               fontWeight:
                   FontWeight.bold,
             ),
           ),
 
-          SizedBox(
-            height:
-                6,
-          ),
+          const SizedBox(height: 7),
 
-          Text(
+          const Text(
             'Este restaurante ainda não possui produtos disponíveis.',
-
-            textAlign:
-                TextAlign.center,
-
-            style:
-                TextStyle(
-              color:
-                  Colors.black54,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Colors.black54,
+              height: 1.4,
             ),
           ),
         ],
@@ -1383,63 +1306,45 @@ class _RestaurantScreenState
     );
   }
 
-  // ============================================================
+  // ==========================================================
   // VAZIO CATEGORIA
-  // ============================================================
+  // ==========================================================
 
   Widget _estadoVazioCategoria() {
     return Container(
       margin:
-          const EdgeInsets.symmetric(
-        horizontal:
-            16,
-      ),
-
+          const EdgeInsets.all(16),
       padding:
-          const EdgeInsets.all(
-        30,
-      ),
-
-      decoration:
-          BoxDecoration(
-        color:
-            Colors.white,
-
+          const EdgeInsets.all(30),
+      decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
+            BorderRadius.circular(20),
       ),
-
-      child:
-          const Column(
+      child: Column(
         children: [
-          Icon(
-            Icons.search_off_rounded,
-
-            size:
-                55,
-
-            color:
-                Colors.black26,
+          Container(
+            width: 70,
+            height: 70,
+            decoration:
+                const BoxDecoration(
+              color: fundoImagem,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.search_off_rounded,
+              color: laranja,
+              size: 34,
+            ),
           ),
 
-          SizedBox(
-            height:
-                12,
-          ),
+          const SizedBox(height: 15),
 
-          Text(
+          const Text(
             'Nenhum produto nesta categoria',
-
-            textAlign:
-                TextAlign.center,
-
-            style:
-                TextStyle(
-              fontSize:
-                  17,
-
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 17,
               fontWeight:
                   FontWeight.bold,
             ),
@@ -1449,4 +1354,3 @@ class _RestaurantScreenState
     );
   }
 }
-
