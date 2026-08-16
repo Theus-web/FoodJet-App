@@ -9,7 +9,7 @@ class CartItem {
   final String? imagem;
   final String? produtoId;
 
-  // Mantido opcional para não quebrar a estrutura atual.
+  // Restaurante ao qual o produto pertence.
   final String? restauranteId;
 
   int quantidade;
@@ -27,9 +27,13 @@ class CartItem {
 class CartScreen extends StatefulWidget {
   final List<CartItem> itens;
 
+  // ID do restaurante escolhido pelo cliente.
+  final String restauranteId;
+
   const CartScreen({
     super.key,
     required this.itens,
+    required this.restauranteId,
   });
 
   @override
@@ -224,6 +228,36 @@ class _CartScreenState extends State<CartScreen> {
     );
   }
 
+  // ============================================================
+  // VALIDAR RESTAURANTE
+  // ============================================================
+
+  String? obterRestauranteId() {
+    // Primeiro tenta o ID recebido pelo CartScreen.
+    final idTela = widget.restauranteId.trim();
+
+    if (idTela.isNotEmpty) {
+      return idTela;
+    }
+
+    // Caso o CartScreen não tenha recebido o ID,
+    // tenta obter do primeiro produto.
+    if (widget.itens.isNotEmpty) {
+      final idProduto =
+          widget.itens.first.restauranteId?.trim();
+
+      if (idProduto != null && idProduto.isNotEmpty) {
+        return idProduto;
+      }
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // CONTINUAR PEDIDO
+  // ============================================================
+
   void continuarPedido() {
     if (widget.itens.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -238,6 +272,58 @@ class _CartScreenState extends State<CartScreen> {
           ),
         ),
       );
+
+      return;
+    }
+
+    final restauranteId = obterRestauranteId();
+
+    if (restauranteId == null || restauranteId.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Não foi possível identificar o restaurante deste pedido.',
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    // Verifica se todos os produtos pertencem ao mesmo restaurante.
+    final restaurantesDiferentes = widget.itens.any(
+      (item) {
+        final itemRestaurante =
+            item.restauranteId?.trim();
+
+        if (itemRestaurante == null ||
+            itemRestaurante.isEmpty) {
+          return false;
+        }
+
+        return itemRestaurante != restauranteId;
+      },
+    );
+
+    if (restaurantesDiferentes) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'O carrinho possui produtos de restaurantes diferentes.',
+          ),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+      );
+
       return;
     }
 
@@ -247,6 +333,7 @@ class _CartScreenState extends State<CartScreen> {
         builder: (context) => DeliveryAddressScreen(
           itens: widget.itens,
           subtotal: subtotal,
+          restauranteId: restauranteId,
         ),
       ),
     );
@@ -530,7 +617,8 @@ class _CartScreenState extends State<CartScreen> {
   // ============================================================
 
   Widget _itemCarrinho(CartItem item) {
-    final totalItem = item.preco * item.quantidade;
+    final totalItem =
+        item.preco * item.quantidade;
 
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
@@ -556,7 +644,8 @@ class _CartScreenState extends State<CartScreen> {
       ),
 
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           _imagemProduto(item.imagem),
 
@@ -564,16 +653,19 @@ class _CartScreenState extends State<CartScreen> {
 
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Expanded(
                       child: Text(
                         item.nome,
                         maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
+                        overflow:
+                            TextOverflow.ellipsis,
                         style: const TextStyle(
                           color: Colors.black87,
                           fontSize: 16,
@@ -590,7 +682,8 @@ class _CartScreenState extends State<CartScreen> {
                         removerProduto(item);
                       },
 
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius:
+                          BorderRadius.circular(20),
 
                       child: const Padding(
                         padding: EdgeInsets.all(4),
@@ -620,7 +713,8 @@ class _CartScreenState extends State<CartScreen> {
                 Row(
                   children: [
                     _botaoQuantidade(
-                      icone: Icons.remove_rounded,
+                      icone:
+                          Icons.remove_rounded,
                       onPressed: () {
                         diminuir(item);
                       },
@@ -641,7 +735,8 @@ class _CartScreenState extends State<CartScreen> {
                     ),
 
                     _botaoQuantidade(
-                      icone: Icons.add_rounded,
+                      icone:
+                          Icons.add_rounded,
                       onPressed: () {
                         aumentar(item);
                       },
@@ -677,11 +772,13 @@ class _CartScreenState extends State<CartScreen> {
   }) {
     return Material(
       color: laranja.withValues(alpha: 0.10),
-      borderRadius: BorderRadius.circular(11),
+      borderRadius:
+          BorderRadius.circular(11),
 
       child: InkWell(
         onTap: onPressed,
-        borderRadius: BorderRadius.circular(11),
+        borderRadius:
+            BorderRadius.circular(11),
 
         child: SizedBox(
           width: 36,
@@ -709,7 +806,8 @@ class _CartScreenState extends State<CartScreen> {
 
         decoration: BoxDecoration(
           color: const Color(0xFFFFE8D5),
-          borderRadius: BorderRadius.circular(16),
+          borderRadius:
+              BorderRadius.circular(16),
         ),
 
         child: const Icon(
@@ -720,7 +818,8 @@ class _CartScreenState extends State<CartScreen> {
       );
     }
 
-    if (imagem == null || imagem.trim().isEmpty) {
+    if (imagem == null ||
+        imagem.trim().isEmpty) {
       return fallback();
     }
 
@@ -728,7 +827,8 @@ class _CartScreenState extends State<CartScreen> {
 
     if (!url.startsWith('http://') &&
         !url.startsWith('https://')) {
-      final baseUrl = Api.baseUrl.replaceFirst(
+      final baseUrl =
+          Api.baseUrl.replaceFirst(
         RegExp(r'/api/?$'),
         '',
       );
@@ -741,7 +841,8 @@ class _CartScreenState extends State<CartScreen> {
     }
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
+      borderRadius:
+          BorderRadius.circular(16),
 
       child: Image.network(
         url,
@@ -762,11 +863,14 @@ class _CartScreenState extends State<CartScreen> {
             width: 78,
             height: 78,
             color: const Color(0xFFFFE8D5),
+
             child: const Center(
               child: SizedBox(
                 width: 20,
                 height: 20,
-                child: CircularProgressIndicator(
+
+                child:
+                    CircularProgressIndicator(
                   strokeWidth: 2,
                   color: laranja,
                 ),
@@ -802,7 +906,8 @@ class _CartScreenState extends State<CartScreen> {
       decoration: const BoxDecoration(
         color: Colors.white,
 
-        borderRadius: BorderRadius.vertical(
+        borderRadius:
+            BorderRadius.vertical(
           top: Radius.circular(28),
         ),
 
@@ -826,7 +931,8 @@ class _CartScreenState extends State<CartScreen> {
 
               decoration: BoxDecoration(
                 color: Colors.black12,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius:
+                    BorderRadius.circular(10),
               ),
             ),
 
@@ -922,26 +1028,29 @@ class _CartScreenState extends State<CartScreen> {
               child: ElevatedButton(
                 onPressed: continuarPedido,
 
-                style: ElevatedButton.styleFrom(
+                style:
+                    ElevatedButton.styleFrom(
                   backgroundColor: laranja,
                   foregroundColor: Colors.white,
                   elevation: 0,
 
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                  shape:
+                      RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(16),
                   ),
                 ),
 
                 child: Row(
                   mainAxisAlignment:
                       MainAxisAlignment.center,
-
                   children: [
                     const Text(
                       'Continuar pedido',
                       style: TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
                     ),
 
@@ -951,15 +1060,19 @@ class _CartScreenState extends State<CartScreen> {
                       width: 30,
                       height: 30,
 
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(
+                      decoration:
+                          BoxDecoration(
+                        color: Colors.white
+                            .withValues(
                           alpha: 0.18,
                         ),
-                        shape: BoxShape.circle,
+                        shape:
+                            BoxShape.circle,
                       ),
 
                       child: const Icon(
-                        Icons.arrow_forward_rounded,
+                        Icons
+                            .arrow_forward_rounded,
                         size: 19,
                       ),
                     ),
