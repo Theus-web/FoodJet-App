@@ -9,17 +9,17 @@ import '../cart/cart_screen.dart';
 import 'restaurant_orders_screen.dart';
 
 class RestaurantScreen extends StatefulWidget {
+  final String restauranteId;
   final String nome;
   final String descricao;
   final String avaliacao;
-  final String restauranteId;
 
   const RestaurantScreen({
     super.key,
+    required this.restauranteId,
     required this.nome,
     required this.descricao,
     required this.avaliacao,
-    this.restauranteId = '',
   });
 
   @override
@@ -321,6 +321,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             nome: nome,
             preco: preco,
             imagem: imagem,
+            restauranteId: widget.restauranteId,
           ),
         );
       }
@@ -366,20 +367,35 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   // ==========================================================
 
   void abrirCarrinho() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            CartScreen(
-          itens: carrinho,
+  final restauranteId = widget.restauranteId.trim();
+
+  if (restauranteId.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Não foi possível identificar o restaurante.',
         ),
+        backgroundColor: Colors.redAccent,
       ),
-    ).then((_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
+    );
+
+    return;
   }
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => CartScreen(
+        itens: carrinho,
+        restauranteId: restauranteId,
+      ),
+    ),
+  ).then((_) {
+    if (mounted) {
+      setState(() {});
+    }
+  });
+}
 
   // ==========================================================
   // PREÇO

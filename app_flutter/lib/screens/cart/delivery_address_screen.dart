@@ -10,10 +10,18 @@ class DeliveryAddressScreen extends StatefulWidget {
   final List<CartItem> itens;
   final double subtotal;
 
+
+  // ============================================================
+  // RESTAURANTE DO PEDIDO
+  // ============================================================
+
+  final String restauranteId;
+
   const DeliveryAddressScreen({
     super.key,
     required this.itens,
     required this.subtotal,
+    required this.restauranteId,
   });
 
   @override
@@ -170,12 +178,28 @@ class _DeliveryAddressScreenState
       return;
     }
 
+    // ============================================================
+    // VALIDAR RESTAURANTE
+    // ============================================================
+
+    final restauranteId =
+        widget.restauranteId.trim();
+
+    if (restauranteId.isEmpty) {
+      _mensagem(
+        'Não foi possível identificar o restaurante deste pedido.',
+        erro: true,
+      );
+      return;
+    }
+
     final endereco = <String, String>{
       'cep': cepController.text.trim(),
       'rua': ruaController.text.trim(),
       'numero': numeroController.text.trim(),
       'bairro': bairroController.text.trim(),
-      'complemento': complementoController.text.trim(),
+      'complemento':
+          complementoController.text.trim(),
       'cidade': cidadeController.text.trim(),
       'estado': estadoController.text.trim(),
     };
@@ -185,6 +209,7 @@ class _DeliveryAddressScreenState
     debugPrint('$endereco');
     debugPrint('🛒 ITENS: ${widget.itens.length}');
     debugPrint('💰 SUBTOTAL: ${widget.subtotal}');
+    debugPrint('🏪 RESTAURANTE ID: $restauranteId');
     debugPrint('========================================');
 
     Navigator.push(
@@ -194,6 +219,12 @@ class _DeliveryAddressScreenState
           endereco: endereco,
           itens: widget.itens,
           subtotal: widget.subtotal,
+
+          // ======================================================
+          // PASSA O RESTAURANTE PARA O PAGAMENTO
+          // ======================================================
+
+          restauranteId: restauranteId,
         ),
       ),
     );
@@ -223,25 +254,31 @@ class _DeliveryAddressScreenState
           prefixIcon: prefixIcon,
           filled: true,
           fillColor:
-              somenteLeitura ? Colors.grey.shade100 : Colors.white,
+              somenteLeitura
+                  ? Colors.grey.shade100
+                  : Colors.white,
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius:
+                BorderRadius.circular(12),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius:
+                BorderRadius.circular(12),
             borderSide: const BorderSide(
               color: Colors.black12,
             ),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius:
+                BorderRadius.circular(12),
             borderSide: const BorderSide(
               color: laranja,
               width: 2,
             ),
           ),
           errorBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius:
+                BorderRadius.circular(12),
             borderSide: const BorderSide(
               color: Colors.red,
             ),
@@ -275,10 +312,14 @@ class _DeliveryAddressScreenState
       return numeros;
     }
 
-    final parte1 = numeros.substring(0, 5);
+    final parte1 =
+        numeros.substring(0, 5);
+
     final parte2 = numeros.substring(
       5,
-      numeros.length > 8 ? 8 : numeros.length,
+      numeros.length > 8
+          ? 8
+          : numeros.length,
     );
 
     return '$parte1-$parte2';
@@ -289,9 +330,11 @@ class _DeliveryAddressScreenState
       padding: const EdgeInsets.only(bottom: 15),
       child: TextFormField(
         controller: cepController,
-        keyboardType: TextInputType.number,
+        keyboardType:
+            TextInputType.number,
         maxLength: 9,
-        textInputAction: TextInputAction.next,
+        textInputAction:
+            TextInputAction.next,
         decoration: InputDecoration(
           labelText: 'CEP',
           hintText: '00000-000',
@@ -308,7 +351,8 @@ class _DeliveryAddressScreenState
                   child: SizedBox(
                     width: 20,
                     height: 20,
-                    child: CircularProgressIndicator(
+                    child:
+                        CircularProgressIndicator(
                       strokeWidth: 2,
                       color: laranja,
                     ),
@@ -323,49 +367,63 @@ class _DeliveryAddressScreenState
                   onPressed: buscarCep,
                 ),
           border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius:
+                BorderRadius.circular(12),
           ),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
+          enabledBorder:
+              OutlineInputBorder(
+            borderRadius:
+                BorderRadius.circular(12),
+            borderSide:
+                const BorderSide(
               color: Colors.black12,
             ),
           ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: const BorderSide(
+          focusedBorder:
+              OutlineInputBorder(
+            borderRadius:
+                BorderRadius.circular(12),
+            borderSide:
+                const BorderSide(
               color: laranja,
               width: 2,
             ),
           ),
         ),
         onChanged: (valor) {
-          final formatado = formatarCep(valor);
+          final formatado =
+              formatarCep(valor);
 
-          if (formatado != cepController.text) {
-            cepController.value = TextEditingValue(
+          if (formatado !=
+              cepController.text) {
+            cepController.value =
+                TextEditingValue(
               text: formatado,
-              selection: TextSelection.collapsed(
+              selection:
+                  TextSelection.collapsed(
                 offset: formatado.length,
               ),
             );
           }
 
-          final cep = formatado.replaceAll(
+          final cep =
+              formatado.replaceAll(
             RegExp(r'[^0-9]'),
             '',
           );
 
-          if (cep.length == 8 && !buscandoCep) {
+          if (cep.length == 8 &&
+              !buscandoCep) {
             buscarCep();
           }
         },
         validator: (value) {
-          final cep = value?.replaceAll(
-                RegExp(r'[^0-9]'),
-                '',
-              ) ??
-              '';
+          final cep =
+              value?.replaceAll(
+                    RegExp(r'[^0-9]'),
+                    '',
+                  ) ??
+                  '';
 
           if (cep.isEmpty) {
             return 'Informe o CEP';
@@ -394,15 +452,21 @@ class _DeliveryAddressScreenState
     ScaffoldMessenger.of(context)
         .hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
       SnackBar(
         content: Text(mensagem),
-        duration: const Duration(seconds: 3),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor:
-            erro ? Colors.red.shade700 : Colors.black87,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+        duration:
+            const Duration(seconds: 3),
+        behavior:
+            SnackBarBehavior.floating,
+        backgroundColor: erro
+            ? Colors.red.shade700
+            : Colors.black87,
+        shape:
+            RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.circular(12),
         ),
       ),
     );
@@ -416,6 +480,7 @@ class _DeliveryAddressScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: fundo,
+
       appBar: AppBar(
         backgroundColor: laranja,
         foregroundColor: Colors.white,
@@ -427,13 +492,18 @@ class _DeliveryAddressScreenState
           ),
         ),
       ),
+
       body: Form(
         key: _formKey,
+
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
+          padding:
+              const EdgeInsets.all(20),
+
           child: Column(
             crossAxisAlignment:
                 CrossAxisAlignment.start,
+
             children: [
               const Text(
                 'Onde devemos entregar seu pedido?',
@@ -460,19 +530,26 @@ class _DeliveryAddressScreenState
 
               campoTexto(
                 label: 'Rua',
-                controller: ruaController,
-                somenteLeitura: buscandoCep,
-                prefixIcon: const Icon(
-                  Icons.signpost_outlined,
+                controller:
+                    ruaController,
+                somenteLeitura:
+                    buscandoCep,
+                prefixIcon:
+                    const Icon(
+                  Icons
+                      .signpost_outlined,
                   color: laranja,
                 ),
               ),
 
               campoTexto(
                 label: 'Número',
-                controller: numeroController,
-                keyboardType: TextInputType.number,
-                prefixIcon: const Icon(
+                controller:
+                    numeroController,
+                keyboardType:
+                    TextInputType.number,
+                prefixIcon:
+                    const Icon(
                   Icons.numbers_outlined,
                   color: laranja,
                 ),
@@ -480,29 +557,39 @@ class _DeliveryAddressScreenState
 
               campoTexto(
                 label: 'Bairro',
-                controller: bairroController,
-                somenteLeitura: buscandoCep,
-                prefixIcon: const Icon(
-                  Icons.location_city_outlined,
+                controller:
+                    bairroController,
+                somenteLeitura:
+                    buscandoCep,
+                prefixIcon:
+                    const Icon(
+                  Icons
+                      .location_city_outlined,
                   color: laranja,
                 ),
               ),
 
               campoTexto(
                 label: 'Complemento',
-                controller: complementoController,
+                controller:
+                    complementoController,
                 obrigatorio: false,
-                prefixIcon: const Icon(
-                  Icons.home_work_outlined,
+                prefixIcon:
+                    const Icon(
+                  Icons
+                      .home_work_outlined,
                   color: laranja,
                 ),
               ),
 
               campoTexto(
                 label: 'Cidade',
-                controller: cidadeController,
-                somenteLeitura: buscandoCep,
-                prefixIcon: const Icon(
+                controller:
+                    cidadeController,
+                somenteLeitura:
+                    buscandoCep,
+                prefixIcon:
+                    const Icon(
                   Icons.location_city,
                   color: laranja,
                 ),
@@ -510,9 +597,12 @@ class _DeliveryAddressScreenState
 
               campoTexto(
                 label: 'Estado',
-                controller: estadoController,
-                somenteLeitura: buscandoCep,
-                prefixIcon: const Icon(
+                controller:
+                    estadoController,
+                somenteLeitura:
+                    buscandoCep,
+                prefixIcon:
+                    const Icon(
                   Icons.map_outlined,
                   color: laranja,
                 ),
@@ -522,32 +612,46 @@ class _DeliveryAddressScreenState
 
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
+
+                child:
+                    ElevatedButton.icon(
                   onPressed:
-                      buscandoCep ? null : continuar,
+                      buscandoCep
+                          ? null
+                          : continuar,
+
                   icon: const Icon(
                     Icons.arrow_forward,
                   ),
+
                   label: const Text(
                     'CONTINUAR',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: laranja,
-                    foregroundColor: Colors.white,
+
+                  style:
+                      ElevatedButton.styleFrom(
+                    backgroundColor:
+                        laranja,
+                    foregroundColor:
+                        Colors.white,
                     disabledBackgroundColor:
                         Colors.orange.shade200,
                     padding:
-                        const EdgeInsets.symmetric(
+                        const EdgeInsets
+                            .symmetric(
                       vertical: 16,
                     ),
                     shape:
                         RoundedRectangleBorder(
                       borderRadius:
-                          BorderRadius.circular(12),
+                          BorderRadius.circular(
+                        12,
+                      ),
                     ),
                   ),
                 ),
@@ -558,9 +662,11 @@ class _DeliveryAddressScreenState
               Center(
                 child: Text(
                   'Seu endereço será utilizado apenas para realizar a entrega.',
-                  textAlign: TextAlign.center,
+                  textAlign:
+                      TextAlign.center,
                   style: TextStyle(
-                    color: Colors.grey.shade600,
+                    color: Colors
+                        .grey.shade600,
                     fontSize: 12,
                   ),
                 ),

@@ -1,5 +1,9 @@
-import 'package:flutter/material.dart';
+import 'dart:convert';
 
+import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
+import '../../config/api.dart';
 import '../restaurant/restaurant_screen.dart';
 import '../orders/order_history_screen.dart';
 import '../favorites/favorites_screen.dart';
@@ -19,35 +23,194 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   static const Color laranja = Color(0xFFF97316);
-  static const Color fundo = Color(0xFFF7F7F8);
+  static const Color fundo = Color(0xFFF5F5F5);
 
   int _indiceSelecionado = 0;
 
-  final TextEditingController _buscaController =
-      TextEditingController();
+  bool carregandoRestaurantes = true;
 
-  String _termoBusca = '';
+  String? erroRestaurantes;
+
+  List<Map<String, dynamic>> restaurantes = [];
 
   @override
-  void dispose() {
-    _buscaController.dispose();
-    super.dispose();
+  void initState() {
+    super.initState();
+
+    carregarRestaurantes();
   }
 
-  // ==========================================================
+  // ============================================================
+  // CARREGAR RESTAURANTES DA API
+  // ============================================================
+
+  Future<void> carregarRestaurantes() async {
+    if (mounted) {
+      setState(() {
+        carregandoRestaurantes = true;
+        erroRestaurantes = null;
+      });
+    }
+
+    try {
+      final url = Uri.parse(
+        '${Api.baseUrl}/restaurants',
+      );
+
+      debugPrint('======================================');
+      debugPrint('FOODJET - BUSCANDO RESTAURANTES');
+      debugPrint('URL: $url');
+      debugPrint('======================================');
+
+      final resposta = await http
+          .get(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+            },
+          )
+          .timeout(
+            const Duration(seconds: 15),
+          );
+
+      debugPrint(
+        'STATUS RESTAURANTES: ${resposta.statusCode}',
+      );
+
+      debugPrint(
+        'RESPOSTA RESTAURANTES: ${resposta.body}',
+      );
+
+      if (resposta.statusCode < 200 ||
+          resposta.statusCode >= 300) {
+        throw Exception(
+          'Erro ${resposta.statusCode} ao buscar restaurantes.',
+        );
+      }
+
+      final resultado = jsonDecode(
+        resposta.body,
+      );
+
+      List<dynamic> lista;
+
+      // Caso a API retorne diretamente:
+      //
+      // [
+      //   {...},
+      //   {...}
+      // ]
+      //
+      if (resultado is List) {
+        lista = resultado;
+      }
+
+      // Caso a API retorne:
+      //
+      // {
+      //   "restaurantes": [...]
+      // }
+      //
+      else if (resultado is Map &&
+          resultado['restaurantes'] is List) {
+        lista = resultado['restaurantes'];
+      }
+
+      // Caso a API retorne:
+      //
+      // {
+      //   "restaurants": [...]
+      // }
+      //
+      else if (resultado is Map &&
+          resultado['restaurants'] is List) {
+        lista = resultado['restaurants'];
+      } else {
+        throw Exception(
+          'Formato de restaurantes inválido.',
+        );
+      }
+
+      final listaFinal = lista
+          .whereType<Map>()
+          .map(
+            (restaurante) =>
+                Map<String, dynamic>.from(
+              restaurante,
+            ),
+          )
+          .where(
+            (restaurante) {
+              final id =
+                  restaurante['id'] ??
+                  restaurante['_id'] ??
+                  restaurante['restauranteId'];
+
+              final nome =
+                  restaurante['nome'] ??
+                  restaurante['name'] ??
+                  restaurante['restauranteNome'];
+
+              return id != null &&
+                  id.toString().trim().isNotEmpty &&
+                  nome != null &&
+                  nome.toString().trim().isNotEmpty;
+            },
+          )
+          .toList();
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        restaurantes = listaFinal;
+        carregandoRestaurantes = false;
+      });
+
+      debugPrint(
+        'RESTAURANTES ENCONTRADOS: ${restaurantes.length}',
+      );
+    } catch (e) {
+      debugPrint(
+        'ERRO AO CARREGAR RESTAURANTES: $e',
+      );
+
+      if (!mounted) {
+        return;
+      }
+
+      setState(() {
+        carregandoRestaurantes = false;
+
+        erroRestaurantes =
+            'Não foi possível carregar os restaurantes.';
+      });
+    }
+  }
+
+  // ============================================================
   // NAVEGAÇÃO
-  // ==========================================================
+  // ============================================================
 
   void _selecionarPagina(int indice) {
     if (indice == 0) {
       setState(() {
         _indiceSelecionado = 0;
       });
+
       return;
     }
 
     if (indice == 1) {
-      _abrirBusca();
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              const OrderHistoryScreen(),
+        ),
+      );
+
       return;
     }
 
@@ -56,24 +219,14 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
         MaterialPageRoute(
           builder: (context) =>
-              const OrderHistoryScreen(),
+              const FavoritesScreen(),
         ),
       );
+
       return;
     }
 
     if (indice == 3) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) =>
-              const FavoritesScreen(),
-        ),
-      );
-      return;
-    }
-
-    if (indice == 4) {
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -82,289 +235,153 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       );
+
+      return;
     }
   }
 
-  // ==========================================================
-  // BUSCA
-  // ==========================================================
+  // ============================================================
+  // NOME RESTAURANTE
+  // ============================================================
 
-  void _abrirBusca() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              height:
-                  MediaQuery.of(context).size.height * 0.88,
-              decoration: const BoxDecoration(
-                color: fundo,
-                borderRadius: BorderRadius.vertical(
-                  top: Radius.circular(28),
-                ),
-              ),
-              child: SafeArea(
-                child: Column(
-                  children: [
-                    const SizedBox(height: 12),
-
-                    Container(
-                      width: 45,
-                      height: 5,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade300,
-                        borderRadius:
-                            BorderRadius.circular(10),
-                      ),
-                    ),
-
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        20,
-                        22,
-                        20,
-                        10,
-                      ),
-                      child: Row(
-                        children: [
-                          const Expanded(
-                            child: Text(
-                              'Buscar no FoodJet',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight:
-                                    FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                          IconButton(
-                            onPressed: () =>
-                                Navigator.pop(context),
-                            icon: const Icon(
-                              Icons.close,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                      ),
-                      child: TextField(
-                        autofocus: true,
-                        controller: _buscaController,
-                        onChanged: (valor) {
-                          setModalState(() {
-                            _termoBusca =
-                                valor.toLowerCase();
-                          });
-                        },
-                        decoration: InputDecoration(
-                          hintText:
-                              'Buscar restaurante ou prato',
-                          prefixIcon: const Icon(
-                            Icons.search,
-                          ),
-                          suffixIcon:
-                              _buscaController
-                                      .text
-                                      .isNotEmpty
-                                  ? IconButton(
-                                      onPressed: () {
-                                        _buscaController
-                                            .clear();
-
-                                        setModalState(() {
-                                          _termoBusca = '';
-                                        });
-                                      },
-                                      icon: const Icon(
-                                        Icons.close,
-                                      ),
-                                    )
-                                  : null,
-                          filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderRadius:
-                                BorderRadius.circular(18),
-                            borderSide:
-                                BorderSide.none,
-                          ),
-                        ),
-                      ),
-                    ),
-
-                    const SizedBox(height: 25),
-
-                    Expanded(
-                      child: ListView(
-                        padding:
-                            const EdgeInsets.symmetric(
-                          horizontal: 20,
-                        ),
-                        children: [
-                          const Text(
-                            'Sugestões',
-                            style: TextStyle(
-                              fontSize: 19,
-                              fontWeight:
-                                  FontWeight.bold,
-                            ),
-                          ),
-
-                          const SizedBox(height: 15),
-
-                          _buscaItem(
-                            'Burger House',
-                            'Hambúrguer • Lanches',
-                            Icons.lunch_dining,
-                            _termoBusca,
-                          ),
-
-                          _buscaItem(
-                            'Pizzaria do Chef',
-                            'Pizza • Italiana',
-                            Icons.local_pizza,
-                            _termoBusca,
-                          ),
-
-                          _buscaItem(
-                            'Açaí Point',
-                            'Açaí • Sorvetes',
-                            Icons.icecream,
-                            _termoBusca,
-                          ),
-
-                          _buscaItem(
-                            'Pizza Minas',
-                            'Pizza • Massas • Bebidas',
-                            Icons.local_pizza,
-                            _termoBusca,
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buscaItem(
-    String nome,
-    String descricao,
-    IconData icone,
-    String termo,
+  String nomeRestaurante(
+    Map<String, dynamic> restaurante,
   ) {
-    final texto =
-        '$nome $descricao'.toLowerCase();
-
-    if (termo.isNotEmpty &&
-        !texto.contains(termo)) {
-      return const SizedBox.shrink();
-    }
-
-    return InkWell(
-      borderRadius: BorderRadius.circular(18),
-      onTap: () {
-        Navigator.pop(context);
-
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => RestaurantScreen(
-              nome: nome,
-              descricao: descricao,
-              avaliacao: '4.8',
-            ),
-          ),
-        );
-      },
-      child: Container(
-        margin:
-            const EdgeInsets.only(bottom: 12),
-        padding:
-            const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius:
-              BorderRadius.circular(18),
-        ),
-        child: Row(
-          children: [
-            _iconeRestaurante(icone),
-
-            const SizedBox(width: 14),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    nome,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    descricao,
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const Icon(
-              Icons.arrow_forward_ios,
-              size: 16,
-              color: Colors.grey,
-            ),
-          ],
-        ),
-      ),
-    );
+    return (
+      restaurante['nome'] ??
+      restaurante['name'] ??
+      restaurante['restauranteNome'] ??
+      'Restaurante'
+    ).toString();
   }
 
-  // ==========================================================
-  // RESTAURANTE
-  // ==========================================================
+  // ============================================================
+  // DESCRIÇÃO
+  // ============================================================
 
-  void _abrirRestaurante({
-    required String nome,
-    required String descricao,
-    required String avaliacao,
-  }) {
+  String descricaoRestaurante(
+    Map<String, dynamic> restaurante,
+  ) {
+    final descricao =
+        restaurante['descricao'] ??
+        restaurante['description'] ??
+        restaurante['categoria'] ??
+        restaurante['tipo'];
+
+    if (descricao == null ||
+        descricao.toString().trim().isEmpty) {
+      return 'Delícias preparadas especialmente para você';
+    }
+
+    return descricao.toString();
+  }
+
+  // ============================================================
+  // AVALIAÇÃO
+  // ============================================================
+
+  String avaliacaoRestaurante(
+    Map<String, dynamic> restaurante,
+  ) {
+    final avaliacao =
+        restaurante['avaliacao'] ??
+        restaurante['rating'] ??
+        restaurante['nota'];
+
+    if (avaliacao == null) {
+      return '5.0';
+    }
+
+    return avaliacao.toString();
+  }
+
+  // ============================================================
+  // ID RESTAURANTE
+  // ============================================================
+
+  String idRestaurante(
+    Map<String, dynamic> restaurante,
+  ) {
+    return (
+      restaurante['id'] ??
+      restaurante['_id'] ??
+      restaurante['restauranteId']
+    ).toString();
+  }
+
+  // ============================================================
+  // STATUS
+  // ============================================================
+
+  bool restauranteAberto(
+    Map<String, dynamic> restaurante,
+  ) {
+    final aberto =
+        restaurante['aberto'] ??
+        restaurante['online'] ??
+        restaurante['ativo'] ??
+        restaurante['abertoAgora'];
+
+    if (aberto == null) {
+      return true;
+    }
+
+    if (aberto is bool) {
+      return aberto;
+    }
+
+    return aberto.toString().toLowerCase() !=
+        'false';
+  }
+
+  // ============================================================
+  // ABRIR RESTAURANTE
+  // ============================================================
+
+  void abrirRestaurante(
+    Map<String, dynamic> restaurante,
+  ) {
+    final id =
+        idRestaurante(restaurante);
+
+    if (id.isEmpty || id == 'null') {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Este restaurante não possui um ID válido.',
+          ),
+        ),
+      );
+
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => RestaurantScreen(
-          nome: nome,
-          descricao: descricao,
-          avaliacao: avaliacao,
+        builder: (context) =>
+            RestaurantScreen(
+          nome: nomeRestaurante(
+            restaurante,
+          ),
+          descricao:
+              descricaoRestaurante(
+            restaurante,
+          ),
+          avaliacao:
+              avaliacaoRestaurante(
+            restaurante,
+          ),
+          restauranteId: id,
         ),
       ),
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // BUILD
-  // ==========================================================
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -375,38 +392,32 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: fundo,
 
-      // ======================================================
+      // ========================================================
       // APP BAR
-      // ======================================================
+      // ========================================================
 
       appBar: AppBar(
         backgroundColor: laranja,
         foregroundColor: Colors.white,
         elevation: 0,
 
-        toolbarHeight: 76,
-
-        titleSpacing: 18,
-
-        title: Column(
+        title: const Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Entregar em',
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.white70,
               ),
             ),
-
-            const SizedBox(height: 3),
-
+            SizedBox(height: 2),
             Row(
-              children: const [
+              children: [
                 Icon(
                   Icons.location_on,
-                  size: 17,
+                  size: 16,
                 ),
                 SizedBox(width: 4),
                 Text(
@@ -417,11 +428,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         FontWeight.bold,
                   ),
                 ),
-                SizedBox(width: 4),
-                Icon(
-                  Icons.keyboard_arrow_down,
-                  size: 18,
-                ),
               ],
             ),
           ],
@@ -431,416 +437,255 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             onPressed: () {},
             icon: const Icon(
-              Icons.notifications_none_rounded,
-              size: 27,
+              Icons.notifications_outlined,
             ),
           ),
-          const SizedBox(width: 5),
         ],
       ),
 
-      // ======================================================
-      // HOME
-      // ======================================================
+      // ========================================================
+      // BODY
+      // ========================================================
 
-      body: SafeArea(
-        child: RefreshIndicator(
-          color: laranja,
-          onRefresh: () async {
-            await Future.delayed(
-              const Duration(milliseconds: 500),
-            );
-          },
-          child: SingleChildScrollView(
-            physics:
-                const AlwaysScrollableScrollPhysics(),
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                // ============================================
-                // ÁREA LARANJA
-                // ============================================
+      body: RefreshIndicator(
+        color: laranja,
+        onRefresh:
+            carregarRestaurantes,
 
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.fromLTRB(
-                    18,
-                    8,
-                    18,
-                    22,
+        child: SingleChildScrollView(
+          physics:
+              const AlwaysScrollableScrollPhysics(),
+
+          padding:
+              const EdgeInsets.all(16),
+
+          child: Column(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+
+            children: [
+              // ==================================================
+              // SAUDAÇÃO
+              // ==================================================
+
+              Text(
+                'Olá, $nomeUsuario! 👋',
+                style: const TextStyle(
+                  color: Colors.black,
+                  fontSize: 24,
+                  fontWeight:
+                      FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 5),
+
+              const Text(
+                'O que você quer pedir hoje?',
+                style: TextStyle(
+                  color: Colors.grey,
+                  fontSize: 16,
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // ==================================================
+              // BUSCA
+              // ==================================================
+
+              TextField(
+                decoration:
+                    InputDecoration(
+                  hintText:
+                      'Buscar restaurantes ou pratos',
+
+                  prefixIcon:
+                      const Icon(
+                    Icons.search,
                   ),
-                  color: laranja,
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Olá, $nomeUsuario 👋',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 23,
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
+
+                  suffixIcon:
+                      const Icon(
+                    Icons.tune,
+                  ),
+
+                  filled: true,
+
+                  fillColor:
+                      Colors.white,
+
+                  border:
+                      OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius
+                            .circular(
+                      15,
+                    ),
+                    borderSide:
+                        BorderSide.none,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 25),
+
+              // ==================================================
+              // CATEGORIAS
+              // ==================================================
+
+              const Text(
+                'Categorias',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight:
+                      FontWeight.bold,
+                ),
+              ),
+
+              const SizedBox(height: 15),
+
+              SizedBox(
+                height: 105,
+
+                child: ListView(
+                  scrollDirection:
+                      Axis.horizontal,
+
+                  children: [
+                    categoria(
+                      Icons.local_pizza,
+                      'Pizza',
+                    ),
+                    categoria(
+                      Icons.lunch_dining,
+                      'Hambúrguer',
+                    ),
+                    categoria(
+                      Icons.icecream,
+                      'Sobremesas',
+                    ),
+                    categoria(
+                      Icons.local_drink,
+                      'Bebidas',
+                    ),
+                    categoria(
+                      Icons.restaurant,
+                      'Comida',
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 25),
+
+              // ==================================================
+              // TÍTULO
+              // ==================================================
+
+              Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Restaurantes',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
+                    ),
+                  ),
 
-                      const SizedBox(height: 5),
-
-                      const Text(
-                        'O que você quer pedir hoje?',
-                        style: TextStyle(
-                          color: Colors.white70,
-                          fontSize: 14,
-                        ),
+                  if (!carregandoRestaurantes &&
+                      restaurantes.isNotEmpty)
+                    Text(
+                      '${restaurantes.length}',
+                      style:
+                          const TextStyle(
+                        color: laranja,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
+                    ),
+                ],
+              ),
 
-                      const SizedBox(height: 16),
+              const SizedBox(height: 15),
 
-                      // BUSCA
-                      GestureDetector(
-                        onTap: _abrirBusca,
-                        child: Container(
-                          height: 56,
-                          padding:
-                              const EdgeInsets.symmetric(
-                            horizontal: 16,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius:
-                                BorderRadius.circular(
-                              17,
-                            ),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.search,
-                                color:
-                                    Colors.grey.shade600,
-                                size: 25,
-                              ),
+              // ==================================================
+              // CARREGANDO
+              // ==================================================
 
-                              const SizedBox(width: 11),
+              if (carregandoRestaurantes)
+                const Center(
+                  child: Padding(
+                    padding:
+                        EdgeInsets.all(40),
+                    child:
+                        CircularProgressIndicator(
+                      color: laranja,
+                    ),
+                  ),
+                )
 
-                              Expanded(
-                                child: Text(
-                                  'O que você está procurando?',
-                                  style: TextStyle(
-                                    color: Colors
-                                        .grey.shade600,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ),
+              // ==================================================
+              // ERRO
+              // ==================================================
 
-                              Container(
-                                padding:
-                                    const EdgeInsets.all(
-                                  8,
-                                ),
-                                decoration:
-                                    BoxDecoration(
-                                  color: const Color(
-                                    0xFFFFF1E8,
-                                  ),
-                                  borderRadius:
-                                      BorderRadius
-                                          .circular(
-                                    11,
-                                  ),
-                                ),
-                                child: const Icon(
-                                  Icons.tune_rounded,
-                                  color: laranja,
-                                  size: 20,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ],
+              else if (
+                  erroRestaurantes != null)
+                _estadoErro()
+
+              // ==================================================
+              // NENHUM RESTAURANTE
+              // ==================================================
+
+              else if (
+                  restaurantes.isEmpty)
+                _estadoVazio()
+
+              // ==================================================
+              // RESTAURANTES DA API
+              // ==================================================
+
+              else
+                ...restaurantes.map(
+                  (restaurante) =>
+                      restauranteCard(
+                    restaurante,
                   ),
                 ),
 
-                Padding(
-                  padding:
-                      const EdgeInsets.fromLTRB(
-                    16,
-                    20,
-                    16,
-                    30,
-                  ),
-                  child: Column(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      // ========================================
-                      // CATEGORIAS
-                      // ========================================
-
-                      _tituloSecao(
-                        'Categorias',
-                        'Ver todas',
-                        () {},
-                      ),
-
-                      const SizedBox(height: 15),
-
-                      SizedBox(
-                        height: 104,
-                        child: ListView(
-                          scrollDirection:
-                              Axis.horizontal,
-                          children: [
-                            _categoria(
-                              Icons.fastfood,
-                              'Lanches',
-                            ),
-                            _categoria(
-                              Icons.local_pizza,
-                              'Pizza',
-                            ),
-                            _categoria(
-                              Icons.ramen_dining,
-                              'Japonesa',
-                            ),
-                            _categoria(
-                              Icons.local_drink,
-                              'Bebidas',
-                            ),
-                            _categoria(
-                              Icons.cake,
-                              'Doces',
-                            ),
-                            _categoria(
-                              Icons.icecream,
-                              'Açaí',
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 25),
-
-                      // ========================================
-                      // BANNER
-                      // ========================================
-
-                      _bannerOferta(),
-
-                      const SizedBox(height: 30),
-
-                      // ========================================
-                      // NOVAS LOJAS
-                      // ========================================
-
-                      _tituloSecao(
-                        'Novas lojas',
-                        'Ver todas',
-                        () {},
-                      ),
-
-                      const SizedBox(height: 15),
-
-                      SizedBox(
-                        height: 205,
-                        child: ListView(
-                          scrollDirection:
-                              Axis.horizontal,
-                          children: [
-                            _cardNovaLoja(
-                              'Pizzaria do Chef',
-                              'Pizza • Italiana',
-                              '4.8',
-                              '25–35 min',
-                              Icons.local_pizza,
-                              () {
-                                _abrirRestaurante(
-                                  nome:
-                                      'Pizzaria do Chef',
-                                  descricao:
-                                      'Pizza • Italiana',
-                                  avaliacao: '4.8',
-                                );
-                              },
-                            ),
-                            _cardNovaLoja(
-                              'Burger House',
-                              'Hambúrguer • Lanches',
-                              '4.7',
-                              '20–30 min',
-                              Icons.lunch_dining,
-                              () {
-                                _abrirRestaurante(
-                                  nome:
-                                      'Burger House',
-                                  descricao:
-                                      'Hambúrguer • Lanches',
-                                  avaliacao: '4.7',
-                                );
-                              },
-                            ),
-                            _cardNovaLoja(
-                              'Açaí Point',
-                              'Açaí • Sorvetes',
-                              '4.9',
-                              '15–25 min',
-                              Icons.icecream,
-                              () {
-                                _abrirRestaurante(
-                                  nome: 'Açaí Point',
-                                  descricao:
-                                      'Açaí • Sorvetes',
-                                  avaliacao: '4.9',
-                                );
-                              },
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 30),
-
-                      // ========================================
-                      // RESTAURANTES PRÓXIMOS
-                      // ========================================
-
-                      _tituloSecao(
-                        'Restaurantes próximos',
-                        'Ver todos',
-                        () {},
-                      ),
-
-                      const SizedBox(height: 15),
-
-                      _cardRestaurante(
-                        'Restaurante FoodJet',
-                        'Hambúrguer • Pizza • Lanches',
-                        '4.8',
-                        '30–45 min',
-                        Icons.restaurant,
-                      ),
-
-                      _cardRestaurante(
-                        'Pizza Minas',
-                        'Pizza • Massas • Bebidas',
-                        '4.7',
-                        '30–45 min',
-                        Icons.local_pizza,
-                      ),
-
-                      _cardRestaurante(
-                        'Burger Vale',
-                        'Hambúrguer • Batata • Milkshake',
-                        '4.9',
-                        '30–45 min',
-                        Icons.lunch_dining,
-                      ),
-
-                      const SizedBox(height: 18),
-
-                      // ========================================
-                      // OFERTAS ESPECIAIS
-                      // ========================================
-
-                      _tituloSecao(
-                        'Ofertas especiais',
-                        'Ver todas',
-                        () {},
-                      ),
-
-                      const SizedBox(height: 15),
-
-                      SizedBox(
-                        height: 230,
-                        child: ListView(
-                          scrollDirection:
-                              Axis.horizontal,
-                          children: [
-                            _cardOferta(
-                              'Combo Burger',
-                              'Burger + Batata + Refri',
-                              'R\$ 29,90',
-                              '25% OFF',
-                              Icons.lunch_dining,
-                            ),
-                            _cardOferta(
-                              '2 Pizzas Grandes',
-                              'Escolha os sabores',
-                              'R\$ 59,90',
-                              '25% OFF',
-                              Icons.local_pizza,
-                            ),
-                          ],
-                        ),
-                      ),
-
-                      const SizedBox(height: 30),
-
-                      // ========================================
-                      // MAIS PEDIDOS
-                      // ========================================
-
-                      _tituloSecao(
-                        'Mais pedidos',
-                        'Ver todos',
-                        () {},
-                      ),
-
-                      const SizedBox(height: 15),
-
-                      _cardRestaurante(
-                        'Açaí do Vale',
-                        'Açaí • Sorvetes • Sobremesas',
-                        '4.9',
-                        '15–25 min',
-                        Icons.icecream,
-                      ),
-
-                      _cardRestaurante(
-                        'Burger Vale',
-                        'Hambúrguer • Batata • Milkshake',
-                        '4.9',
-                        '20–30 min',
-                        Icons.lunch_dining,
-                      ),
-
-                      const SizedBox(height: 80),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+              const SizedBox(height: 30),
+            ],
           ),
         ),
       ),
 
-      // ======================================================
+      // ========================================================
       // CARRINHO
-      // ======================================================
+      // ========================================================
 
       floatingActionButton:
           FloatingActionButton.extended(
         backgroundColor: laranja,
-        elevation: 5,
+
         onPressed: () {
           ScaffoldMessenger.of(context)
               .showSnackBar(
             const SnackBar(
-              content:
-                  Text('Seu carrinho está vazio.'),
-              backgroundColor: laranja,
+              content: Text(
+                'Seu carrinho está vazio.',
+              ),
             ),
           );
         },
+
         icon: const Icon(
-          Icons.shopping_bag_outlined,
+          Icons.shopping_cart,
           color: Colors.white,
         ),
+
         label: const Text(
           'Carrinho',
           style: TextStyle(
@@ -851,71 +696,49 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
 
-      // ======================================================
-      // NAVEGAÇÃO INFERIOR
-      // ======================================================
+      // ========================================================
+      // BOTTOM NAVIGATION
+      // ========================================================
 
       bottomNavigationBar:
-          NavigationBar(
-        selectedIndex:
+          BottomNavigationBar(
+        currentIndex:
             _indiceSelecionado,
-        onDestinationSelected:
+
+        onTap:
             _selecionarPagina,
-        backgroundColor:
-            Colors.white,
-        elevation: 10,
-        height: 72,
 
-        indicatorColor:
-            const Color(0xFFFFE7D7),
+        type:
+            BottomNavigationBarType.fixed,
 
-        destinations: const [
-          NavigationDestination(
+        selectedItemColor:
+            laranja,
+
+        unselectedItemColor:
+            Colors.grey,
+
+        items: const [
+          BottomNavigationBarItem(
             icon: Icon(
-              Icons.home_outlined,
-            ),
-            selectedIcon: Icon(
               Icons.home,
             ),
             label: 'Início',
           ),
-
-          NavigationDestination(
+          BottomNavigationBarItem(
             icon: Icon(
-              Icons.search_outlined,
-            ),
-            selectedIcon: Icon(
-              Icons.search,
-            ),
-            label: 'Busca',
-          ),
-
-          NavigationDestination(
-            icon: Icon(
-              Icons.receipt_long_outlined,
-            ),
-            selectedIcon: Icon(
               Icons.receipt_long,
             ),
             label: 'Pedidos',
           ),
-
-          NavigationDestination(
+          BottomNavigationBarItem(
             icon: Icon(
               Icons.favorite_border,
             ),
-            selectedIcon: Icon(
-              Icons.favorite,
-            ),
             label: 'Favoritos',
           ),
-
-          NavigationDestination(
+          BottomNavigationBarItem(
             icon: Icon(
               Icons.person_outline,
-            ),
-            selectedIcon: Icon(
-              Icons.person,
             ),
             label: 'Perfil',
           ),
@@ -924,90 +747,70 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // ==========================================================
-  // COMPONENTES
-  // ==========================================================
+  // ============================================================
+  // CATEGORIA
+  // ============================================================
 
-  Widget _tituloSecao(
-    String titulo,
-    String acao,
-    VoidCallback onTap,
-  ) {
-    return Row(
-      mainAxisAlignment:
-          MainAxisAlignment.spaceBetween,
-      children: [
-        Text(
-          titulo,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight:
-                FontWeight.bold,
-          ),
-        ),
-
-        GestureDetector(
-          onTap: onTap,
-          child: const Text(
-            'Ver todos',
-            style: TextStyle(
-              color: laranja,
-              fontWeight:
-                  FontWeight.bold,
-              fontSize: 13,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _categoria(
+  Widget categoria(
     IconData icone,
     String nome,
   ) {
     return Container(
-      width: 82,
+      width: 90,
+
       margin:
-          const EdgeInsets.only(right: 12),
+          const EdgeInsets.only(
+        right: 12,
+      ),
+
       child: Column(
         children: [
           Container(
-            width: 66,
-            height: 66,
-            decoration: BoxDecoration(
+            width: 65,
+            height: 65,
+
+            decoration:
+                BoxDecoration(
               color: Colors.white,
-              shape: BoxShape.circle,
+
+              borderRadius:
+                  BorderRadius.circular(
+                35,
+              ),
+
               boxShadow: [
                 BoxShadow(
                   color: Colors.black
-                      .withValues(alpha: 0.06),
-                  blurRadius: 8,
+                      .withValues(
+                    alpha: 0.05,
+                  ),
+                  blurRadius: 5,
                   offset:
-                      const Offset(0, 3),
+                      const Offset(0, 2),
                 ),
               ],
             ),
+
             child: Icon(
               icone,
               color: laranja,
-              size: 29,
+              size: 30,
             ),
           ),
 
-          const SizedBox(height: 9),
+          const SizedBox(height: 8),
 
           Text(
             nome,
             textAlign:
                 TextAlign.center,
-            maxLines: 1,
-            overflow:
-                TextOverflow.ellipsis,
-            style: const TextStyle(
-              fontSize: 12,
+
+            style:
+                const TextStyle(
+              color: Colors.black,
+              fontSize: 13,
               fontWeight:
-                  FontWeight.w600,
+                  FontWeight.w500,
             ),
           ),
         ],
@@ -1015,583 +818,313 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _bannerOferta() {
+  // ============================================================
+  // CARD RESTAURANTE
+  // ============================================================
+
+  Widget restauranteCard(
+    Map<String, dynamic> restaurante,
+  ) {
+    final nome =
+        nomeRestaurante(
+      restaurante,
+    );
+
+    final descricao =
+        descricaoRestaurante(
+      restaurante,
+    );
+
+    final avaliacao =
+        avaliacaoRestaurante(
+      restaurante,
+    );
+
+    final aberto =
+        restauranteAberto(
+      restaurante,
+    );
+
     return Container(
-      width: double.infinity,
-      padding:
-          const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        gradient:
-            const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            Color(0xFFF97316),
-            Color(0xFFFF9A5A),
-          ],
-        ),
-        borderRadius:
-            BorderRadius.circular(24),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration:
-                      BoxDecoration(
-                    color: Colors.white
-                        .withValues(
-                      alpha: 0.18,
-                    ),
-                    borderRadius:
-                        BorderRadius.circular(
-                      20,
-                    ),
-                  ),
-                  child: const Text(
-                    'OFERTA EXCLUSIVA',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 10),
-
-                const Text(
-                  'Até 30% OFF',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
-                ),
-
-                const SizedBox(height: 5),
-
-                const Text(
-                  'Peça agora e aproveite ofertas especiais.',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                  ),
-                ),
-
-                const SizedBox(height: 15),
-
-                ElevatedButton(
-                  onPressed: () {},
-                  style:
-                      ElevatedButton.styleFrom(
-                    backgroundColor:
-                        Colors.white,
-                    foregroundColor:
-                        laranja,
-                    elevation: 0,
-                    padding:
-                        const EdgeInsets.symmetric(
-                      horizontal: 17,
-                      vertical: 11,
-                    ),
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(
-                        12,
-                      ),
-                    ),
-                  ),
-                  child: const Text(
-                    'Ver ofertas',
-                    style: TextStyle(
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(width: 8),
-
-          const Icon(
-            Icons.local_offer_rounded,
-            color: Colors.white,
-            size: 78,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _cardNovaLoja(
-    String nome,
-    String descricao,
-    String avaliacao,
-    String tempo,
-    IconData icone,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 175,
-        margin:
-            const EdgeInsets.only(right: 13),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius:
-              BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black
-                  .withValues(alpha: 0.05),
-              blurRadius: 8,
-              offset:
-                  const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
-          children: [
-            Stack(
-              children: [
-                Container(
-                  height: 105,
-                  width: double.infinity,
-                  decoration:
-                      const BoxDecoration(
-                    color: Color(0xFFFFE2CF),
-                    borderRadius:
-                        BorderRadius.vertical(
-                      top: Radius.circular(20),
-                    ),
-                  ),
-                  child: Icon(
-                    icone,
-                    size: 52,
-                    color: laranja,
-                  ),
-                ),
-
-                Positioned(
-                  top: 10,
-                  left: 10,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    decoration:
-                        BoxDecoration(
-                      color: laranja,
-                      borderRadius:
-                          BorderRadius.circular(
-                        8,
-                      ),
-                    ),
-                    child: const Text(
-                      'NOVO',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 9,
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            Padding(
-              padding:
-                  const EdgeInsets.all(11),
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    nome,
-                    maxLines: 1,
-                    overflow:
-                        TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight:
-                          FontWeight.bold,
-                      fontSize: 15,
-                    ),
-                  ),
-
-                  const SizedBox(height: 4),
-
-                  Text(
-                    descricao,
-                    maxLines: 1,
-                    overflow:
-                        TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color:
-                          Colors.grey.shade600,
-                      fontSize: 11,
-                    ),
-                  ),
-
-                  const SizedBox(height: 8),
-
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.star,
-                        color:
-                            Colors.amber,
-                        size: 15,
-                      ),
-                      const SizedBox(width: 3),
-                      Text(
-                        avaliacao,
-                        style:
-                            const TextStyle(
-                          fontWeight:
-                              FontWeight.bold,
-                          fontSize: 11,
-                        ),
-                      ),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        child: Text(
-                          tempo,
-                          style: TextStyle(
-                            color: Colors
-                                .grey.shade600,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _cardRestaurante(
-    String nome,
-    String descricao,
-    String avaliacao,
-    String tempo,
-    IconData icone,
-  ) {
-    return GestureDetector(
-      onTap: () {
-        _abrirRestaurante(
-          nome: nome,
-          descricao: descricao,
-          avaliacao: avaliacao,
-        );
-      },
-      child: Container(
-        margin:
-            const EdgeInsets.only(bottom: 13),
-        padding:
-            const EdgeInsets.all(11),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius:
-              BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black
-                  .withValues(alpha: 0.04),
-              blurRadius: 8,
-              offset:
-                  const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Stack(
-              children: [
-                Container(
-                  width: 82,
-                  height: 82,
-                  decoration:
-                      BoxDecoration(
-                    color:
-                        const Color(0xFFFFE2CF),
-                    borderRadius:
-                        BorderRadius.circular(
-                      16,
-                    ),
-                  ),
-                  child: Icon(
-                    icone,
-                    color: laranja,
-                    size: 38,
-                  ),
-                ),
-
-                Positioned(
-                  bottom: 5,
-                  left: 5,
-                  child: Container(
-                    padding:
-                        const EdgeInsets
-                            .symmetric(
-                      horizontal: 6,
-                      vertical: 3,
-                    ),
-                    decoration:
-                        BoxDecoration(
-                      color: Colors.white,
-                      borderRadius:
-                          BorderRadius.circular(
-                        7,
-                      ),
-                    ),
-                    child: const Text(
-                      'FoodJet',
-                      style: TextStyle(
-                        color: laranja,
-                        fontSize: 8,
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-
-            const SizedBox(width: 13),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    nome,
-                    maxLines: 1,
-                    overflow:
-                        TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
-                  ),
-
-                  const SizedBox(height: 5),
-
-                  Text(
-                    descricao,
-                    maxLines: 1,
-                    overflow:
-                        TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color:
-                          Colors.grey.shade600,
-                      fontSize: 12,
-                    ),
-                  ),
-
-                  const SizedBox(height: 9),
-
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.star,
-                        color:
-                            Colors.amber,
-                        size: 16,
-                      ),
-
-                      const SizedBox(width: 4),
-
-                      Text(
-                        avaliacao,
-                        style:
-                            const TextStyle(
-                          fontWeight:
-                              FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-
-                      const SizedBox(width: 7),
-
-                      Text(
-                        '• $tempo',
-                        style: TextStyle(
-                          color:
-                              Colors.grey.shade600,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(
-                Icons.favorite_border,
-                color: Colors.grey,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _cardOferta(
-    String titulo,
-    String descricao,
-    String preco,
-    String desconto,
-    IconData icone,
-  ) {
-    return Container(
-      width: 220,
       margin:
-          const EdgeInsets.only(right: 14),
-      decoration: BoxDecoration(
+          const EdgeInsets.only(
+        bottom: 15,
+      ),
+
+      decoration:
+          BoxDecoration(
         color: Colors.white,
+
         borderRadius:
-            BorderRadius.circular(20),
+            BorderRadius.circular(
+          18,
+        ),
+
         boxShadow: [
           BoxShadow(
-            color: Colors.black
-                .withValues(alpha: 0.05),
+            color:
+                Colors.black.withValues(
+              alpha: 0.05,
+            ),
             blurRadius: 8,
             offset:
                 const Offset(0, 3),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-        children: [
-          Container(
-            height: 105,
-            width: double.infinity,
-            decoration:
-                const BoxDecoration(
-              color: Color(0xFFFFE2CF),
-              borderRadius:
-                  BorderRadius.vertical(
-                top: Radius.circular(20),
-              ),
-            ),
-            child: Stack(
-              children: [
-                Center(
-                  child: Icon(
-                    icone,
-                    color: laranja,
-                    size: 55,
+
+      child: InkWell(
+        borderRadius:
+            BorderRadius.circular(
+          18,
+        ),
+
+        onTap: () {
+          abrirRestaurante(
+            restaurante,
+          );
+        },
+
+        child: Padding(
+          padding:
+              const EdgeInsets.all(
+            12,
+          ),
+
+          child: Row(
+            children: [
+              // ==================================================
+              // LOGO
+              // ==================================================
+
+              Container(
+                width: 82,
+                height: 82,
+
+                decoration:
+                    BoxDecoration(
+                  color:
+                      const Color(
+                    0xFFFFE5D3,
+                  ),
+
+                  borderRadius:
+                      BorderRadius.circular(
+                    16,
                   ),
                 ),
 
-                Positioned(
-                  top: 10,
-                  right: 10,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    decoration:
-                        BoxDecoration(
-                      color: laranja,
-                      borderRadius:
-                          BorderRadius.circular(
-                        8,
-                      ),
-                    ),
-                    child: Text(
-                      desconto,
+                child:
+                    const Icon(
+                  Icons.restaurant,
+                  color: laranja,
+                  size: 40,
+                ),
+              ),
+
+              const SizedBox(
+                width: 13,
+              ),
+
+              // ==================================================
+              // INFORMAÇÕES
+              // ==================================================
+
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
+
+                  children: [
+                    Text(
+                      nome,
+                      maxLines: 1,
+                      overflow:
+                          TextOverflow
+                              .ellipsis,
+
                       style:
                           const TextStyle(
-                        color: Colors.white,
-                        fontSize: 10,
+                        color:
+                            Colors.black,
+                        fontSize: 17,
                         fontWeight:
                             FontWeight.bold,
                       ),
                     ),
-                  ),
+
+                    const SizedBox(
+                      height: 5,
+                    ),
+
+                    Text(
+                      descricao,
+                      maxLines: 2,
+                      overflow:
+                          TextOverflow
+                              .ellipsis,
+
+                      style: TextStyle(
+                        color:
+                            Colors.grey
+                                .shade600,
+                        fontSize: 12,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 9,
+                    ),
+
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.star,
+                          color:
+                              Colors.orange,
+                          size: 17,
+                        ),
+
+                        const SizedBox(
+                          width: 3,
+                        ),
+
+                        Text(
+                          avaliacao,
+                          style:
+                              const TextStyle(
+                            fontSize: 12,
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+
+                        const SizedBox(
+                          width: 10,
+                        ),
+
+                        Icon(
+                          aberto
+                              ? Icons
+                                  .check_circle
+                              : Icons
+                                  .schedule,
+                          color: aberto
+                              ? Colors.green
+                              : Colors.orange,
+                          size: 16,
+                        ),
+
+                        const SizedBox(
+                          width: 3,
+                        ),
+
+                        Text(
+                          aberto
+                              ? 'Aberto'
+                              : 'Fechado',
+                          style:
+                              TextStyle(
+                            color: aberto
+                                ? Colors.green
+                                : Colors.orange,
+                            fontSize: 12,
+                            fontWeight:
+                                FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
-              ],
+              ),
+
+              const SizedBox(
+                width: 5,
+              ),
+
+              const Icon(
+                Icons
+                    .arrow_forward_ios,
+                color:
+                    Colors.black38,
+                size: 17,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // ESTADO DE ERRO
+  // ============================================================
+
+  Widget _estadoErro() {
+    return Container(
+      width: double.infinity,
+
+      padding:
+          const EdgeInsets.all(
+        30,
+      ),
+
+      decoration:
+          BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(
+          18,
+        ),
+      ),
+
+      child: Column(
+        children: [
+          const Icon(
+            Icons.cloud_off,
+            color: laranja,
+            size: 55,
+          ),
+
+          const SizedBox(height: 12),
+
+          const Text(
+            'Não foi possível carregar os restaurantes.',
+            textAlign:
+                TextAlign.center,
+
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight:
+                  FontWeight.bold,
             ),
           ),
 
-          Padding(
-            padding:
-                const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titulo,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
-                ),
+          const SizedBox(height: 15),
 
-                const SizedBox(height: 4),
+          ElevatedButton.icon(
+            onPressed:
+                carregarRestaurantes,
 
-                Text(
-                  descricao,
-                  style: TextStyle(
-                    color:
-                        Colors.grey.shade600,
-                    fontSize: 12,
-                  ),
-                ),
+            icon: const Icon(
+              Icons.refresh,
+            ),
 
-                const SizedBox(height: 10),
+            label: const Text(
+              'Tentar novamente',
+            ),
 
-                Text(
-                  preco,
-                  style: const TextStyle(
-                    color: laranja,
-                    fontSize: 18,
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
-                ),
-              ],
+            style:
+                ElevatedButton.styleFrom(
+              backgroundColor:
+                  laranja,
+
+              foregroundColor:
+                  Colors.white,
+
+              elevation: 0,
             ),
           ),
         ],
@@ -1599,21 +1132,65 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _iconeRestaurante(
-    IconData icone,
-  ) {
+  // ============================================================
+  // ESTADO VAZIO
+  // ============================================================
+
+  Widget _estadoVazio() {
     return Container(
-      width: 58,
-      height: 58,
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFE2CF),
-        borderRadius:
-            BorderRadius.circular(15),
+      width: double.infinity,
+
+      padding:
+          const EdgeInsets.all(
+        30,
       ),
-      child: Icon(
-        icone,
-        color: laranja,
-        size: 29,
+
+      decoration:
+          BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(
+          18,
+        ),
+      ),
+
+      child: Column(
+        children: [
+          const Icon(
+            Icons.storefront_outlined,
+            color: laranja,
+            size: 60,
+          ),
+
+          const SizedBox(height: 15),
+
+          const Text(
+            'Nenhum restaurante disponível',
+            textAlign:
+                TextAlign.center,
+
+            style: TextStyle(
+              fontSize: 17,
+              fontWeight:
+                  FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 7),
+
+          Text(
+            'Quando um novo restaurante for cadastrado no FoodJet, ele aparecerá aqui automaticamente.',
+            textAlign:
+                TextAlign.center,
+
+            style: TextStyle(
+              color:
+                  Colors.grey.shade600,
+              fontSize: 13,
+              height: 1.4,
+            ),
+          ),
+        ],
       ),
     );
   }

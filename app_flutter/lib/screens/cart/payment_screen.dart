@@ -12,7 +12,7 @@ class PaymentScreen extends StatefulWidget {
     super.key,
     required this.endereco,
     required this.itens,
-    required this.subtotal,
+    required this.subtotal, required String restauranteId,
   });
 
   @override
