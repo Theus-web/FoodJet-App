@@ -1,7 +1,9 @@
+import 'dart:async';
 
 import 'package:flutter/material.dart';
 
 import '../../services/order_service.dart';
+import '../../services/socket_service.dart';
 
 class RestaurantOrdersScreen extends StatefulWidget {
   final String restauranteId;
@@ -20,17 +22,232 @@ class _RestaurantOrdersScreenState
     extends State<RestaurantOrdersScreen> {
   final OrderService _orderService = OrderService();
 
+  final SocketService _socketService =
+      SocketService();
+
   List<dynamic> _pedidos = [];
 
   bool _carregando = true;
   bool _atualizando = false;
+  bool _socketConectado = false;
 
   String _filtro = 'TODOS';
+
+  // Evita recarregamentos simultâneos
+  bool _recarregandoAutomaticamente = false;
 
   @override
   void initState() {
     super.initState();
-    _carregarPedidos();
+
+    _inicializar();
+  }
+
+  // ============================================================
+  // INICIALIZAÇÃO
+  // ============================================================
+
+  Future<void> _inicializar() async {
+    await _carregarPedidos();
+
+    if (!mounted) return;
+
+    _conectarSocket();
+  }
+
+  // ============================================================
+  // SOCKET.IO
+  // ============================================================
+
+  void _conectarSocket() {
+    final restauranteId =
+        widget.restauranteId.trim();
+
+    if (restauranteId.isEmpty) {
+      print(
+        'FOODJET SOCKET: restauranteId vazio.',
+      );
+
+      return;
+    }
+
+    print(
+      'FOODJET SOCKET: conectando restaurante $restauranteId',
+    );
+
+    _socketService.conectar(
+      restauranteId: restauranteId,
+      onNovoPedido: _receberNovoPedido,
+    );
+
+    if (mounted) {
+      setState(() {
+        _socketConectado = true;
+      });
+    }
+  }
+
+  // ============================================================
+  // RECEBER NOVO PEDIDO
+  // ============================================================
+
+  Future<void> _receberNovoPedido(
+    dynamic pedidoRecebido,
+  ) async {
+    print('==========================================');
+    print('FOODJET RESTAURANTE');
+    print('NOVO PEDIDO RECEBIDO PELO SOCKET');
+    print(pedidoRecebido);
+    print('==========================================');
+
+    if (!mounted) return;
+
+    // Primeiro tentamos inserir imediatamente o pedido
+    // recebido pelo Socket.IO.
+    if (pedidoRecebido is Map) {
+      final pedidoMap =
+          Map<String, dynamic>.from(
+        pedidoRecebido,
+      );
+
+      final idNovo =
+          _valorString(
+            pedidoMap,
+            [
+              'id',
+              '_id',
+              'pedidoId',
+            ],
+          );
+
+      if (idNovo != null &&
+          idNovo.isNotEmpty) {
+        final existe = _pedidos.any(
+          (pedido) {
+            final idExistente =
+                _valorString(
+              pedido,
+              [
+                'id',
+                '_id',
+                'pedidoId',
+              ],
+            );
+
+            return idExistente == idNovo;
+          },
+        );
+
+        if (!existe) {
+          setState(() {
+            _pedidos = [
+              pedidoMap,
+              ..._pedidos,
+            ];
+          });
+        }
+      }
+    }
+
+    // Depois sincronizamos com a API.
+    // Isso garante que o card tenha todos os dados
+    // mesmo que o Socket envie somente parte do pedido.
+    await _sincronizarPedidosAutomaticamente();
+
+    if (!mounted) return;
+
+    _mostrarNovoPedido();
+  }
+
+  // ============================================================
+  // SINCRONIZAR PEDIDOS
+  // ============================================================
+
+  Future<void>
+      _sincronizarPedidosAutomaticamente() async {
+    if (_recarregandoAutomaticamente) {
+      return;
+    }
+
+    _recarregandoAutomaticamente = true;
+
+    try {
+      final pedidos =
+          await _orderService
+              .buscarPedidosRestaurante(
+        widget.restauranteId,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _pedidos = pedidos;
+      });
+    } catch (e) {
+      print(
+        'FOODJET: erro na sincronização automática: $e',
+      );
+    } finally {
+      _recarregandoAutomaticamente = false;
+    }
+  }
+
+  // ============================================================
+  // NOTIFICAÇÃO DE NOVO PEDIDO
+  // ============================================================
+
+  void _mostrarNovoPedido() {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          duration:
+              const Duration(seconds: 4),
+          backgroundColor:
+              const Color(0xFFF97316),
+          behavior:
+              SnackBarBehavior.floating,
+          margin:
+              const EdgeInsets.all(16),
+          shape:
+              RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(14),
+          ),
+          content: const Row(
+            children: [
+              Icon(
+                Icons.notifications_active_rounded,
+                color: Colors.white,
+              ),
+              SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Novo pedido recebido!',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight:
+                        FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+  }
+
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
+  @override
+  void dispose() {
+    _socketService.desconectar();
+
+    super.dispose();
   }
 
   // ============================================================
@@ -46,7 +263,8 @@ class _RestaurantOrdersScreenState
 
     try {
       final pedidos =
-          await _orderService.buscarPedidosRestaurante(
+          await _orderService
+              .buscarPedidosRestaurante(
         widget.restauranteId,
       );
 
@@ -63,13 +281,13 @@ class _RestaurantOrdersScreenState
         _carregando = false;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(
-            'Não foi possível carregar os pedidos.',
-          ),
-          backgroundColor: Colors.red.shade700,
-        ),
+      _mostrarMensagem(
+        'Não foi possível carregar os pedidos.',
+        erro: true,
+      );
+
+      print(
+        'FOODJET - erro ao carregar pedidos: $e',
       );
     }
   }
@@ -84,16 +302,23 @@ class _RestaurantOrdersScreenState
   ) async {
     if (_atualizando) return;
 
-    final String? pedidoId = _valorString(
+    final String? pedidoId =
+        _valorString(
       pedido,
-      ['id', '_id', 'pedidoId'],
+      [
+        'id',
+        '_id',
+        'pedidoId',
+      ],
     );
 
-    if (pedidoId == null || pedidoId.isEmpty) {
+    if (pedidoId == null ||
+        pedidoId.isEmpty) {
       _mostrarMensagem(
         'ID do pedido não encontrado.',
         erro: true,
       );
+
       return;
     }
 
@@ -102,20 +327,33 @@ class _RestaurantOrdersScreenState
     });
 
     try {
-      await _orderService.atualizarStatusPedido(
+      final sucesso =
+          await _orderService
+              .atualizarStatusPedido(
         pedidoId,
         novoStatus,
       );
 
       if (!mounted) return;
 
+      if (!sucesso) {
+        throw Exception(
+          'API não confirmou a atualização.',
+        );
+      }
+
       _mostrarMensagem(
-        'Pedido atualizado para ${_nomeStatus(novoStatus)}.',
+        'Pedido atualizado para '
+        '${_nomeStatus(novoStatus)}.',
       );
 
       await _carregarPedidos();
     } catch (e) {
       if (!mounted) return;
+
+      print(
+        'FOODJET - erro status pedido: $e',
+      );
 
       _mostrarMensagem(
         'Erro ao atualizar o pedido.',
@@ -139,16 +377,59 @@ class _RestaurantOrdersScreenState
       return _pedidos;
     }
 
-    return _pedidos.where((pedido) {
-      final status =
-          _valorString(
-            pedido,
-            ['status'],
-          ) ??
-          '';
+    return _pedidos.where(
+      (pedido) {
+        final status =
+            (_valorString(
+                  pedido,
+                  ['status'],
+                ) ??
+                '')
+            .toUpperCase();
 
-      return status.toUpperCase() == _filtro;
-    }).toList();
+        if (_filtro == 'AGUARDANDO') {
+          return [
+            'AGUARDANDO',
+            'AGUARDANDO_RESTAURANTE',
+            'PENDENTE',
+            'NOVO',
+          ].contains(status);
+        }
+
+        if (_filtro == 'PREPARANDO') {
+          return [
+            'ACEITO',
+            'PREPARANDO',
+            'EM_PREPARO',
+            'PREPARANDO_PEDIDO',
+          ].contains(status);
+        }
+
+        if (_filtro == 'PRONTO') {
+          return [
+            'PRONTO',
+            'PRONTO_PARA_ENTREGA',
+          ].contains(status);
+        }
+
+        if (_filtro ==
+            'SAIU_PARA_ENTREGA') {
+          return [
+            'SAIU_PARA_ENTREGA',
+            'EM_ENTREGA',
+          ].contains(status);
+        }
+
+        if (_filtro == 'CONCLUIDO') {
+          return [
+            'CONCLUIDO',
+            'ENTREGUE',
+          ].contains(status);
+        }
+
+        return status == _filtro;
+      },
+    ).toList();
   }
 
   // ============================================================
@@ -158,23 +439,33 @@ class _RestaurantOrdersScreenState
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF6F7F9),
+      backgroundColor:
+          const Color(0xFFF6F7F9),
       appBar: AppBar(
         elevation: 0,
         backgroundColor: Colors.white,
-        foregroundColor: const Color(0xFF171717),
-        title: const Text(
-          'Pedidos',
-          style: TextStyle(
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-          ),
+        foregroundColor:
+            const Color(0xFF171717),
+        title: Row(
+          children: [
+            const Text(
+              'Pedidos',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight:
+                    FontWeight.w800,
+              ),
+            ),
+            const SizedBox(width: 8),
+            _indicadorSocket(),
+          ],
         ),
         actions: [
           IconButton(
             tooltip: 'Atualizar',
-            onPressed:
-                _carregando ? null : _carregarPedidos,
+            onPressed: _carregando
+                ? null
+                : _carregarPedidos,
             icon: const Icon(
               Icons.refresh_rounded,
             ),
@@ -183,17 +474,77 @@ class _RestaurantOrdersScreenState
         ],
       ),
       body: RefreshIndicator(
-        color: const Color(0xFFF97316),
+        color:
+            const Color(0xFFF97316),
         onRefresh: _carregarPedidos,
         child: Column(
           children: [
             _cabecalhoResumo(),
             _filtros(),
             Expanded(
-              child: _conteudoPedidos(),
+              child:
+                  _conteudoPedidos(),
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // INDICADOR SOCKET
+  // ============================================================
+
+  Widget _indicadorSocket() {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(
+        horizontal: 8,
+        vertical: 5,
+      ),
+      decoration: BoxDecoration(
+        color: _socketConectado
+            ? const Color(0xFFF0FDF4)
+            : const Color(0xFFFEF2F2),
+        borderRadius:
+            BorderRadius.circular(20),
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration:
+                BoxDecoration(
+              shape: BoxShape.circle,
+              color: _socketConectado
+                  ? const Color(
+                      0xFF16A34A,
+                    )
+                  : const Color(
+                      0xFFDC2626,
+                    ),
+            ),
+          ),
+          const SizedBox(width: 5),
+          Text(
+            _socketConectado
+                ? 'Online'
+                : 'Offline',
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight:
+                  FontWeight.w800,
+              color: _socketConectado
+                  ? const Color(
+                      0xFF15803D,
+                    )
+                  : const Color(
+                      0xFFB91C1C,
+                    ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -203,27 +554,32 @@ class _RestaurantOrdersScreenState
   // ============================================================
 
   Widget _cabecalhoResumo() {
-    final pendentes = _contarStatus([
+    final pendentes =
+        _contarStatus([
       'AGUARDANDO',
+      'AGUARDANDO_RESTAURANTE',
       'PENDENTE',
       'NOVO',
     ]);
 
-    final preparando = _contarStatus([
+    final preparando =
+        _contarStatus([
       'ACEITO',
       'PREPARANDO',
       'EM_PREPARO',
       'PREPARANDO_PEDIDO',
     ]);
 
-    final prontos = _contarStatus([
+    final prontos =
+        _contarStatus([
       'PRONTO',
       'PRONTO_PARA_ENTREGA',
     ]);
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.fromLTRB(
+      margin:
+          const EdgeInsets.fromLTRB(
         16,
         16,
         16,
@@ -235,8 +591,10 @@ class _RestaurantOrdersScreenState
             child: _cardResumo(
               titulo: 'Novos',
               valor: pendentes,
-              icone: Icons.notifications_active_rounded,
-              cor: const Color(0xFFF97316),
+              icone: Icons
+                  .notifications_active_rounded,
+              cor:
+                  const Color(0xFFF97316),
             ),
           ),
           const SizedBox(width: 10),
@@ -244,8 +602,10 @@ class _RestaurantOrdersScreenState
             child: _cardResumo(
               titulo: 'Preparando',
               valor: preparando,
-              icone: Icons.restaurant_rounded,
-              cor: const Color(0xFF2563EB),
+              icone:
+                  Icons.restaurant_rounded,
+              cor:
+                  const Color(0xFF2563EB),
             ),
           ),
           const SizedBox(width: 10),
@@ -253,8 +613,10 @@ class _RestaurantOrdersScreenState
             child: _cardResumo(
               titulo: 'Prontos',
               valor: prontos,
-              icone: Icons.check_circle_rounded,
-              cor: const Color(0xFF16A34A),
+              icone:
+                  Icons.check_circle_rounded,
+              cor:
+                  const Color(0xFF16A34A),
             ),
           ),
         ],
@@ -269,15 +631,19 @@ class _RestaurantOrdersScreenState
     required Color cor,
   }) {
     return Container(
-      padding: const EdgeInsets.all(14),
+      padding:
+          const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius:
+            BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Colors.black
+                .withValues(alpha: 0.04),
             blurRadius: 10,
-            offset: const Offset(0, 4),
+            offset:
+                const Offset(0, 4),
           ),
         ],
       ),
@@ -290,10 +656,15 @@ class _RestaurantOrdersScreenState
               Container(
                 width: 34,
                 height: 34,
-                decoration: BoxDecoration(
-                  color: cor.withValues(alpha: 0.12),
+                decoration:
+                    BoxDecoration(
+                  color: cor.withValues(
+                    alpha: 0.12,
+                  ),
                   borderRadius:
-                      BorderRadius.circular(10),
+                      BorderRadius.circular(
+                    10,
+                  ),
                 ),
                 child: Icon(
                   icone,
@@ -306,7 +677,8 @@ class _RestaurantOrdersScreenState
                 '$valor',
                 style: TextStyle(
                   fontSize: 22,
-                  fontWeight: FontWeight.w900,
+                  fontWeight:
+                      FontWeight.w900,
                   color: cor,
                 ),
               ),
@@ -315,10 +687,13 @@ class _RestaurantOrdersScreenState
           const SizedBox(height: 10),
           Text(
             titulo,
-            style: const TextStyle(
+            style:
+                const TextStyle(
               fontSize: 12,
-              color: Color(0xFF6B7280),
-              fontWeight: FontWeight.w600,
+              color:
+                  Color(0xFF6B7280),
+              fontWeight:
+                  FontWeight.w600,
             ),
           ),
         ],
@@ -334,8 +709,10 @@ class _RestaurantOrdersScreenState
     return SizedBox(
       height: 58,
       child: ListView(
-        scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(
+        scrollDirection:
+            Axis.horizontal,
+        padding:
+            const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 8,
         ),
@@ -348,7 +725,8 @@ class _RestaurantOrdersScreenState
           _filtroBotao(
             'AGUARDANDO',
             'Novos',
-            Icons.notifications_active_rounded,
+            Icons
+                .notifications_active_rounded,
           ),
           _filtroBotao(
             'PREPARANDO',
@@ -358,12 +736,14 @@ class _RestaurantOrdersScreenState
           _filtroBotao(
             'PRONTO',
             'Prontos',
-            Icons.check_circle_outline_rounded,
+            Icons
+                .check_circle_outline_rounded,
           ),
           _filtroBotao(
             'SAIU_PARA_ENTREGA',
             'Em entrega',
-            Icons.delivery_dining_rounded,
+            Icons
+                .delivery_dining_rounded,
           ),
           _filtroBotao(
             'CONCLUIDO',
@@ -380,30 +760,44 @@ class _RestaurantOrdersScreenState
     String titulo,
     IconData icone,
   ) {
-    final selecionado = _filtro == valor;
+    final selecionado =
+        _filtro == valor;
 
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding:
+          const EdgeInsets.only(
+        right: 8,
+      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius:
+            BorderRadius.circular(14),
         onTap: () {
           setState(() {
             _filtro = valor;
           });
         },
         child: Container(
-          padding: const EdgeInsets.symmetric(
+          padding:
+              const EdgeInsets.symmetric(
             horizontal: 14,
           ),
-          decoration: BoxDecoration(
+          decoration:
+              BoxDecoration(
             color: selecionado
-                ? const Color(0xFFF97316)
+                ? const Color(
+                    0xFFF97316,
+                  )
                 : Colors.white,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius:
+                BorderRadius.circular(14),
             border: Border.all(
               color: selecionado
-                  ? const Color(0xFFF97316)
-                  : const Color(0xFFE5E7EB),
+                  ? const Color(
+                      0xFFF97316,
+                    )
+                  : const Color(
+                      0xFFE5E7EB,
+                    ),
             ),
           ),
           child: Row(
@@ -413,17 +807,24 @@ class _RestaurantOrdersScreenState
                 size: 17,
                 color: selecionado
                     ? Colors.white
-                    : const Color(0xFF6B7280),
+                    : const Color(
+                        0xFF6B7280,
+                      ),
               ),
-              const SizedBox(width: 7),
+              const SizedBox(
+                width: 7,
+              ),
               Text(
                 titulo,
                 style: TextStyle(
                   fontSize: 12,
-                  fontWeight: FontWeight.w700,
+                  fontWeight:
+                      FontWeight.w700,
                   color: selecionado
                       ? Colors.white
-                      : const Color(0xFF374151),
+                      : const Color(
+                          0xFF374151,
+                        ),
                 ),
               ),
             ],
@@ -440,13 +841,16 @@ class _RestaurantOrdersScreenState
   Widget _conteudoPedidos() {
     if (_carregando) {
       return const Center(
-        child: CircularProgressIndicator(
-          color: Color(0xFFF97316),
+        child:
+            CircularProgressIndicator(
+          color:
+              Color(0xFFF97316),
         ),
       );
     }
 
-    final pedidos = _pedidosFiltrados;
+    final pedidos =
+        _pedidosFiltrados;
 
     if (pedidos.isEmpty) {
       return ListView(
@@ -464,14 +868,16 @@ class _RestaurantOrdersScreenState
     return ListView.builder(
       physics:
           const AlwaysScrollableScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
+      padding:
+          const EdgeInsets.fromLTRB(
         16,
         4,
         16,
         30,
       ),
       itemCount: pedidos.length,
-      itemBuilder: (context, index) {
+      itemBuilder:
+          (context, index) {
         return _cardPedido(
           pedidos[index],
         );
@@ -488,15 +894,21 @@ class _RestaurantOrdersScreenState
           Container(
             width: 90,
             height: 90,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFEDD5),
+            decoration:
+                BoxDecoration(
+              color:
+                  const Color(0xFFFFEDD5),
               borderRadius:
-                  BorderRadius.circular(30),
+                  BorderRadius.circular(
+                30,
+              ),
             ),
             child: const Icon(
-              Icons.receipt_long_rounded,
+              Icons
+                  .receipt_long_rounded,
               size: 44,
-              color: Color(0xFFF97316),
+              color:
+                  Color(0xFFF97316),
             ),
           ),
           const SizedBox(height: 18),
@@ -504,36 +916,48 @@ class _RestaurantOrdersScreenState
             'Nenhum pedido encontrado',
             style: TextStyle(
               fontSize: 18,
-              fontWeight: FontWeight.w800,
-              color: Color(0xFF171717),
+              fontWeight:
+                  FontWeight.w800,
+              color:
+                  Color(0xFF171717),
             ),
           ),
           const SizedBox(height: 7),
           const Text(
             'Os novos pedidos aparecerão aqui.',
-            textAlign: TextAlign.center,
+            textAlign:
+                TextAlign.center,
             style: TextStyle(
-              color: Color(0xFF6B7280),
+              color:
+                  Color(0xFF6B7280),
               fontSize: 13,
             ),
           ),
           const SizedBox(height: 18),
           ElevatedButton.icon(
-            onPressed: _carregarPedidos,
-            style: ElevatedButton.styleFrom(
+            onPressed:
+                _carregarPedidos,
+            style:
+                ElevatedButton.styleFrom(
               backgroundColor:
-                  const Color(0xFFF97316),
-              foregroundColor: Colors.white,
+                  const Color(
+                0xFFF97316,
+              ),
+              foregroundColor:
+                  Colors.white,
               elevation: 0,
               padding:
-                  const EdgeInsets.symmetric(
+                  const EdgeInsets
+                      .symmetric(
                 horizontal: 18,
                 vertical: 12,
               ),
               shape:
                   RoundedRectangleBorder(
                 borderRadius:
-                    BorderRadius.circular(14),
+                    BorderRadius.circular(
+                  14,
+                ),
               ),
             ),
             icon: const Icon(
@@ -543,7 +967,8 @@ class _RestaurantOrdersScreenState
             label: const Text(
               'Atualizar pedidos',
               style: TextStyle(
-                fontWeight: FontWeight.w700,
+                fontWeight:
+                    FontWeight.w700,
               ),
             ),
           ),
@@ -556,12 +981,19 @@ class _RestaurantOrdersScreenState
   // CARD DO PEDIDO
   // ============================================================
 
-  Widget _cardPedido(dynamic pedido) {
-    final id = _valorString(
-          pedido,
-          ['id', '_id', 'pedidoId'],
-        ) ??
-        '---';
+  Widget _cardPedido(
+    dynamic pedido,
+  ) {
+    final id =
+        _valorString(
+              pedido,
+              [
+                'id',
+                '_id',
+                'pedidoId',
+              ],
+            ) ??
+            '---';
 
     final status =
         (_valorString(
@@ -574,31 +1006,45 @@ class _RestaurantOrdersScreenState
     final pagamento =
         _valorString(
               pedido,
-              ['pagamento', 'formaPagamento'],
+              [
+                'pagamento',
+                'formaPagamento',
+              ],
             ) ??
             'PIX';
 
-    final total = _valorDouble(
+    final total =
+        _valorDouble(
       pedido,
       ['total'],
     );
 
-    final subtotal = _valorDouble(
+    final subtotal =
+        _valorDouble(
       pedido,
       ['subtotal'],
     );
 
-    final taxa = _valorDouble(
+    final taxa =
+        _valorDouble(
       pedido,
-      ['taxaEntrega', 'taxa'],
+      [
+        'taxaEntrega',
+        'taxa',
+      ],
     );
 
-    final itens = _valorLista(
+    final itens =
+        _valorLista(
       pedido,
-      ['itens', 'produtos'],
+      [
+        'itens',
+        'produtos',
+      ],
     );
 
-    final endereco = _valorMapa(
+    final endereco =
+        _valorMapa(
       pedido,
       ['endereco'],
     );
@@ -606,34 +1052,48 @@ class _RestaurantOrdersScreenState
     final clienteNome =
         _valorString(
               pedido,
-              ['clienteNome', 'nomeCliente'],
+              [
+                'clienteNome',
+                'nomeCliente',
+                'cliente',
+              ],
             ) ??
             'Cliente';
 
-    final corStatus = _corStatus(status);
+    final corStatus =
+        _corStatus(status);
 
     return Container(
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 14,
       ),
-      decoration: BoxDecoration(
+      decoration:
+          BoxDecoration(
         color: Colors.white,
         borderRadius:
-            BorderRadius.circular(20),
+            BorderRadius.circular(
+          20,
+        ),
         border: Border.all(
-          color: const Color(0xFFE5E7EB),
+          color:
+              const Color(0xFFE5E7EB),
         ),
         boxShadow: [
           BoxShadow(
-            color:
-                Colors.black.withValues(alpha: 0.035),
+            color: Colors.black
+                .withValues(
+              alpha: 0.035,
+            ),
             blurRadius: 12,
-            offset: const Offset(0, 4),
+            offset:
+                const Offset(0, 4),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding:
+            const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
@@ -645,24 +1105,32 @@ class _RestaurantOrdersScreenState
                 Container(
                   width: 46,
                   height: 46,
-                  decoration: BoxDecoration(
-                    color: corStatus.withValues(
+                  decoration:
+                      BoxDecoration(
+                    color:
+                        corStatus.withValues(
                       alpha: 0.12,
                     ),
                     borderRadius:
-                        BorderRadius.circular(14),
+                        BorderRadius.circular(
+                      14,
+                    ),
                   ),
                   child: Icon(
-                    Icons.receipt_long_rounded,
+                    Icons
+                        .receipt_long_rounded,
                     color: corStatus,
                     size: 24,
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(
+                  width: 12,
+                ),
                 Expanded(
                   child: Column(
                     crossAxisAlignment:
-                        CrossAxisAlignment.start,
+                        CrossAxisAlignment
+                            .start,
                     children: [
                       Text(
                         'Pedido #${_resumirId(id)}',
@@ -670,51 +1138,63 @@ class _RestaurantOrdersScreenState
                             const TextStyle(
                           fontSize: 16,
                           fontWeight:
-                              FontWeight.w900,
+                              FontWeight
+                                  .w900,
                           color:
                               Color(0xFF171717),
                         ),
                       ),
-                      const SizedBox(height: 4),
+                      const SizedBox(
+                        height: 4,
+                      ),
                       Text(
                         clienteNome,
                         maxLines: 1,
                         overflow:
-                            TextOverflow.ellipsis,
+                            TextOverflow
+                                .ellipsis,
                         style:
                             const TextStyle(
                           fontSize: 13,
                           color:
                               Color(0xFF6B7280),
                           fontWeight:
-                              FontWeight.w600,
+                              FontWeight
+                                  .w600,
                         ),
                       ),
                     ],
                   ),
                 ),
-                _statusBadge(status),
+                _statusBadge(
+                  status,
+                ),
               ],
             ),
-
-            const SizedBox(height: 16),
-
+            const SizedBox(
+              height: 16,
+            ),
             const Divider(
               height: 1,
-              color: Color(0xFFF0F0F0),
+              color:
+                  Color(0xFFF0F0F0),
             ),
-
-            const SizedBox(height: 14),
-
+            const SizedBox(
+              height: 14,
+            ),
             if (itens.isNotEmpty) ...[
               Row(
                 children: [
                   const Icon(
-                    Icons.shopping_bag_outlined,
+                    Icons
+                        .shopping_bag_outlined,
                     size: 18,
-                    color: Color(0xFF6B7280),
+                    color:
+                        Color(0xFF6B7280),
                   ),
-                  const SizedBox(width: 8),
+                  const SizedBox(
+                    width: 8,
+                  ),
                   Text(
                     '${itens.length} item(ns)',
                     style:
@@ -726,25 +1206,34 @@ class _RestaurantOrdersScreenState
                   ),
                 ],
               ),
-              const SizedBox(height: 10),
+              const SizedBox(
+                height: 10,
+              ),
               ...itens
                   .take(5)
                   .map(
                     (item) =>
-                        _itemPedido(item),
+                        _itemPedido(
+                      item,
+                    ),
                   ),
             ],
-
-            const SizedBox(height: 12),
-
+            const SizedBox(
+              height: 12,
+            ),
             Container(
               padding:
-                  const EdgeInsets.all(13),
-              decoration: BoxDecoration(
+                  const EdgeInsets.all(
+                13,
+              ),
+              decoration:
+                  BoxDecoration(
                 color:
                     const Color(0xFFF9FAFB),
                 borderRadius:
-                    BorderRadius.circular(14),
+                    BorderRadius.circular(
+                  14,
+                ),
               ),
               child: Column(
                 children: [
@@ -752,7 +1241,9 @@ class _RestaurantOrdersScreenState
                     'Subtotal',
                     subtotal,
                   ),
-                  const SizedBox(height: 5),
+                  const SizedBox(
+                    height: 5,
+                  ),
                   _linhaValor(
                     'Entrega',
                     taxa,
@@ -770,10 +1261,12 @@ class _RestaurantOrdersScreenState
                     children: [
                       const Text(
                         'Total',
-                        style: TextStyle(
+                        style:
+                            TextStyle(
                           fontSize: 15,
                           fontWeight:
-                              FontWeight.w900,
+                              FontWeight
+                                  .w900,
                         ),
                       ),
                       const Spacer(),
@@ -783,7 +1276,8 @@ class _RestaurantOrdersScreenState
                             const TextStyle(
                           fontSize: 18,
                           fontWeight:
-                              FontWeight.w900,
+                              FontWeight
+                                  .w900,
                           color:
                               Color(0xFFF97316),
                         ),
@@ -793,42 +1287,52 @@ class _RestaurantOrdersScreenState
                 ],
               ),
             ),
-
-            const SizedBox(height: 12),
-
+            const SizedBox(
+              height: 12,
+            ),
             Row(
               children: [
                 const Icon(
                   Icons.payment_rounded,
                   size: 17,
-                  color: Color(0xFF6B7280),
+                  color:
+                      Color(0xFF6B7280),
                 ),
-                const SizedBox(width: 7),
+                const SizedBox(
+                  width: 7,
+                ),
                 Text(
                   'Pagamento: ${_nomePagamento(pagamento)}',
                   style:
                       const TextStyle(
                     fontSize: 12,
-                    color: Color(0xFF6B7280),
+                    color:
+                        Color(0xFF6B7280),
                     fontWeight:
                         FontWeight.w600,
                   ),
                 ),
               ],
             ),
-
             if (endereco.isNotEmpty) ...[
-              const SizedBox(height: 9),
+              const SizedBox(
+                height: 9,
+              ),
               Row(
                 crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    CrossAxisAlignment
+                        .start,
                 children: [
                   const Icon(
-                    Icons.location_on_outlined,
+                    Icons
+                        .location_on_outlined,
                     size: 17,
-                    color: Color(0xFF6B7280),
+                    color:
+                        Color(0xFF6B7280),
                   ),
-                  const SizedBox(width: 7),
+                  const SizedBox(
+                    width: 7,
+                  ),
                   Expanded(
                     child: Text(
                       _formatarEndereco(
@@ -847,9 +1351,9 @@ class _RestaurantOrdersScreenState
                 ],
               ),
             ],
-
-            const SizedBox(height: 16),
-
+            const SizedBox(
+              height: 16,
+            ),
             _botoesStatus(
               pedido,
               status,
@@ -864,57 +1368,83 @@ class _RestaurantOrdersScreenState
   // ITEM
   // ============================================================
 
-  Widget _itemPedido(dynamic item) {
+  Widget _itemPedido(
+    dynamic item,
+  ) {
     final nome =
         _valorString(
               item,
-              ['nome', 'produto', 'nomeProduto'],
+              [
+                'nome',
+                'produto',
+                'nomeProduto',
+              ],
             ) ??
             'Produto';
 
-    final quantidade = _valorInt(
+    final quantidade =
+        _valorInt(
       item,
-      ['quantidade', 'qtd'],
+      [
+        'quantidade',
+        'qtd',
+      ],
     );
 
-    final preco = _valorDouble(
+    final preco =
+        _valorDouble(
       item,
-      ['preco', 'valor', 'precoUnitario'],
+      [
+        'preco',
+        'valor',
+        'precoUnitario',
+      ],
     );
 
     return Padding(
       padding:
-          const EdgeInsets.only(bottom: 7),
+          const EdgeInsets.only(
+        bottom: 7,
+      ),
       child: Row(
         children: [
           Container(
             width: 28,
             height: 28,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
+            alignment:
+                Alignment.center,
+            decoration:
+                BoxDecoration(
               color:
                   const Color(0xFFFFF7ED),
               borderRadius:
-                  BorderRadius.circular(8),
+                  BorderRadius.circular(
+                8,
+              ),
             ),
             child: Text(
               '$quantidade',
-              style: const TextStyle(
-                color: Color(0xFFF97316),
+              style:
+                  const TextStyle(
+                color:
+                    Color(0xFFF97316),
                 fontSize: 12,
                 fontWeight:
                     FontWeight.w900,
               ),
             ),
           ),
-          const SizedBox(width: 9),
+          const SizedBox(
+            width: 9,
+          ),
           Expanded(
             child: Text(
               nome,
               maxLines: 1,
               overflow:
                   TextOverflow.ellipsis,
-              style: const TextStyle(
+              style:
+                  const TextStyle(
                 fontSize: 13,
                 fontWeight:
                     FontWeight.w600,
@@ -922,8 +1452,11 @@ class _RestaurantOrdersScreenState
             ),
           ),
           Text(
-            _moeda(preco * quantidade),
-            style: const TextStyle(
+            _moeda(
+              preco * quantidade,
+            ),
+            style:
+                const TextStyle(
               fontSize: 12,
               fontWeight:
                   FontWeight.w800,
@@ -944,6 +1477,7 @@ class _RestaurantOrdersScreenState
   ) {
     switch (status) {
       case 'AGUARDANDO':
+      case 'AGUARDANDO_RESTAURANTE':
       case 'PENDENTE':
       case 'NOVO':
         return Row(
@@ -951,7 +1485,8 @@ class _RestaurantOrdersScreenState
             Expanded(
               child: _botaoStatus(
                 texto: 'Recusar',
-                icone: Icons.close_rounded,
+                icone:
+                    Icons.close_rounded,
                 cor: Colors.red,
                 preenchido: false,
                 onTap: () =>
@@ -961,11 +1496,14 @@ class _RestaurantOrdersScreenState
                 ),
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(
+              width: 10,
+            ),
             Expanded(
               flex: 2,
               child: _botaoStatus(
-                texto: 'Aceitar pedido',
+                texto:
+                    'Aceitar pedido',
                 icone:
                     Icons.check_rounded,
                 cor:
@@ -982,15 +1520,34 @@ class _RestaurantOrdersScreenState
         );
 
       case 'ACEITO':
+        return SizedBox(
+          width: double.infinity,
+          child: _botaoStatus(
+            texto:
+                'Iniciar preparo',
+            icone:
+                Icons.restaurant_rounded,
+            cor:
+                const Color(0xFF2563EB),
+            preenchido: true,
+            onTap: () =>
+                _atualizarStatus(
+              pedido,
+              'PREPARANDO',
+            ),
+          ),
+        );
+
       case 'PREPARANDO':
       case 'EM_PREPARO':
       case 'PREPARANDO_PEDIDO':
         return SizedBox(
           width: double.infinity,
           child: _botaoStatus(
-            texto: 'Marcar como pronto',
-            icone:
-                Icons.check_circle_outline_rounded,
+            texto:
+                'Marcar como pronto',
+            icone: Icons
+                .check_circle_outline_rounded,
             cor:
                 const Color(0xFF16A34A),
             preenchido: true,
@@ -1007,9 +1564,10 @@ class _RestaurantOrdersScreenState
         return SizedBox(
           width: double.infinity,
           child: _botaoStatus(
-            texto: 'Enviar para entrega',
-            icone:
-                Icons.delivery_dining_rounded,
+            texto:
+                'Enviar para entrega',
+            icone: Icons
+                .delivery_dining_rounded,
             cor:
                 const Color(0xFF2563EB),
             preenchido: true,
@@ -1026,24 +1584,34 @@ class _RestaurantOrdersScreenState
         return Container(
           width: double.infinity,
           padding:
-              const EdgeInsets.all(12),
-          decoration: BoxDecoration(
+              const EdgeInsets.all(
+            12,
+          ),
+          decoration:
+              BoxDecoration(
             color:
                 const Color(0xFFEFF6FF),
             borderRadius:
-                BorderRadius.circular(13),
+                BorderRadius.circular(
+              13,
+            ),
           ),
           child: const Row(
             children: [
               Icon(
-                Icons.delivery_dining_rounded,
-                color: Color(0xFF2563EB),
+                Icons
+                    .delivery_dining_rounded,
+                color:
+                    Color(0xFF2563EB),
               ),
-              SizedBox(width: 9),
+              SizedBox(
+                width: 9,
+              ),
               Expanded(
                 child: Text(
                   'Pedido está com o entregador.',
-                  style: TextStyle(
+                  style:
+                      TextStyle(
                     color:
                         Color(0xFF1D4ED8),
                     fontWeight:
@@ -1061,23 +1629,33 @@ class _RestaurantOrdersScreenState
         return Container(
           width: double.infinity,
           padding:
-              const EdgeInsets.all(12),
-          decoration: BoxDecoration(
+              const EdgeInsets.all(
+            12,
+          ),
+          decoration:
+              BoxDecoration(
             color:
                 const Color(0xFFF0FDF4),
             borderRadius:
-                BorderRadius.circular(13),
+                BorderRadius.circular(
+              13,
+            ),
           ),
           child: const Row(
             children: [
               Icon(
-                Icons.check_circle_rounded,
-                color: Color(0xFF16A34A),
+                Icons
+                    .check_circle_rounded,
+                color:
+                    Color(0xFF16A34A),
               ),
-              SizedBox(width: 9),
+              SizedBox(
+                width: 9,
+              ),
               Text(
                 'Pedido concluído',
-                style: TextStyle(
+                style:
+                    TextStyle(
                   color:
                       Color(0xFF15803D),
                   fontWeight:
@@ -1094,23 +1672,32 @@ class _RestaurantOrdersScreenState
         return Container(
           width: double.infinity,
           padding:
-              const EdgeInsets.all(12),
-          decoration: BoxDecoration(
+              const EdgeInsets.all(
+            12,
+          ),
+          decoration:
+              BoxDecoration(
             color:
                 const Color(0xFFFEF2F2),
             borderRadius:
-                BorderRadius.circular(13),
+                BorderRadius.circular(
+              13,
+            ),
           ),
           child: const Row(
             children: [
               Icon(
                 Icons.cancel_rounded,
-                color: Color(0xFFDC2626),
+                color:
+                    Color(0xFFDC2626),
               ),
-              SizedBox(width: 9),
+              SizedBox(
+                width: 9,
+              ),
               Text(
                 'Pedido cancelado',
-                style: TextStyle(
+                style:
+                    TextStyle(
                   color:
                       Color(0xFFB91C1C),
                   fontWeight:
@@ -1126,7 +1713,8 @@ class _RestaurantOrdersScreenState
         return SizedBox(
           width: double.infinity,
           child: _botaoStatus(
-            texto: 'Atualizar pedido',
+            texto:
+                'Atualizar pedido',
             icone:
                 Icons.refresh_rounded,
             cor:
@@ -1151,17 +1739,23 @@ class _RestaurantOrdersScreenState
   }) {
     return SizedBox(
       height: 48,
-      child: ElevatedButton.icon(
+      child:
+          ElevatedButton.icon(
         onPressed:
-            _atualizando ? null : onTap,
-        style: ElevatedButton.styleFrom(
+            _atualizando
+                ? null
+                : onTap,
+        style:
+            ElevatedButton.styleFrom(
           elevation: 0,
-          backgroundColor: preenchido
-              ? cor
-              : Colors.white,
-          foregroundColor: preenchido
-              ? Colors.white
-              : cor,
+          backgroundColor:
+              preenchido
+                  ? cor
+                  : Colors.white,
+          foregroundColor:
+              preenchido
+                  ? Colors.white
+                  : cor,
           disabledBackgroundColor:
               Colors.grey.shade300,
           side: preenchido
@@ -1173,7 +1767,9 @@ class _RestaurantOrdersScreenState
           shape:
               RoundedRectangleBorder(
             borderRadius:
-                BorderRadius.circular(13),
+                BorderRadius.circular(
+              13,
+            ),
           ),
         ),
         icon: Icon(
@@ -1182,9 +1778,11 @@ class _RestaurantOrdersScreenState
         ),
         label: Text(
           texto,
-          style: const TextStyle(
+          style:
+              const TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.w800,
+            fontWeight:
+                FontWeight.w800,
           ),
         ),
       ),
@@ -1207,7 +1805,8 @@ class _RestaurantOrdersScreenState
           title: const Text(
             'Recusar pedido?',
             style: TextStyle(
-              fontWeight: FontWeight.w800,
+              fontWeight:
+                  FontWeight.w800,
             ),
           ),
           content: const Text(
@@ -1261,18 +1860,20 @@ class _RestaurantOrdersScreenState
   int _contarStatus(
     List<String> statusPermitidos,
   ) {
-    return _pedidos.where((pedido) {
-      final status =
-          (_valorString(
-                pedido,
-                ['status'],
-              ) ??
-              '')
-          .toUpperCase();
+    return _pedidos.where(
+      (pedido) {
+        final status =
+            (_valorString(
+                  pedido,
+                  ['status'],
+                ) ??
+                '')
+            .toUpperCase();
 
-      return statusPermitidos
-          .contains(status);
-    }).length;
+        return statusPermitidos
+            .contains(status);
+      },
+    ).length;
   }
 
   // ============================================================
@@ -1287,19 +1888,25 @@ class _RestaurantOrdersScreenState
       children: [
         Text(
           titulo,
-          style: const TextStyle(
+          style:
+              const TextStyle(
             fontSize: 12,
-            color: Color(0xFF6B7280),
-            fontWeight: FontWeight.w600,
+            color:
+                Color(0xFF6B7280),
+            fontWeight:
+                FontWeight.w600,
           ),
         ),
         const Spacer(),
         Text(
           _moeda(valor),
-          style: const TextStyle(
+          style:
+              const TextStyle(
             fontSize: 12,
-            color: Color(0xFF374151),
-            fontWeight: FontWeight.w800,
+            color:
+                Color(0xFF374151),
+            fontWeight:
+                FontWeight.w800,
           ),
         ),
       ],
@@ -1417,42 +2024,62 @@ class _RestaurantOrdersScreenState
   // STATUS
   // ============================================================
 
-  Color _corStatus(String status) {
+  Color _corStatus(
+    String status,
+  ) {
     switch (status) {
       case 'AGUARDANDO':
+      case 'AGUARDANDO_RESTAURANTE':
       case 'PENDENTE':
       case 'NOVO':
-        return const Color(0xFFF97316);
+        return const Color(
+          0xFFF97316,
+        );
 
       case 'ACEITO':
       case 'PREPARANDO':
       case 'EM_PREPARO':
       case 'PREPARANDO_PEDIDO':
-        return const Color(0xFF2563EB);
+        return const Color(
+          0xFF2563EB,
+        );
 
       case 'PRONTO':
       case 'PRONTO_PARA_ENTREGA':
-        return const Color(0xFF16A34A);
+        return const Color(
+          0xFF16A34A,
+        );
 
       case 'SAIU_PARA_ENTREGA':
       case 'EM_ENTREGA':
-        return const Color(0xFF7C3AED);
+        return const Color(
+          0xFF7C3AED,
+        );
 
       case 'CONCLUIDO':
       case 'ENTREGUE':
-        return const Color(0xFF16A34A);
+        return const Color(
+          0xFF16A34A,
+        );
 
       case 'CANCELADO':
       case 'RECUSADO':
-        return const Color(0xFFDC2626);
+        return const Color(
+          0xFFDC2626,
+        );
 
       default:
-        return const Color(0xFF6B7280);
+        return const Color(
+          0xFF6B7280,
+        );
     }
   }
 
-  Widget _statusBadge(String status) {
-    final cor = _corStatus(status);
+  Widget _statusBadge(
+    String status,
+  ) {
+    final cor =
+        _corStatus(status);
 
     return Container(
       padding:
@@ -1460,25 +2087,35 @@ class _RestaurantOrdersScreenState
         horizontal: 10,
         vertical: 6,
       ),
-      decoration: BoxDecoration(
-        color: cor.withValues(alpha: 0.10),
+      decoration:
+          BoxDecoration(
+        color: cor.withValues(
+          alpha: 0.10,
+        ),
         borderRadius:
-            BorderRadius.circular(20),
+            BorderRadius.circular(
+          20,
+        ),
       ),
       child: Text(
         _nomeStatus(status),
-        style: TextStyle(
+        style:
+            TextStyle(
           color: cor,
           fontSize: 10,
-          fontWeight: FontWeight.w900,
+          fontWeight:
+              FontWeight.w900,
         ),
       ),
     );
   }
 
-  String _nomeStatus(String status) {
+  String _nomeStatus(
+    String status,
+  ) {
     switch (status) {
       case 'AGUARDANDO':
+      case 'AGUARDANDO_RESTAURANTE':
       case 'PENDENTE':
       case 'NOVO':
         return 'NOVO';
@@ -1512,7 +2149,9 @@ class _RestaurantOrdersScreenState
     }
   }
 
-  String _nomePagamento(String pagamento) {
+  String _nomePagamento(
+    String pagamento,
+  ) {
     switch (pagamento.toUpperCase()) {
       case 'PIX':
         return 'PIX';
@@ -1537,13 +2176,19 @@ class _RestaurantOrdersScreenState
     Map<String, dynamic> endereco,
   ) {
     final rua =
-        endereco['rua']?.toString() ?? '';
+        endereco['rua']
+                ?.toString() ??
+            '';
 
     final numero =
-        endereco['numero']?.toString() ?? '';
+        endereco['numero']
+                ?.toString() ??
+            '';
 
     final bairro =
-        endereco['bairro']?.toString() ?? '';
+        endereco['bairro']
+                ?.toString() ??
+            '';
 
     final complemento =
         endereco['complemento']
@@ -1551,9 +2196,12 @@ class _RestaurantOrdersScreenState
             '';
 
     final cidade =
-        endereco['cidade']?.toString() ?? '';
+        endereco['cidade']
+                ?.toString() ??
+            '';
 
-    final partes = <String>[];
+    final partes =
+        <String>[];
 
     if (rua.isNotEmpty) {
       partes.add(
@@ -1586,11 +2234,15 @@ class _RestaurantOrdersScreenState
   // FORMATADORES
   // ============================================================
 
-  String _moeda(double valor) {
+  String _moeda(
+    double valor,
+  ) {
     return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 
-  String _resumirId(String id) {
+  String _resumirId(
+    String id,
+  ) {
     if (id.length <= 8) {
       return id;
     }
@@ -1599,6 +2251,10 @@ class _RestaurantOrdersScreenState
       id.length - 8,
     );
   }
+
+  // ============================================================
+  // MENSAGEM
+  // ============================================================
 
   void _mostrarMensagem(
     String mensagem, {
@@ -1610,20 +2266,26 @@ class _RestaurantOrdersScreenState
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text(mensagem),
-          backgroundColor: erro
-              ? Colors.red.shade700
-              : const Color(0xFF16A34A),
+          content:
+              Text(mensagem),
+          backgroundColor:
+              erro
+                  ? Colors.red.shade700
+                  : const Color(
+                      0xFF16A34A,
+                    ),
           behavior:
               SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
+          margin:
+              const EdgeInsets.all(16),
           shape:
               RoundedRectangleBorder(
             borderRadius:
-                BorderRadius.circular(12),
+                BorderRadius.circular(
+              12,
+            ),
           ),
         ),
       );
   }
 }
-

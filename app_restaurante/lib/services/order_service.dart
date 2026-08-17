@@ -3,50 +3,96 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class OrderService {
-  final String baseUrl =
+  static const String baseUrl =
       'http://192.168.1.101:3000/api';
 
   // ============================================================
   // BUSCAR PEDIDOS DO RESTAURANTE
   // ============================================================
 
-  Future<List> buscarPedidosRestaurante(
+  Future<List<dynamic>> buscarPedidosRestaurante(
     String restauranteId,
   ) async {
-    try {
-      final url = Uri.parse(
-        '$baseUrl/orders/restaurante/$restauranteId',
+    if (restauranteId.trim().isEmpty) {
+      throw Exception(
+        'ID do restaurante não informado.',
       );
+    }
 
-      print('==========================================');
-      print('BUSCANDO PEDIDOS');
-      print('URL: $url');
-      print('RESTAURANTE: $restauranteId');
-      print('==========================================');
+    final url = Uri.parse(
+      '$baseUrl/orders/restaurante/${Uri.encodeComponent(restauranteId)}',
+    );
 
-      final response = await http.get(url);
+    print('==========================================');
+    print('BUSCANDO PEDIDOS DO RESTAURANTE');
+    print('URL: $url');
+    print('RESTAURANTE: $restauranteId');
+    print('==========================================');
 
-      print('STATUS: ${response.statusCode}');
+    try {
+      final response = await http
+          .get(
+            url,
+            headers: {
+              'Accept': 'application/json',
+            },
+          )
+          .timeout(
+            const Duration(seconds: 15),
+          );
+
+      print('STATUS HTTP: ${response.statusCode}');
       print('RESPOSTA: ${response.body}');
 
-      if (response.statusCode == 200) {
-        final dados = jsonDecode(response.body);
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        throw Exception(
+          'Erro HTTP ${response.statusCode}',
+        );
+      }
 
-        if (dados is List) {
-          return dados;
-        }
-
-        if (dados is Map && dados['pedidos'] is List) {
-          return List.from(dados['pedidos']);
-        }
-
-        print('Resposta da API não é uma lista de pedidos.');
+      if (response.body.trim().isEmpty) {
         return [];
       }
 
+      final dados = jsonDecode(response.body);
+
+      // API retornando diretamente:
+      // [
+      //   {...},
+      //   {...}
+      // ]
+
+      if (dados is List) {
+        return List<dynamic>.from(dados);
+      }
+
+      // API retornando:
+      // {
+      //   "pedidos": [...]
+      // }
+
+      if (dados is Map &&
+          dados['pedidos'] is List) {
+        return List<dynamic>.from(
+          dados['pedidos'],
+        );
+      }
+
+      // Alguns backends podem retornar:
+      // {
+      //   "data": [...]
+      // }
+
+      if (dados is Map &&
+          dados['data'] is List) {
+        return List<dynamic>.from(
+          dados['data'],
+        );
+      }
+
       print(
-        'Erro HTTP ao buscar pedidos: '
-        '${response.statusCode}',
+        'Resposta da API não contém uma lista de pedidos.',
       );
 
       return [];
@@ -56,44 +102,80 @@ class OrderService {
       print(e);
       print('==========================================');
 
-      return [];
+      rethrow;
     }
   }
 
   // ============================================================
-  // ATUALIZAR STATUS
+  // ATUALIZAR STATUS DO PEDIDO
   // ============================================================
 
   Future<bool> atualizarStatusPedido(
     String pedidoId,
     String status,
   ) async {
+    if (pedidoId.trim().isEmpty) {
+      throw Exception(
+        'ID do pedido não informado.',
+      );
+    }
+
+    if (status.trim().isEmpty) {
+      throw Exception(
+        'Status não informado.',
+      );
+    }
+
+    final url = Uri.parse(
+      '$baseUrl/orders/${Uri.encodeComponent(pedidoId)}/status',
+    );
+
+    print('==========================================');
+    print('ATUALIZANDO PEDIDO');
+    print('URL: $url');
+    print('PEDIDO: $pedidoId');
+    print('NOVO STATUS: $status');
+    print('==========================================');
+
     try {
-      final url = Uri.parse(
-        '$baseUrl/orders/$pedidoId/status',
+      final response = await http
+          .put(
+            url,
+            headers: {
+              'Content-Type':
+                  'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({
+              'status': status,
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 15),
+          );
+
+      print(
+        'STATUS HTTP ATUALIZAÇÃO: ${response.statusCode}',
+      );
+      print(
+        'RESPOSTA ATUALIZAÇÃO: ${response.body}',
       );
 
-      print('ATUALIZANDO PEDIDO');
-      print('URL: $url');
-      print('STATUS: $status');
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300) {
+        return true;
+      }
 
-      final response = await http.put(
-        url,
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: jsonEncode({
-          'status': status,
-        }),
+      throw Exception(
+        'Erro HTTP ${response.statusCode}: '
+        '${response.body}',
       );
-
-      print('STATUS HTTP: ${response.statusCode}');
-      print('RESPOSTA: ${response.body}');
-
-      return response.statusCode == 200;
     } catch (e) {
-      print('ERRO AO ATUALIZAR PEDIDO: $e');
-      return false;
+      print(
+        'ERRO AO ATUALIZAR PEDIDO: $e',
+      );
+
+      rethrow;
     }
   }
 }
