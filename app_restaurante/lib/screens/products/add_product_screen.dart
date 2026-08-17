@@ -1,5 +1,6 @@
-import 'dart:io';
+import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
@@ -22,11 +23,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final ImagePicker imagePicker = ImagePicker();
 
   final TextEditingController nomeController = TextEditingController();
-  final TextEditingController descricaoController = TextEditingController();
-  final TextEditingController precoController = TextEditingController();
-  final TextEditingController categoriaController = TextEditingController();
+  final TextEditingController descricaoController =
+      TextEditingController();
+  final TextEditingController precoController =
+      TextEditingController();
+  final TextEditingController categoriaController =
+      TextEditingController();
 
-  File? imagemSelecionada;
+  XFile? imagemSelecionada;
+  Uint8List? imagemBytes;
 
   bool disponivel = true;
   bool destaque = false;
@@ -45,8 +50,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
     'Combos',
     'Pratos',
     'Açaí',
-    'Outros',
-  ];
+    'Japonês',
+  ].toSet().toList();
 
   @override
   void dispose() {
@@ -74,18 +79,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
       if (arquivo == null) return;
 
-      final File file = File(arquivo.path);
+      final Uint8List bytes = await arquivo.readAsBytes();
 
       if (!mounted) return;
 
       setState(() {
-        imagemSelecionada = file;
+        imagemSelecionada = arquivo;
+        imagemBytes = bytes;
       });
     } catch (e) {
       if (!mounted) return;
 
       _mostrarErro(
-        'Não foi possível selecionar a imagem.',
+        'Não foi possível selecionar a imagem.\n$e',
       );
     }
   }
@@ -99,6 +105,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     setState(() {
       imagemSelecionada = null;
+      imagemBytes = null;
     });
   }
 
@@ -118,31 +125,30 @@ class _AddProductScreenState extends State<AddProductScreen> {
         .replaceAll(',', '.');
 
     if (nome.isEmpty) {
-      _mostrarErro(
-        'Digite o nome do produto.',
-      );
+      _mostrarErro('Digite o nome do produto.');
       return;
     }
 
     if (precoTexto.isEmpty) {
-      _mostrarErro(
-        'Digite o preço do produto.',
-      );
+      _mostrarErro('Digite o preço do produto.');
       return;
     }
 
     final double? preco = double.tryParse(precoTexto);
 
     if (preco == null || preco <= 0) {
-      _mostrarErro(
-        'Digite um preço válido.',
-      );
+      _mostrarErro('Digite um preço válido.');
       return;
     }
 
     if (categoria.isEmpty) {
+      _mostrarErro('Informe a categoria do produto.');
+      return;
+    }
+
+    if (widget.restauranteId.trim().isEmpty) {
       _mostrarErro(
-        'Informe a categoria do produto.',
+        'Não foi possível identificar o restaurante.',
       );
       return;
     }
@@ -166,6 +172,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
         'destaque': destaque,
       };
 
+      debugPrint(
+        'CADASTRANDO PRODUTO: $dadosProduto',
+      );
+
       final Map<String, dynamic>? produtoCriado =
           await service.criarProdutoComRetorno(
         dadosProduto,
@@ -179,11 +189,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
         });
 
         _mostrarErro(
-          'Não foi possível cadastrar o produto.',
+          'Não foi possível cadastrar o produto.\n'
+          'Verifique se o servidor está funcionando.',
         );
 
         return;
       }
+
+      debugPrint(
+        'PRODUTO CRIADO: $produtoCriado',
+      );
 
       // ========================================================
       // 2. PEGAR ID
@@ -209,11 +224,16 @@ class _AddProductScreenState extends State<AddProductScreen> {
       // 3. ENVIAR IMAGEM
       // ========================================================
 
-      if (imagemSelecionada != null) {
+      if (imagemSelecionada != null && imagemBytes != null) {
+        debugPrint(
+          'ENVIANDO IMAGEM DO PRODUTO $id',
+        );
+
         final Map<String, dynamic>? imagemEnviada =
             await service.uploadImagem(
           id.toString(),
           imagemSelecionada!,
+          imagemBytes!,
         );
 
         if (imagemEnviada == null) {
@@ -227,6 +247,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
           return;
         }
+
+        debugPrint(
+          'IMAGEM ENVIADA COM SUCESSO',
+        );
       }
 
       // ========================================================
@@ -246,6 +270,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
       Navigator.pop(context, true);
     } catch (e) {
+      debugPrint(
+        'ERRO AO CADASTRAR PRODUTO: $e',
+      );
+
       if (!mounted) return;
 
       setState(() {
@@ -253,13 +281,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
       });
 
       _mostrarErro(
-        'Erro ao cadastrar produto: $e',
+        'Erro ao cadastrar produto:\n$e',
       );
     }
   }
 
   // ============================================================
-  // AVISO UPLOAD DA IMAGEM
+  // AVISO IMAGEM
   // ============================================================
 
   Future<void> _mostrarAvisoImagem() async {
@@ -299,9 +327,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 backgroundColor: laranja,
                 foregroundColor: Colors.white,
               ),
-              child: const Text(
-                'Continuar',
-              ),
+              child: const Text('Continuar'),
             ),
           ],
         );
@@ -324,6 +350,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       SnackBar(
         content: Text(mensagem),
         backgroundColor: Colors.red,
+        duration: const Duration(seconds: 4),
       ),
     );
   }
@@ -392,9 +419,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 backgroundColor: Colors.red,
                 foregroundColor: Colors.white,
               ),
-              child: const Text(
-                'Sair',
-              ),
+              child: const Text('Sair'),
             ),
           ],
         );
@@ -435,7 +460,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
             onPressed: salvando
                 ? null
                 : () async {
-                    final bool sair = await confirmarSaida();
+                    final bool sair =
+                        await confirmarSaida();
 
                     if (!mounted) return;
 
@@ -449,7 +475,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
             ),
           ),
           title: const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               Text(
                 'Novo produto',
@@ -471,7 +498,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
         ),
         body: SafeArea(
           child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
+            physics:
+                const AlwaysScrollableScrollPhysics(),
             padding: const EdgeInsets.fromLTRB(
               16,
               20,
@@ -479,7 +507,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
               120,
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 _cabecalho(),
 
@@ -537,7 +566,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
         const SizedBox(width: 14),
         const Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               Text(
                 'Cadastrar produto',
@@ -566,7 +596,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   // ============================================================
 
   Widget _fotoProduto() {
-    if (imagemSelecionada != null) {
+    if (imagemSelecionada != null &&
+        imagemBytes != null) {
       return _fotoSelecionada();
     }
 
@@ -583,15 +614,19 @@ class _AddProductScreenState extends State<AddProductScreen> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          borderRadius: BorderRadius.circular(22),
-          onTap: salvando ? null : selecionarImagem,
+          borderRadius:
+              BorderRadius.circular(22),
+          onTap:
+              salvando ? null : selecionarImagem,
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment:
+                MainAxisAlignment.center,
             children: [
               Container(
                 width: 72,
                 height: 72,
-                decoration: const BoxDecoration(
+                decoration:
+                    const BoxDecoration(
                   color: Color(0xFFFFEDD5),
                   shape: BoxShape.circle,
                 ),
@@ -619,19 +654,23 @@ class _AddProductScreenState extends State<AddProductScreen> {
               ),
               const SizedBox(height: 12),
               Container(
-                padding: const EdgeInsets.symmetric(
+                padding:
+                    const EdgeInsets.symmetric(
                   horizontal: 14,
                   vertical: 8,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFFF7ED),
-                  borderRadius: BorderRadius.circular(20),
+                  color:
+                      const Color(0xFFFFF7ED),
+                  borderRadius:
+                      BorderRadius.circular(20),
                 ),
                 child: const Text(
                   'Selecionar imagem',
                   style: TextStyle(
                     color: laranja,
-                    fontWeight: FontWeight.bold,
+                    fontWeight:
+                        FontWeight.bold,
                     fontSize: 12,
                   ),
                 ),
@@ -653,78 +692,102 @@ class _AddProductScreenState extends State<AddProductScreen> {
       height: 250,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(22),
+        borderRadius:
+            BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
             blurRadius: 12,
             offset: const Offset(0, 4),
-            color: Colors.black.withValues(alpha: .05),
+            color:
+                Colors.black.withValues(alpha: .05),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
+        borderRadius:
+            BorderRadius.circular(22),
         child: Stack(
           fit: StackFit.expand,
           children: [
-            Image.file(
-              imagemSelecionada!,
+            Image.memory(
+              imagemBytes!,
               fit: BoxFit.cover,
             ),
+
             Positioned.fill(
               child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
+                decoration:
+                    BoxDecoration(
+                  gradient:
+                      LinearGradient(
+                    begin:
+                        Alignment.topCenter,
+                    end:
+                        Alignment.bottomCenter,
                     colors: [
-                      Colors.black.withValues(alpha: .35),
+                      Colors.black.withValues(
+                          alpha: .35),
                       Colors.transparent,
-                      Colors.black.withValues(alpha: .45),
+                      Colors.black.withValues(
+                          alpha: .45),
                     ],
                   ),
                 ),
               ),
             ),
+
             Positioned(
               top: 12,
               right: 12,
               child: Material(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius:
+                    BorderRadius.circular(14),
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: salvando ? null : removerImagem,
+                  borderRadius:
+                      BorderRadius.circular(14),
+                  onTap: salvando
+                      ? null
+                      : removerImagem,
                   child: const SizedBox(
                     width: 44,
                     height: 44,
                     child: Icon(
-                      Icons.delete_outline_rounded,
+                      Icons
+                          .delete_outline_rounded,
                       color: Colors.red,
                     ),
                   ),
                 ),
               ),
             ),
+
             Positioned(
               left: 14,
               bottom: 14,
               child: Material(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(14),
+                borderRadius:
+                    BorderRadius.circular(14),
                 child: InkWell(
-                  borderRadius: BorderRadius.circular(14),
-                  onTap: salvando ? null : selecionarImagem,
+                  borderRadius:
+                      BorderRadius.circular(14),
+                  onTap: salvando
+                      ? null
+                      : selecionarImagem,
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
+                    padding:
+                        const EdgeInsets.symmetric(
                       horizontal: 14,
                       vertical: 10,
                     ),
                     child: const Row(
-                      mainAxisSize: MainAxisSize.min,
+                      mainAxisSize:
+                          MainAxisSize.min,
                       children: [
                         Icon(
-                          Icons.photo_library_rounded,
+                          Icons
+                              .photo_library_rounded,
                           size: 18,
                           color: laranja,
                         ),
@@ -732,8 +795,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                         Text(
                           'Trocar foto',
                           style: TextStyle(
-                            color: Colors.black87,
-                            fontWeight: FontWeight.bold,
+                            color:
+                                Colors.black87,
+                            fontWeight:
+                                FontWeight.bold,
                             fontSize: 12,
                           ),
                         ),
@@ -763,16 +828,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
             controller: nomeController,
             label: 'Nome do produto',
             hint: 'Ex: X-Bacon Especial',
-            icone: Icons.fastfood_rounded,
-            textCapitalization: TextCapitalization.words,
+            icone:
+                Icons.fastfood_rounded,
+            textCapitalization:
+                TextCapitalization.words,
           ),
           const SizedBox(height: 16),
           _campo(
             controller: precoController,
             label: 'Preço',
             hint: '0,00',
-            icone: Icons.attach_money_rounded,
-            keyboardType: const TextInputType.numberWithOptions(
+            icone:
+                Icons.attach_money_rounded,
+            keyboardType:
+                const TextInputType.numberWithOptions(
               decimal: true,
             ),
           ),
@@ -790,14 +859,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
       titulo: 'Categoria',
       icone: Icons.category_outlined,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           _campo(
-            controller: categoriaController,
-            label: 'Categoria do produto',
-            hint: 'Ex: Hambúrguer',
-            icone: Icons.category_rounded,
-            textCapitalization: TextCapitalization.words,
+            controller:
+                categoriaController,
+            label:
+                'Categoria do produto',
+            hint:
+                'Ex: Hambúrguer',
+            icone:
+                Icons.category_rounded,
+            textCapitalization:
+                TextCapitalization.words,
           ),
           const SizedBox(height: 14),
           const Text(
@@ -805,39 +880,57 @@ class _AddProductScreenState extends State<AddProductScreen> {
             style: TextStyle(
               color: Colors.grey,
               fontSize: 12,
-              fontWeight: FontWeight.w600,
+              fontWeight:
+                  FontWeight.w600,
             ),
           ),
           const SizedBox(height: 8),
           Wrap(
             spacing: 7,
             runSpacing: 7,
-            children: categoriasSugeridas.map(
+            children:
+                categoriasSugeridas.map(
               (String categoria) {
                 final bool selecionada =
-                    categoriaController.text.trim().toLowerCase() ==
-                    categoria.toLowerCase();
+                    categoriaController
+                            .text
+                            .trim()
+                            .toLowerCase() ==
+                        categoria
+                            .toLowerCase();
 
                 return ChoiceChip(
-                  label: Text(categoria),
-                  selected: selecionada,
-                  onSelected: salvando
-                      ? null
-                      : (_) {
-                          selecionarCategoria(categoria);
-                        },
-                  selectedColor: laranja,
-                  backgroundColor: Colors.grey.shade100,
-                  labelStyle: TextStyle(
+                  label:
+                      Text(categoria),
+                  selected:
+                      selecionada,
+                  onSelected:
+                      salvando
+                          ? null
+                          : (_) {
+                              selecionarCategoria(
+                                  categoria);
+                            },
+                  selectedColor:
+                      laranja,
+                  backgroundColor:
+                      Colors.grey.shade100,
+                  labelStyle:
+                      TextStyle(
                     color: selecionada
                         ? Colors.white
                         : Colors.black87,
-                    fontWeight: FontWeight.w600,
+                    fontWeight:
+                        FontWeight.w600,
                     fontSize: 12,
                   ),
-                  side: BorderSide.none,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(20),
+                  side:
+                      BorderSide.none,
+                  shape:
+                      RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                            20),
                   ),
                 );
               },
@@ -855,15 +948,20 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Widget _descricao() {
     return _cardSecao(
       titulo: 'Descrição',
-      icone: Icons.description_outlined,
+      icone:
+          Icons.description_outlined,
       child: _campo(
-        controller: descricaoController,
-        label: 'Descrição do produto',
-        hint: 'Descreva os ingredientes e detalhes do produto...',
+        controller:
+            descricaoController,
+        label:
+            'Descrição do produto',
+        hint:
+            'Descreva os ingredientes e detalhes do produto...',
         icone: Icons.notes_rounded,
         maxLines: 5,
         maxLength: 500,
-        textCapitalization: TextCapitalization.sentences,
+        textCapitalization:
+            TextCapitalization.sentences,
       ),
     );
   }
@@ -879,26 +977,35 @@ class _AddProductScreenState extends State<AddProductScreen> {
       child: Column(
         children: [
           _switchItem(
-            titulo: 'Produto disponível',
+            titulo:
+                'Produto disponível',
             descricao:
                 'O produto poderá ser comprado pelos clientes.',
-            icone: Icons.visibility_rounded,
+            icone:
+                Icons.visibility_rounded,
             valor: disponivel,
             cor: Colors.green,
-            onChanged: (bool valor) {
+            onChanged:
+                (bool valor) {
               setState(() {
                 disponivel = valor;
               });
             },
           ),
-          const Divider(height: 25),
+          const Divider(
+              height: 25),
           _switchItem(
-            titulo: 'Produto em destaque',
-            descricao: 'Destaque este produto no cardápio.',
-            icone: Icons.star_rounded,
+            titulo:
+                'Produto em destaque',
+            descricao:
+                'Destaque este produto no cardápio.',
+            icone:
+                Icons.star_rounded,
             valor: destaque,
-            cor: Colors.amber.shade700,
-            onChanged: (bool valor) {
+            cor:
+                Colors.amber.shade700,
+            onChanged:
+                (bool valor) {
               setState(() {
                 destaque = valor;
               });
@@ -919,16 +1026,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
     required IconData icone,
     required bool valor,
     required Color cor,
-    required ValueChanged<bool> onChanged,
+    required ValueChanged<bool>
+        onChanged,
   }) {
     return Row(
       children: [
         Container(
           width: 44,
           height: 44,
-          decoration: BoxDecoration(
-            color: cor.withValues(alpha: .12),
-            borderRadius: BorderRadius.circular(13),
+          decoration:
+              BoxDecoration(
+            color: cor.withValues(
+                alpha: .12),
+            borderRadius:
+                BorderRadius.circular(
+                    13),
           ),
           child: Icon(
             icone,
@@ -939,19 +1051,24 @@ class _AddProductScreenState extends State<AddProductScreen> {
         const SizedBox(width: 12),
         Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               Text(
                 titulo,
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
+                style:
+                    const TextStyle(
+                  fontWeight:
+                      FontWeight.bold,
                   fontSize: 14,
                 ),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(
+                  height: 3),
               Text(
                 descricao,
-                style: const TextStyle(
+                style:
+                    const TextStyle(
                   color: Colors.grey,
                   fontSize: 11,
                   height: 1.3,
@@ -963,7 +1080,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
         Switch(
           value: valor,
           activeThumbColor: cor,
-          onChanged: salvando ? null : onChanged,
+          onChanged:
+              salvando
+                  ? null
+                  : onChanged,
         ),
       ],
     );
@@ -980,29 +1100,41 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
+      padding:
+          const EdgeInsets.all(16),
+      decoration:
+          BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
+        borderRadius:
+            BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
             blurRadius: 12,
-            offset: const Offset(0, 4),
-            color: Colors.black.withValues(alpha: .04),
+            offset:
+                const Offset(0, 4),
+            color:
+                Colors.black.withValues(
+                    alpha: .04),
           ),
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
                 width: 36,
                 height: 36,
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFEDD5),
-                  borderRadius: BorderRadius.circular(11),
+                decoration:
+                    BoxDecoration(
+                  color:
+                      const Color(
+                          0xFFFFEDD5),
+                  borderRadius:
+                      BorderRadius.circular(
+                          11),
                 ),
                 child: Icon(
                   icone,
@@ -1010,17 +1142,21 @@ class _AddProductScreenState extends State<AddProductScreen> {
                   size: 19,
                 ),
               ),
-              const SizedBox(width: 10),
+              const SizedBox(
+                  width: 10),
               Text(
                 titulo,
-                style: const TextStyle(
+                style:
+                    const TextStyle(
                   fontSize: 16,
-                  fontWeight: FontWeight.bold,
+                  fontWeight:
+                      FontWeight.bold,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 16),
+          const SizedBox(
+              height: 16),
           child,
         ],
       ),
@@ -1032,23 +1168,29 @@ class _AddProductScreenState extends State<AddProductScreen> {
   // ============================================================
 
   Widget _campo({
-    required TextEditingController controller,
+    required TextEditingController
+        controller,
     required String label,
     required String hint,
     required IconData icone,
     TextInputType? keyboardType,
-    TextCapitalization textCapitalization = TextCapitalization.none,
+    TextCapitalization
+        textCapitalization =
+        TextCapitalization.none,
     int maxLines = 1,
     int? maxLength,
   }) {
     return TextField(
       controller: controller,
-      keyboardType: keyboardType,
-      textCapitalization: textCapitalization,
+      keyboardType:
+          keyboardType,
+      textCapitalization:
+          textCapitalization,
       maxLines: maxLines,
       maxLength: maxLength,
       enabled: !salvando,
-      decoration: InputDecoration(
+      decoration:
+          InputDecoration(
         labelText: label,
         hintText: hint,
         prefixIcon: Icon(
@@ -1056,29 +1198,47 @@ class _AddProductScreenState extends State<AddProductScreen> {
           color: laranja,
         ),
         filled: true,
-        fillColor: const Color(0xFFF9FAFB),
-        labelStyle: const TextStyle(
+        fillColor:
+            const Color(
+                0xFFF9FAFB),
+        labelStyle:
+            const TextStyle(
           color: Colors.grey,
         ),
-        hintStyle: const TextStyle(
+        hintStyle:
+            const TextStyle(
           color: Colors.grey,
           fontSize: 13,
         ),
-        contentPadding: const EdgeInsets.symmetric(
+        contentPadding:
+            const EdgeInsets
+                .symmetric(
           horizontal: 16,
           vertical: 16,
         ),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide.none,
+        border:
+            OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(
+                  15),
+          borderSide:
+              BorderSide.none,
         ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(15),
-          borderSide: BorderSide.none,
+        enabledBorder:
+            OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(
+                  15),
+          borderSide:
+              BorderSide.none,
         ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(15),
-          borderSide: const BorderSide(
+        focusedBorder:
+            OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(
+                  15),
+          borderSide:
+              const BorderSide(
             color: laranja,
             width: 1.5,
           ),
@@ -1088,22 +1248,28 @@ class _AddProductScreenState extends State<AddProductScreen> {
   }
 
   // ============================================================
-  // BOTÃO SALVAR
+  // BOTÃO
   // ============================================================
 
   Widget _botaoSalvar() {
     return SizedBox(
       width: double.infinity,
       height: 56,
-      child: ElevatedButton.icon(
-        onPressed: salvando ? null : salvarProduto,
+      child:
+          ElevatedButton.icon(
+        onPressed:
+            salvando
+                ? null
+                : salvarProduto,
         icon: salvando
             ? const SizedBox(
                 width: 21,
                 height: 21,
-                child: CircularProgressIndicator(
+                child:
+                    CircularProgressIndicator(
                   strokeWidth: 2.5,
-                  color: Colors.white,
+                  color:
+                      Colors.white,
                 ),
               )
             : const Icon(
@@ -1113,19 +1279,29 @@ class _AddProductScreenState extends State<AddProductScreen> {
           salvando
               ? 'Cadastrando produto...'
               : 'Cadastrar produto',
-          style: const TextStyle(
+          style:
+              const TextStyle(
             fontSize: 15,
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: laranja,
-          foregroundColor: Colors.white,
-          disabledBackgroundColor: Colors.grey,
-          disabledForegroundColor: Colors.white,
+        style:
+            ElevatedButton.styleFrom(
+          backgroundColor:
+              laranja,
+          foregroundColor:
+              Colors.white,
+          disabledBackgroundColor:
+              Colors.grey,
+          disabledForegroundColor:
+              Colors.white,
           elevation: 3,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(17),
+          shape:
+              RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(
+                    17),
           ),
         ),
       ),

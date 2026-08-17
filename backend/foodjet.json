@@ -80,14 +80,27 @@
         "conta": "05482755",
         "pix": "31989733089"
       },
-      "status": "FECHADO",
-      "online": false,
-      "aberto": false,
+      "status": "ABERTO",
+      "online": true,
+      "aberto": true,
       "criadoEm": "2026-08-12T13:48:23.805Z",
-      "atualizadoEm": "2026-08-13T15:25:48.752Z"
+      "atualizadoEm": "2026-08-17T01:51:54.753Z"
     }
   ],
-  "produtos": [],
+  "produtos": [
+    {
+      "id": 1786938835441,
+      "restauranteId": "rest_1786542500158",
+      "nome": "Oniguiri",
+      "descricao": "Arroz, sushi, alga marinha.",
+      "preco": 50,
+      "categoria": "Japonês",
+      "disponivel": true,
+      "destaque": false,
+      "imagem": "/uploads/products/produto-1786938835441-1786938839830.webp",
+      "criadoEm": "2026-08-17T03:53:55.441Z"
+    }
+  ],
   "pedidos": [
     {
       "id": 1784423963411,

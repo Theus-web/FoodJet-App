@@ -28,6 +28,26 @@ class _EditProductScreenState extends State<EditProductScreen> {
   late bool disponivel;
   late bool destaque;
 
+  // ============================================================
+  // CATEGORIAS DO FOODJET
+  // ============================================================
+
+  static const List<String> categorias = [
+    'Hambúrguer',
+    'Pizza',
+    'Lanches',
+    'Porções',
+    'Bebidas',
+    'Sobremesas',
+    'Combos',
+    'Pratos',
+    'Açaí',
+    'Japonês',
+    'Outros',
+  ];
+
+  static const Color laranja = Color(0xFFF97316);
+
   @override
   void initState() {
     super.initState();
@@ -41,16 +61,81 @@ class _EditProductScreenState extends State<EditProductScreen> {
     );
 
     precoController = TextEditingController(
-      text: widget.produto.preco.toString(),
+      text: widget.produto.preco.toStringAsFixed(2),
     );
 
-    categoria = widget.produto.categoria;
+    // ==========================================================
+    // CORREÇÃO DO DROPDOWN
+    //
+    // Se o produto já possui uma categoria válida,
+    // usamos ela.
+    //
+    // Se vier uma categoria antiga que não está na lista,
+    // adicionamos temporariamente à lista para evitar
+    // o erro do DropdownButton.
+    // ==========================================================
+
+    final String categoriaProduto =
+        widget.produto.categoria.trim();
+
+    if (categoriaProduto.isEmpty) {
+      categoria = categorias.first;
+    } else {
+      categoria = categoriaProduto;
+    }
+
     disponivel = widget.produto.disponivel;
     destaque = widget.produto.destaque;
   }
 
+  // ============================================================
+  // LISTA SEGURA DE CATEGORIAS
+  // ============================================================
+
+  List<String> get categoriasDropdown {
+    final List<String> lista = [
+      ...categorias,
+    ];
+
+    // Se existir uma categoria antiga no banco
+    // que não está mais na lista padrão,
+    // adicionamos ela para o produto continuar editável.
+    if (categoria.trim().isNotEmpty &&
+        !lista.contains(categoria.trim())) {
+      lista.add(categoria.trim());
+    }
+
+    // Remove duplicadas
+    return lista.toSet().toList();
+  }
+
+  // ============================================================
+  // SALVAR
+  // ============================================================
+
   Future<void> salvar() async {
+    FocusScope.of(context).unfocus();
+
     if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final double? preco = double.tryParse(
+      precoController.text
+          .trim()
+          .replaceAll(',', '.'),
+    );
+
+    if (preco == null || preco <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Informe um preço válido.',
+          ),
+          backgroundColor: Colors.red,
+        ),
+      );
+
       return;
     }
 
@@ -60,10 +145,7 @@ class _EditProductScreenState extends State<EditProductScreen> {
         {
           "nome": nomeController.text.trim(),
           "descricao": descricaoController.text.trim(),
-          "preco": double.tryParse(
-                precoController.text.replaceAll(",", "."),
-              ) ??
-              0,
+          "preco": preco,
           "categoria": categoria,
           "disponivel": disponivel,
           "destaque": destaque,
@@ -73,11 +155,23 @@ class _EditProductScreenState extends State<EditProductScreen> {
       if (!mounted) return;
 
       if (sucesso) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Produto atualizado com sucesso!',
+            ),
+            backgroundColor: Colors.green,
+          ),
+        );
+
         Navigator.pop(context, true);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Erro ao atualizar produto."),
+            content: Text(
+              'Erro ao atualizar produto.',
+            ),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -86,125 +180,438 @@ class _EditProductScreenState extends State<EditProductScreen> {
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString()),
+          content: Text(
+            'Erro: $e',
+          ),
+          backgroundColor: Colors.red,
         ),
       );
     }
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text("Editar Produto"),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Form(
-          key: _formKey,
-          child: ListView(
-            children: [
-              TextFormField(
-                controller: nomeController,
-                decoration: const InputDecoration(
-                  labelText: "Nome",
-                ),
-                validator: (v) {
-                  if (v == null || v.trim().isEmpty) {
-                    return "Informe o nome";
-                  }
-                  return null;
-                },
-              ),
-              TextFormField(
-                controller: descricaoController,
-                decoration: const InputDecoration(
-                  labelText: "Descrição",
-                ),
-              ),
-              TextFormField(
-                controller: precoController,
-                keyboardType: const TextInputType.numberWithOptions(
-                  decimal: true,
-                ),
-                decoration: const InputDecoration(
-                  labelText: "Preço",
-                ),
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: categoria,
-                decoration: const InputDecoration(
-                  labelText: "Categoria",
-                ),
-                items: const [
-                  DropdownMenuItem(
-                    value: "Lanches",
-                    child: Text("Lanches"),
-                  ),
-                  DropdownMenuItem(
-                    value: "Pizzas",
-                    child: Text("Pizzas"),
-                  ),
-                  DropdownMenuItem(
-                    value: "Bebidas",
-                    child: Text("Bebidas"),
-                  ),
-                  DropdownMenuItem(
-                    value: "Doces",
-                    child: Text("Doces"),
-                  ),
-                ],
-                onChanged: (v) {
-                  if (v == null) return;
+      backgroundColor: const Color(0xFFF5F5F5),
 
-                  setState(() {
-                    categoria = v;
-                  });
-                },
-              ),
-              SwitchListTile(
-                title: const Text("Disponível"),
-                value: disponivel,
-                onChanged: (v) {
-                  setState(() {
-                    disponivel = v;
-                  });
-                },
-              ),
-              SwitchListTile(
-                title: const Text("Produto destaque"),
-                value: destaque,
-                onChanged: (v) {
-                  setState(() {
-                    destaque = v;
-                  });
-                },
-              ),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFF97316),
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+
+        iconTheme: const IconThemeData(
+          color: Colors.black,
+        ),
+
+        title: const Text(
+          "Editar Produto",
+          style: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+
+          child: Form(
+            key: _formKey,
+
+            child: ListView(
+              children: [
+
+                // ==================================================
+                // NOME
+                // ==================================================
+
+                TextFormField(
+                  controller: nomeController,
+
+                  textCapitalization:
+                      TextCapitalization.words,
+
+                  decoration: InputDecoration(
+                    labelText: "Nome do produto",
+                    prefixIcon: const Icon(
+                      Icons.fastfood_rounded,
+                      color: laranja,
+                    ),
+
+                    filled: true,
+                    fillColor: Colors.white,
+
+                    border: OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+
+                    enabledBorder:
+                        OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+
+                    focusedBorder:
+                        OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: const BorderSide(
+                        color: laranja,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+
+                  validator: (v) {
+                    if (v == null ||
+                        v.trim().isEmpty) {
+                      return "Informe o nome";
+                    }
+
+                    return null;
+                  },
                 ),
-                onPressed: salvar,
-                child: const Text(
-                  "Salvar alterações",
-                  style: TextStyle(
-                    color: Colors.white,
+
+                const SizedBox(height: 16),
+
+                // ==================================================
+                // DESCRIÇÃO
+                // ==================================================
+
+                TextFormField(
+                  controller: descricaoController,
+
+                  textCapitalization:
+                      TextCapitalization.sentences,
+
+                  maxLines: 4,
+
+                  decoration: InputDecoration(
+                    labelText: "Descrição",
+                    prefixIcon: const Icon(
+                      Icons.description_outlined,
+                      color: laranja,
+                    ),
+
+                    filled: true,
+                    fillColor: Colors.white,
+
+                    alignLabelWithHint: true,
+
+                    border: OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+
+                    enabledBorder:
+                        OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+
+                    focusedBorder:
+                        OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: const BorderSide(
+                        color: laranja,
+                        width: 1.5,
+                      ),
+                    ),
                   ),
                 ),
-              ),
-            ],
+
+                const SizedBox(height: 16),
+
+                // ==================================================
+                // PREÇO
+                // ==================================================
+
+                TextFormField(
+                  controller: precoController,
+
+                  keyboardType:
+                      const TextInputType.numberWithOptions(
+                    decimal: true,
+                  ),
+
+                  decoration: InputDecoration(
+                    labelText: "Preço",
+                    hintText: "0,00",
+
+                    prefixIcon: const Icon(
+                      Icons.attach_money_rounded,
+                      color: laranja,
+                    ),
+
+                    filled: true,
+                    fillColor: Colors.white,
+
+                    border: OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+
+                    enabledBorder:
+                        OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+
+                    focusedBorder:
+                        OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: const BorderSide(
+                        color: laranja,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+
+                  validator: (v) {
+                    if (v == null ||
+                        v.trim().isEmpty) {
+                      return "Informe o preço";
+                    }
+
+                    final valor =
+                        double.tryParse(
+                      v.replaceAll(',', '.'),
+                    );
+
+                    if (valor == null ||
+                        valor <= 0) {
+                      return "Preço inválido";
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // ==================================================
+                // CATEGORIA
+                // ==================================================
+
+                DropdownButtonFormField<String>(
+                  initialValue: categoria,
+
+                  isExpanded: true,
+
+                  decoration: InputDecoration(
+                    labelText: "Categoria",
+
+                    prefixIcon: const Icon(
+                      Icons.category_rounded,
+                      color: laranja,
+                    ),
+
+                    filled: true,
+                    fillColor: Colors.white,
+
+                    border: OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+
+                    enabledBorder:
+                        OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+
+                    focusedBorder:
+                        OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius.circular(15),
+                      borderSide: const BorderSide(
+                        color: laranja,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+
+                  items: categoriasDropdown
+                      .map(
+                        (String item) {
+                          return DropdownMenuItem<String>(
+                            value: item,
+                            child: Text(item),
+                          );
+                        },
+                      )
+                      .toList(),
+
+                  onChanged: (String? valor) {
+                    if (valor == null) return;
+
+                    setState(() {
+                      categoria = valor;
+                    });
+                  },
+                ),
+
+                const SizedBox(height: 16),
+
+                // ==================================================
+                // DISPONIBILIDADE
+                // ==================================================
+
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius:
+                        BorderRadius.circular(15),
+                  ),
+
+                  child: SwitchListTile(
+                    title: const Text(
+                      "Produto disponível",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    subtitle: const Text(
+                      "O produto poderá ser comprado pelos clientes.",
+                    ),
+
+                    secondary: const Icon(
+                      Icons.visibility_rounded,
+                      color: Colors.green,
+                    ),
+
+                    value: disponivel,
+
+                    activeThumbColor: Colors.green,
+
+                    onChanged: (v) {
+                      setState(() {
+                        disponivel = v;
+                      });
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 12),
+
+                // ==================================================
+                // DESTAQUE
+                // ==================================================
+
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius:
+                        BorderRadius.circular(15),
+                  ),
+
+                  child: SwitchListTile(
+                    title: const Text(
+                      "Produto em destaque",
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    subtitle: const Text(
+                      "Exibir o produto como destaque.",
+                    ),
+
+                    secondary: Icon(
+                      Icons.star_rounded,
+                      color: Colors.amber.shade700,
+                    ),
+
+                    value: destaque,
+
+                    activeThumbColor:
+                        Colors.amber.shade700,
+
+                    onChanged: (v) {
+                      setState(() {
+                        destaque = v;
+                      });
+                    },
+                  ),
+                ),
+
+                const SizedBox(height: 25),
+
+                // ==================================================
+                // BOTÃO SALVAR
+                // ==================================================
+
+                SizedBox(
+                  height: 55,
+                  width: double.infinity,
+
+                  child: ElevatedButton.icon(
+                    onPressed: salvar,
+
+                    icon: const Icon(
+                      Icons.check_rounded,
+                      color: Colors.white,
+                    ),
+
+                    label: const Text(
+                      "Salvar alterações",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+
+                    style:
+                        ElevatedButton.styleFrom(
+                      backgroundColor: laranja,
+
+                      elevation: 2,
+
+                      shape:
+                          RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(16),
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(height: 30),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
   @override
   void dispose() {
     nomeController.dispose();
     descricaoController.dispose();
     precoController.dispose();
+
     super.dispose();
   }
 }

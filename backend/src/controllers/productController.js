@@ -7,12 +7,19 @@ const Product = require("../models/product");
 
 exports.create = async (req, res) => {
     try {
+        console.log("==========================================");
+        console.log("CRIANDO PRODUTO");
+        console.log("BODY RECEBIDO:", req.body);
+        console.log("==========================================");
+
         const {
             restauranteId,
             nome,
             descricao,
             preco,
-            categoria
+            categoria,
+            disponivel,
+            destaque
         } = req.body;
 
         if (!restauranteId) {
@@ -37,53 +44,102 @@ exports.create = async (req, res) => {
             });
         }
 
+        const precoNumerico =
+            Number(
+                String(preco).replace(",", ".")
+            );
+
+        if (
+            !Number.isFinite(precoNumerico) ||
+            precoNumerico <= 0
+        ) {
+            return res.status(400).json({
+                erro: "Preço inválido"
+            });
+        }
+
         const produto = {
             id: Date.now(),
 
-            // IMPORTANTE:
-            // sempre salvar como String
-            restauranteId: restauranteId.toString(),
+            restauranteId:
+                restauranteId.toString(),
 
-            nome: nome.toString().trim(),
+            nome:
+                nome.toString().trim(),
 
-            descricao: descricao
-                ? descricao.toString().trim()
-                : "",
+            descricao:
+                descricao
+                    ? descricao.toString().trim()
+                    : "",
 
-            preco: Number(preco),
+            preco:
+                precoNumerico,
 
-            categoria: categoria
-                ? categoria.toString().trim()
-                : "",
+            categoria:
+                categoria
+                    ? categoria.toString().trim()
+                    : "",
 
-            disponivel: true,
+            disponivel:
+                typeof disponivel === "boolean"
+                    ? disponivel
+                    : true,
 
-            destaque: false,
+            destaque:
+                typeof destaque === "boolean"
+                    ? destaque
+                    : false,
 
             imagem: null,
 
-            criadoEm: new Date().toISOString()
+            criadoEm:
+                new Date().toISOString()
         };
 
-        const criado = await Product.criar(produto);
+        console.log(
+            "PRODUTO QUE SERÁ SALVO:",
+            produto
+        );
+
+        const criado =
+            await Product.criar(produto);
+
+        console.log(
+            "PRODUTO CRIADO:",
+            criado
+        );
 
         return res.status(201).json({
-            mensagem: "Produto cadastrado com sucesso",
-            produto: criado
+            mensagem:
+                "Produto cadastrado com sucesso",
+
+            produto:
+                criado
         });
 
     } catch (erro) {
+        console.error(
+            "=========================================="
+        );
+
         console.error(
             "ERRO AO CRIAR PRODUTO:",
             erro
         );
 
+        console.error(
+            "=========================================="
+        );
+
         return res.status(500).json({
-            erro: "Erro ao cadastrar produto"
+            erro:
+                "Erro ao cadastrar produto",
+
+            detalhes:
+                erro.message
         });
     }
 };
-
 
 // ============================================================
 // LISTAR TODOS
