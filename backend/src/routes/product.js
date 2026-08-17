@@ -33,7 +33,7 @@ if (!fs.existsSync(pastaUploads)) {
 }
 
 // ============================================================
-// CONFIGURAÇÃO MULTER
+// MULTER
 // ============================================================
 
 const storage =
@@ -118,15 +118,44 @@ const upload =
 // PRODUTOS
 // ============================================================
 
+// CRIAR
 router.post(
     "/",
     productController.create
 );
 
+// LISTAR TODOS
 router.get(
     "/",
     productController.list
 );
+
+// ============================================================
+// ROTAS ESPECÍFICAS
+// ============================================================
+
+// PRODUTOS DO RESTAURANTE
+// IMPORTANTE: fica ANTES de /:id
+router.get(
+    "/restaurante/:id",
+    productController.restaurantProducts
+);
+
+// PRODUTOS POR CATEGORIA
+router.get(
+    "/categoria/:categoria",
+    productController.categoryProducts
+);
+
+// PESQUISAR
+router.get(
+    "/buscar/:texto",
+    productController.searchProducts
+);
+
+// ============================================================
+// ROTAS POR ID
+// ============================================================
 
 router.get(
     "/:id",
@@ -143,33 +172,18 @@ router.put(
     productController.updateAvailability
 );
 
-router.delete(
-    "/:id",
-    productController.remove
-);
-
-router.get(
-    "/restaurante/:id",
-    productController.restaurantProducts
-);
-
 router.put(
     "/:id/destaque",
     productController.updateHighlight
 );
 
-router.get(
-    "/categoria/:categoria",
-    productController.categoryProducts
-);
-
-router.get(
-    "/buscar/:texto",
-    productController.searchProducts
+router.delete(
+    "/:id",
+    productController.remove
 );
 
 // ============================================================
-// IMAGEM DO PRODUTO
+// IMAGEM
 // ============================================================
 
 router.post(
