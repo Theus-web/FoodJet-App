@@ -20,36 +20,56 @@ class RestaurantService {
     final restauranteId = id.trim();
 
     if (restauranteId.isEmpty) {
-      throw Exception('Restaurante não identificado.');
+      throw Exception(
+        'Restaurante não identificado.',
+      );
     }
 
-    final response = await http.get(
-      Uri.parse(
-        '$baseUrl/restaurants/$restauranteId',
-      ),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    );
+    final response = await http
+        .get(
+          Uri.parse(
+            '$baseUrl/restaurants/$restauranteId',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
 
     Map<String, dynamic> data = {};
 
     try {
-      final decoded = jsonDecode(response.body);
+      if (response.body.trim().isNotEmpty) {
+        final decoded =
+            jsonDecode(response.body);
 
-      if (decoded is Map) {
-        data = Map<String, dynamic>.from(decoded);
+        if (decoded is Map) {
+          data =
+              Map<String, dynamic>.from(decoded);
+        }
       }
     } catch (_) {}
 
     if (response.statusCode == 200) {
+      Map<String, dynamic> restaurante;
+
       if (data['restaurante'] is Map) {
-        return Map<String, dynamic>.from(
+        restaurante =
+            Map<String, dynamic>.from(
           data['restaurante'],
         );
+      } else {
+        restaurante = data;
       }
 
-      return data;
+      // Salva a versão mais recente localmente.
+      await _salvarRestauranteLocal(
+        restaurante,
+      );
+
+      return restaurante;
     }
 
     throw Exception(
@@ -61,6 +81,9 @@ class RestaurantService {
 
   // ============================================================
   // ALTERAR STATUS
+  //
+  // ABERTO  = ONLINE
+  // FECHADO = OFFLINE
   // ============================================================
 
   Future<Map<String, dynamic>> alterarStatus(
@@ -75,36 +98,123 @@ class RestaurantService {
       );
     }
 
-    final response = await http.put(
-      Uri.parse(
-        '$baseUrl/restaurants/$id/status',
-      ),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'status': status,
-      }),
+    final statusNormalizado =
+        status.trim().toUpperCase();
+
+    if (statusNormalizado != 'ABERTO' &&
+        statusNormalizado != 'FECHADO') {
+      throw Exception(
+        'Status inválido.',
+      );
+    }
+
+    // ==========================================================
+    // SINCRONIZA STATUS E ONLINE
+    // ==========================================================
+
+    final bool online =
+        statusNormalizado == 'ABERTO';
+
+    print('');
+    print(
+      '==========================================',
     );
+    print(
+      '🔄 FOODJET - ALTERANDO STATUS',
+    );
+    print(
+      '🏪 Restaurante: $id',
+    );
+    print(
+      '📌 Status: $statusNormalizado',
+    );
+    print(
+      '🟢 Online: $online',
+    );
+    print(
+      '==========================================',
+    );
+
+    final response = await http
+        .put(
+          Uri.parse(
+            '$baseUrl/restaurants/$id/status',
+          ),
+          headers: {
+            'Content-Type':
+                'application/json',
+          },
+          body: jsonEncode({
+            'status':
+                statusNormalizado,
+            'online': online,
+            'aberto': online,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
 
     Map<String, dynamic> data = {};
 
     try {
-      final decoded = jsonDecode(response.body);
+      if (response.body.trim().isNotEmpty) {
+        final decoded =
+            jsonDecode(response.body);
 
-      if (decoded is Map) {
-        data = Map<String, dynamic>.from(decoded);
+        if (decoded is Map) {
+          data =
+              Map<String, dynamic>.from(decoded);
+        }
       }
     } catch (_) {}
 
+    print(
+      '📡 HTTP: ${response.statusCode}',
+    );
+
+    print(
+      '📦 RESPOSTA: ${response.body}',
+    );
+
     if (response.statusCode == 200) {
+      Map<String, dynamic> restaurante;
+
       if (data['restaurante'] is Map) {
-        return Map<String, dynamic>.from(
+        restaurante =
+            Map<String, dynamic>.from(
           data['restaurante'],
         );
+      } else {
+        restaurante = {
+          ...data,
+          'id': id,
+          'status':
+              statusNormalizado,
+          'online': online,
+          'aberto': online,
+        };
       }
 
-      return data;
+      // Garante os valores mesmo se o backend
+      // não devolver algum campo.
+      restaurante['status'] =
+          restaurante['status'] ??
+              statusNormalizado;
+
+      restaurante['online'] =
+          restaurante['online'] ??
+              online;
+
+      restaurante['aberto'] =
+          restaurante['aberto'] ??
+              online;
+
+      await _salvarRestauranteLocal(
+        restaurante,
+      );
+
+      return restaurante;
     }
 
     throw Exception(
@@ -130,27 +240,44 @@ class RestaurantService {
       );
     }
 
-    final response = await http.put(
-      Uri.parse(
-        '$baseUrl/restaurants/$id',
-      ),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(dados),
-    );
+    final response = await http
+        .put(
+          Uri.parse(
+            '$baseUrl/restaurants/$id',
+          ),
+          headers: {
+            'Content-Type':
+                'application/json',
+          },
+          body: jsonEncode(dados),
+        )
+        .timeout(
+          const Duration(seconds: 10),
+        );
 
     Map<String, dynamic> data = {};
 
     try {
-      final decoded = jsonDecode(response.body);
+      if (response.body.trim().isNotEmpty) {
+        final decoded =
+            jsonDecode(response.body);
 
-      if (decoded is Map) {
-        data = Map<String, dynamic>.from(decoded);
+        if (decoded is Map) {
+          data =
+              Map<String, dynamic>.from(decoded);
+        }
       }
     } catch (_) {}
 
     if (response.statusCode == 200) {
+      if (data['restaurante'] is Map) {
+        await _salvarRestauranteLocal(
+          Map<String, dynamic>.from(
+            data['restaurante'],
+          ),
+        );
+      }
+
       return true;
     }
 
@@ -169,10 +296,6 @@ class RestaurantService {
     final prefs =
         await SharedPreferences.getInstance();
 
-    // ----------------------------------------------------------
-    // 1. ID SALVO DIRETAMENTE
-    // ----------------------------------------------------------
-
     final idSalvo =
         prefs.getString(_restaurantIdKey);
 
@@ -180,10 +303,6 @@ class RestaurantService {
         idSalvo.trim().isNotEmpty) {
       return idSalvo.trim();
     }
-
-    // ----------------------------------------------------------
-    // 2. OBJETO RESTAURANTE SALVO
-    // ----------------------------------------------------------
 
     final restauranteJson =
         prefs.getString(_restaurantKey);
@@ -223,6 +342,35 @@ class RestaurantService {
   }
 
   // ============================================================
+  // SALVAR RESTAURANTE LOCALMENTE
+  // ============================================================
+
+  Future<void> _salvarRestauranteLocal(
+    Map<String, dynamic> restaurante,
+  ) async {
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    final id =
+        restaurante['id'] ??
+            restaurante['_id'] ??
+            restaurante['restauranteId'];
+
+    if (id != null &&
+        id.toString().trim().isNotEmpty) {
+      await prefs.setString(
+        _restaurantIdKey,
+        id.toString().trim(),
+      );
+    }
+
+    await prefs.setString(
+      _restaurantKey,
+      jsonEncode(restaurante),
+    );
+  }
+
+  // ============================================================
   // EXCLUIR CONTA
   // ============================================================
 
@@ -231,17 +379,9 @@ class RestaurantService {
   ]) async {
     String? id = restauranteId?.trim();
 
-    // ----------------------------------------------------------
-    // 1. TENTAR ID RECEBIDO
-    // ----------------------------------------------------------
-
     if (id == null || id.isEmpty) {
       id = await obterRestauranteId();
     }
-
-    // ----------------------------------------------------------
-    // 2. VALIDAR ID
-    // ----------------------------------------------------------
 
     if (id == null || id.trim().isEmpty) {
       throw Exception(
@@ -252,23 +392,29 @@ class RestaurantService {
     id = id.trim();
 
     print('');
-    print('==========================================');
-    print('🗑️ FOODJET - EXCLUSÃO DE CONTA');
-    print('==========================================');
-    print('🏪 Restaurante ID: $id');
-    print('📡 DELETE /restaurants/$id');
-    print('==========================================');
-
-    // ----------------------------------------------------------
-    // 3. CHAMAR BACKEND
-    // ----------------------------------------------------------
+    print(
+      '==========================================',
+    );
+    print(
+      '🗑️ FOODJET - EXCLUSÃO DE CONTA',
+    );
+    print(
+      '🏪 Restaurante ID: $id',
+    );
+    print(
+      '📡 DELETE /restaurants/$id',
+    );
+    print(
+      '==========================================',
+    );
 
     final response = await http.delete(
       Uri.parse(
         '$baseUrl/restaurants/$id',
       ),
       headers: {
-        'Content-Type': 'application/json',
+        'Content-Type':
+            'application/json',
       },
     );
 
@@ -294,42 +440,16 @@ class RestaurantService {
       '📡 Resposta: ${response.body}',
     );
 
-    // ----------------------------------------------------------
-    // 4. SUCESSO
-    // ----------------------------------------------------------
-
     if (response.statusCode == 200 ||
         response.statusCode == 204) {
-      print(
-        '✅ Servidor confirmou exclusão.',
-      );
-
       await _limparSessaoLocal();
-
-      print(
-        '✅ Sessão local removida.',
-      );
-
       return true;
     }
-
-    // ----------------------------------------------------------
-    // 5. CONTA JÁ NÃO EXISTE
-    // ----------------------------------------------------------
 
     if (response.statusCode == 404) {
-      print(
-        '⚠️ Restaurante já não existe no servidor.',
-      );
-
       await _limparSessaoLocal();
-
       return true;
     }
-
-    // ----------------------------------------------------------
-    // 6. ERRO
-    // ----------------------------------------------------------
 
     final mensagem =
         data['erro'] ??
@@ -349,11 +469,6 @@ class RestaurantService {
     final prefs =
         await SharedPreferences.getInstance();
 
-    print(
-      '🧹 Limpando sessão local...',
-    );
-
-    // Restaurante
     await prefs.remove(
       _restaurantIdKey,
     );
@@ -362,11 +477,8 @@ class RestaurantService {
       _restaurantKey,
     );
 
-    // Autenticação
     await prefs.remove('token');
     await prefs.remove('usuario');
-
-    // Possíveis nomes antigos
     await prefs.remove('user');
     await prefs.remove('access_token');
     await prefs.remove('auth_token');
@@ -374,13 +486,8 @@ class RestaurantService {
     await prefs.remove('restaurantId');
     await prefs.remove('restaurant');
 
-    // Outros dados
     await prefs.remove('usuarioLogado');
     await prefs.remove('userData');
     await prefs.remove('restauranteAtual');
-
-    print(
-      '✅ Sessão local limpa.',
-    );
   }
 }

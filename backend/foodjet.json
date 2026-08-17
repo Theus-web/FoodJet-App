@@ -84,7 +84,7 @@
       "online": true,
       "aberto": true,
       "criadoEm": "2026-08-12T13:48:23.805Z",
-      "atualizadoEm": "2026-08-17T01:51:54.753Z"
+      "atualizadoEm": "2026-08-17T05:43:19.760Z"
     }
   ],
   "produtos": [
@@ -119,6 +119,40 @@
       "pagamento": "PIX",
       "status": "AGUARDANDO",
       "total": 0
+    },
+    {
+      "id": 1786945489724,
+      "clienteId": 1784355543711,
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "1786938835441",
+          "nome": "Oniguiri",
+          "preco": 50,
+          "quantidade": 2,
+          "subtotal": 100
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "45",
+        "bairro": "Bethânia",
+        "complemento": "cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "DINHEIRO",
+      "subtotal": 100,
+      "total": 116.5,
+      "status": "SAIU_PARA_ENTREGA",
+      "criadoEm": "2026-08-17T05:44:49.724Z",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "atualizadoEm": "2026-08-17T05:46:44.135Z"
     }
   ],
   "entregadores": [

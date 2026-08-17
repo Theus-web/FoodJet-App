@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -18,7 +19,8 @@ class HomeScreen extends StatefulWidget {
   });
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() =>
+      _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
@@ -33,19 +35,40 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Map<String, dynamic>> restaurantes = [];
 
+  Timer? _timerStatus;
+
   @override
   void initState() {
     super.initState();
 
     carregarRestaurantes();
+
+    // Atualiza o status dos restaurantes
+    // automaticamente a cada 10 segundos.
+    _timerStatus = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) {
+        carregarRestaurantes(
+          mostrarCarregamento: false,
+        );
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _timerStatus?.cancel();
+    super.dispose();
   }
 
   // ============================================================
-  // CARREGAR RESTAURANTES DA API
+  // CARREGAR RESTAURANTES
   // ============================================================
 
-  Future<void> carregarRestaurantes() async {
-    if (mounted) {
+  Future<void> carregarRestaurantes({
+    bool mostrarCarregamento = true,
+  }) async {
+    if (mounted && mostrarCarregamento) {
       setState(() {
         carregandoRestaurantes = true;
         erroRestaurantes = null;
@@ -57,16 +80,28 @@ class _HomeScreenState extends State<HomeScreen> {
         '${Api.baseUrl}/restaurants',
       );
 
-      debugPrint('======================================');
-      debugPrint('FOODJET - BUSCANDO RESTAURANTES');
-      debugPrint('URL: $url');
-      debugPrint('======================================');
+      debugPrint(
+        '======================================',
+      );
+
+      debugPrint(
+        'FOODJET - BUSCANDO RESTAURANTES',
+      );
+
+      debugPrint(
+        'URL: $url',
+      );
+
+      debugPrint(
+        '======================================',
+      );
 
       final resposta = await http
           .get(
             url,
             headers: {
-              'Content-Type': 'application/json',
+              'Content-Type':
+                  'application/json',
             },
           )
           .timeout(
@@ -74,11 +109,11 @@ class _HomeScreenState extends State<HomeScreen> {
           );
 
       debugPrint(
-        'STATUS RESTAURANTES: ${resposta.statusCode}',
+        'STATUS HTTP: ${resposta.statusCode}',
       );
 
       debugPrint(
-        'RESPOSTA RESTAURANTES: ${resposta.body}',
+        'RESPOSTA: ${resposta.body}',
       );
 
       if (resposta.statusCode < 200 ||
@@ -88,43 +123,23 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
 
-      final resultado = jsonDecode(
-        resposta.body,
-      );
+      final resultado =
+          jsonDecode(resposta.body);
 
       List<dynamic> lista;
 
-      // Caso a API retorne diretamente:
-      //
-      // [
-      //   {...},
-      //   {...}
-      // ]
-      //
       if (resultado is List) {
         lista = resultado;
-      }
-
-      // Caso a API retorne:
-      //
-      // {
-      //   "restaurantes": [...]
-      // }
-      //
-      else if (resultado is Map &&
+      } else if (
+          resultado is Map &&
           resultado['restaurantes'] is List) {
-        lista = resultado['restaurantes'];
-      }
-
-      // Caso a API retorne:
-      //
-      // {
-      //   "restaurants": [...]
-      // }
-      //
-      else if (resultado is Map &&
+        lista =
+            resultado['restaurantes'];
+      } else if (
+          resultado is Map &&
           resultado['restaurants'] is List) {
-        lista = resultado['restaurants'];
+        lista =
+            resultado['restaurants'];
       } else {
         throw Exception(
           'Formato de restaurantes inválido.',
@@ -152,12 +167,59 @@ class _HomeScreenState extends State<HomeScreen> {
                   restaurante['restauranteNome'];
 
               return id != null &&
-                  id.toString().trim().isNotEmpty &&
+                  id
+                      .toString()
+                      .trim()
+                      .isNotEmpty &&
                   nome != null &&
-                  nome.toString().trim().isNotEmpty;
+                  nome
+                      .toString()
+                      .trim()
+                      .isNotEmpty;
             },
           )
           .toList();
+
+      // ========================================================
+      // DEBUG DOS STATUS
+      // ========================================================
+
+      for (final restaurante
+          in listaFinal) {
+        debugPrint(
+          '--------------------------------------',
+        );
+
+        debugPrint(
+          '🏪 RESTAURANTE: '
+          '${nomeRestaurante(restaurante)}',
+        );
+
+        debugPrint(
+          '🆔 ID: '
+          '${idRestaurante(restaurante)}',
+        );
+
+        debugPrint(
+          '📊 STATUS: '
+          '${restaurante['status']}',
+        );
+
+        debugPrint(
+          '🟢 ONLINE: '
+          '${restaurante['online']}',
+        );
+
+        debugPrint(
+          '🚪 ABERTO: '
+          '${restaurante['aberto']}',
+        );
+
+        debugPrint(
+          '✅ RESULTADO HOME: '
+          '${restauranteAberto(restaurante)}',
+        );
+      }
 
       if (!mounted) {
         return;
@@ -166,14 +228,11 @@ class _HomeScreenState extends State<HomeScreen> {
       setState(() {
         restaurantes = listaFinal;
         carregandoRestaurantes = false;
+        erroRestaurantes = null;
       });
-
-      debugPrint(
-        'RESTAURANTES ENCONTRADOS: ${restaurantes.length}',
-      );
     } catch (e) {
       debugPrint(
-        'ERRO AO CARREGAR RESTAURANTES: $e',
+        '❌ ERRO AO CARREGAR RESTAURANTES: $e',
       );
 
       if (!mounted) {
@@ -193,7 +252,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // NAVEGAÇÃO
   // ============================================================
 
-  void _selecionarPagina(int indice) {
+  void _selecionarPagina(
+    int indice,
+  ) {
     if (indice == 0) {
       setState(() {
         _indiceSelecionado = 0;
@@ -230,7 +291,8 @@ class _HomeScreenState extends State<HomeScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => ProfileScreen(
+          builder: (context) =>
+              ProfileScreen(
             usuario: widget.usuario,
           ),
         ),
@@ -241,7 +303,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // NOME RESTAURANTE
+  // NOME
   // ============================================================
 
   String nomeRestaurante(
@@ -269,7 +331,10 @@ class _HomeScreenState extends State<HomeScreen> {
         restaurante['tipo'];
 
     if (descricao == null ||
-        descricao.toString().trim().isEmpty) {
+        descricao
+            .toString()
+            .trim()
+            .isEmpty) {
       return 'Delícias preparadas especialmente para você';
     }
 
@@ -296,7 +361,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // ID RESTAURANTE
+  // ID
   // ============================================================
 
   String idRestaurante(
@@ -305,33 +370,38 @@ class _HomeScreenState extends State<HomeScreen> {
     return (
       restaurante['id'] ??
       restaurante['_id'] ??
-      restaurante['restauranteId']
+      restaurante['restauranteId'] ??
+      ''
     ).toString();
   }
 
   // ============================================================
-  // STATUS
+  // STATUS OFICIAL
+  // ============================================================
+  //
+  // SOMENTE O CAMPO "status" DA API DEFINE
+  // SE O RESTAURANTE ESTÁ ABERTO OU FECHADO.
+  //
+  // FECHADO = SEMPRE FECHADO
+  // ABERTO   = ABERTO
+  // QUALQUER OUTRO VALOR = FECHADO
+  //
   // ============================================================
 
   bool restauranteAberto(
     Map<String, dynamic> restaurante,
   ) {
-    final aberto =
-        restaurante['aberto'] ??
-        restaurante['online'] ??
-        restaurante['ativo'] ??
-        restaurante['abertoAgora'];
+    final status = restaurante['status']
+        ?.toString()
+        .trim()
+        .toUpperCase();
 
-    if (aberto == null) {
-      return true;
-    }
+    debugPrint(
+      'STATUS OFICIAL '
+      '${nomeRestaurante(restaurante)}: $status',
+    );
 
-    if (aberto is bool) {
-      return aberto;
-    }
-
-    return aberto.toString().toLowerCase() !=
-        'false';
+    return status == 'ABERTO';
   }
 
   // ============================================================
@@ -344,7 +414,8 @@ class _HomeScreenState extends State<HomeScreen> {
     final id =
         idRestaurante(restaurante);
 
-    if (id.isEmpty || id == 'null') {
+    if (id.isEmpty ||
+        id == 'null') {
       ScaffoldMessenger.of(context)
           .showSnackBar(
         const SnackBar(
@@ -362,7 +433,8 @@ class _HomeScreenState extends State<HomeScreen> {
       MaterialPageRoute(
         builder: (context) =>
             RestaurantScreen(
-          nome: nomeRestaurante(
+          nome:
+              nomeRestaurante(
             restaurante,
           ),
           descricao:
@@ -376,7 +448,12 @@ class _HomeScreenState extends State<HomeScreen> {
           restauranteId: id,
         ),
       ),
-    );
+    ).then((_) {
+      // Atualiza quando voltar para a Home.
+      carregarRestaurantes(
+        mostrarCarregamento: false,
+      );
+    });
   }
 
   // ============================================================
@@ -384,17 +461,16 @@ class _HomeScreenState extends State<HomeScreen> {
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     final String nomeUsuario =
-        widget.usuario['nome']?.toString() ??
+        widget.usuario['nome']
+                ?.toString() ??
             'Usuário';
 
     return Scaffold(
       backgroundColor: fundo,
-
-      // ========================================================
-      // APP BAR
-      // ========================================================
 
       appBar: AppBar(
         backgroundColor: laranja,
@@ -443,14 +519,11 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
 
-      // ========================================================
-      // BODY
-      // ========================================================
-
       body: RefreshIndicator(
         color: laranja,
-        onRefresh:
-            carregarRestaurantes,
+
+        onRefresh: () =>
+            carregarRestaurantes(),
 
         child: SingleChildScrollView(
           physics:
@@ -464,13 +537,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 CrossAxisAlignment.start,
 
             children: [
-              // ==================================================
-              // SAUDAÇÃO
-              // ==================================================
-
               Text(
                 'Olá, $nomeUsuario! 👋',
-                style: const TextStyle(
+                style:
+                    const TextStyle(
                   color: Colors.black,
                   fontSize: 24,
                   fontWeight:
@@ -519,9 +589,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       OutlineInputBorder(
                     borderRadius:
                         BorderRadius
-                            .circular(
-                      15,
-                    ),
+                            .circular(15),
                     borderSide:
                         BorderSide.none,
                   ),
@@ -580,7 +648,7 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 25),
 
               // ==================================================
-              // TÍTULO
+              // RESTAURANTES
               // ==================================================
 
               Row(
@@ -588,7 +656,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Expanded(
                     child: Text(
                       'Restaurantes',
-                      style: TextStyle(
+                      style:
+                          TextStyle(
                         fontSize: 20,
                         fontWeight:
                             FontWeight.bold,
@@ -612,10 +681,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const SizedBox(height: 15),
 
-              // ==================================================
-              // CARREGANDO
-              // ==================================================
-
               if (carregandoRestaurantes)
                 const Center(
                   child: Padding(
@@ -628,25 +693,13 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 )
 
-              // ==================================================
-              // ERRO
-              // ==================================================
-
               else if (
                   erroRestaurantes != null)
                 _estadoErro()
 
-              // ==================================================
-              // NENHUM RESTAURANTE
-              // ==================================================
-
               else if (
                   restaurantes.isEmpty)
                 _estadoVazio()
-
-              // ==================================================
-              // RESTAURANTES DA API
-              // ==================================================
 
               else
                 ...restaurantes.map(
@@ -697,7 +750,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
 
       // ========================================================
-      // BOTTOM NAVIGATION
+      // MENU INFERIOR
       // ========================================================
 
       bottomNavigationBar:
@@ -840,6 +893,10 @@ class _HomeScreenState extends State<HomeScreen> {
       restaurante,
     );
 
+    // ==========================================================
+    // STATUS OFICIAL
+    // ==========================================================
+
     final aberto =
         restauranteAberto(
       restaurante,
@@ -887,9 +944,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
         child: Padding(
           padding:
-              const EdgeInsets.all(
-            12,
-          ),
+              const EdgeInsets.all(12),
 
           child: Row(
             children: [
@@ -977,6 +1032,10 @@ class _HomeScreenState extends State<HomeScreen> {
                       height: 9,
                     ),
 
+                    // ==================================================
+                    // AVALIAÇÃO + STATUS
+                    // ==================================================
+
                     Row(
                       children: [
                         const Icon(
@@ -1012,7 +1071,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   .schedule,
                           color: aberto
                               ? Colors.green
-                              : Colors.orange,
+                              : Colors.red,
                           size: 16,
                         ),
 
@@ -1024,12 +1083,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           aberto
                               ? 'Aberto'
                               : 'Fechado',
+
                           style:
                               TextStyle(
                             color: aberto
                                 ? Colors.green
                                 : Colors.orange,
+
                             fontSize: 12,
+
                             fontWeight:
                                 FontWeight.w600,
                           ),
@@ -1059,7 +1121,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // ESTADO DE ERRO
+  // ERRO
   // ============================================================
 
   Widget _estadoErro() {
@@ -1067,17 +1129,13 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
 
       padding:
-          const EdgeInsets.all(
-        30,
-      ),
+          const EdgeInsets.all(30),
 
       decoration:
           BoxDecoration(
         color: Colors.white,
         borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
+            BorderRadius.circular(18),
       ),
 
       child: Column(
@@ -1095,7 +1153,8 @@ class _HomeScreenState extends State<HomeScreen> {
             textAlign:
                 TextAlign.center,
 
-            style: TextStyle(
+            style:
+                TextStyle(
               fontSize: 16,
               fontWeight:
                   FontWeight.bold,
@@ -1108,11 +1167,13 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed:
                 carregarRestaurantes,
 
-            icon: const Icon(
+            icon:
+                const Icon(
               Icons.refresh,
             ),
 
-            label: const Text(
+            label:
+                const Text(
               'Tentar novamente',
             ),
 
@@ -1133,7 +1194,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // ESTADO VAZIO
+  // VAZIO
   // ============================================================
 
   Widget _estadoVazio() {
@@ -1141,17 +1202,13 @@ class _HomeScreenState extends State<HomeScreen> {
       width: double.infinity,
 
       padding:
-          const EdgeInsets.all(
-        30,
-      ),
+          const EdgeInsets.all(30),
 
       decoration:
           BoxDecoration(
         color: Colors.white,
         borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
+            BorderRadius.circular(18),
       ),
 
       child: Column(
@@ -1169,7 +1226,8 @@ class _HomeScreenState extends State<HomeScreen> {
             textAlign:
                 TextAlign.center,
 
-            style: TextStyle(
+            style:
+                TextStyle(
               fontSize: 17,
               fontWeight:
                   FontWeight.bold,

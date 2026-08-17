@@ -11,13 +11,9 @@ exports.create = async (req, res) => {
             id: Date.now(),
 
             nome: req.body.nome || "",
-
             categoria: req.body.categoria || "",
-
             descricao: req.body.descricao || "",
-
             telefone: req.body.telefone || "",
-
             endereco: req.body.endereco || "",
 
             taxaEntrega:
@@ -42,9 +38,9 @@ exports.create = async (req, res) => {
         await Restaurant.criar(restaurante);
 
         return res.status(201).json({
+            sucesso: true,
             mensagem:
                 "Restaurante cadastrado com sucesso",
-
             restaurante
         });
 
@@ -56,9 +52,9 @@ exports.create = async (req, res) => {
         );
 
         return res.status(500).json({
+            sucesso: false,
             erro:
                 "Erro ao cadastrar restaurante",
-
             detalhe:
                 erro.message
         });
@@ -88,7 +84,6 @@ exports.list = async (req, res) => {
         return res.status(500).json({
             erro:
                 "Erro ao listar restaurantes",
-
             detalhe:
                 erro.message
         });
@@ -105,7 +100,10 @@ exports.getById = async (req, res) => {
 
         const { id } = req.params;
 
-        if (!id || String(id).trim() === "") {
+        if (
+            !id ||
+            String(id).trim() === ""
+        ) {
             return res.status(400).json({
                 erro:
                     "ID do restaurante é obrigatório"
@@ -134,7 +132,6 @@ exports.getById = async (req, res) => {
         return res.status(500).json({
             erro:
                 "Erro ao buscar restaurante",
-
             detalhe:
                 erro.message
         });
@@ -152,7 +149,10 @@ exports.update = async (req, res) => {
 
         const { id } = req.params;
 
-        if (!id || String(id).trim() === "") {
+        if (
+            !id ||
+            String(id).trim() === ""
+        ) {
             return res.status(400).json({
                 erro:
                     "ID do restaurante é obrigatório"
@@ -194,10 +194,27 @@ exports.update = async (req, res) => {
             });
         }
 
+        // ==================================================
+        // AVISAR CLIENTES
+        // ==================================================
+
+        if (global.io) {
+
+            global.io.emit(
+                "restaurante_atualizado",
+                restaurante
+            );
+
+            console.log(
+                "📡 ATUALIZAÇÃO ENVIADA AOS CLIENTES:",
+                restaurante.id
+            );
+        }
+
         return res.json({
+            sucesso: true,
             mensagem:
                 "Restaurante atualizado com sucesso",
-
             restaurante
         });
 
@@ -209,9 +226,9 @@ exports.update = async (req, res) => {
         );
 
         return res.status(500).json({
+            sucesso: false,
             erro:
                 "Erro ao atualizar restaurante",
-
             detalhe:
                 erro.message
         });
@@ -247,63 +264,38 @@ exports.delete = async (req, res) => {
             "================================"
         );
 
-
-        // ==================================================
-        // VALIDAR ID
-        // ==================================================
-
-        if (!id || String(id).trim() === "") {
-
+        if (
+            !id ||
+            String(id).trim() === ""
+        ) {
             return res.status(400).json({
                 erro:
                     "ID do restaurante é obrigatório"
             });
         }
 
-
-        // ==================================================
-        // VERIFICAR EXISTÊNCIA
-        // ==================================================
-
         const restaurante =
             await Restaurant.buscarPorId(id);
 
         if (!restaurante) {
-
             return res.status(404).json({
                 erro:
                     "Restaurante não encontrado"
             });
         }
 
-
-        // ==================================================
-        // EXCLUSÃO COMPLETA
-        // ==================================================
-
         const resultado =
             await Restaurant.excluir(id);
-
-
-        // ==================================================
-        // VERIFICAR RESULTADO
-        // ==================================================
 
         if (
             !resultado ||
             resultado.sucesso !== true
         ) {
-
             return res.status(500).json({
                 erro:
                     "Não foi possível excluir a conta do restaurante"
             });
         }
-
-
-        // ==================================================
-        // LOG
-        // ==================================================
 
         console.log(
             "✅ EXCLUSÃO CONCLUÍDA"
@@ -338,10 +330,20 @@ exports.delete = async (req, res) => {
             "================================"
         );
 
+        // ==================================================
+        // AVISAR CLIENTES
+        // ==================================================
 
-        // ==================================================
-        // RESPOSTA
-        // ==================================================
+        if (global.io) {
+
+            global.io.emit(
+                "restaurante_excluido",
+                {
+                    restauranteId:
+                        String(id)
+                }
+            );
+        }
 
         return res.status(200).json({
 
@@ -356,7 +358,6 @@ exports.delete = async (req, res) => {
             removidos:
                 resultado.removidos
         });
-
 
     } catch (erro) {
 
@@ -396,11 +397,16 @@ exports.delete = async (req, res) => {
 // ==================================================
 
 exports.updateStatus = async (req, res) => {
+
     try {
 
         const { id } = req.params;
 
-        const { status } = req.body;
+        const statusRecebido =
+            req.body.status
+                ?.toString()
+                .trim()
+                .toUpperCase();
 
         console.log(
             "================================"
@@ -417,64 +423,275 @@ exports.updateStatus = async (req, res) => {
 
         console.log(
             "NOVO STATUS:",
-            status
+            statusRecebido
         );
 
         console.log(
             "================================"
         );
 
+        // ==================================================
+        // VALIDAR ID
+        // ==================================================
+
+        if (
+            !id ||
+            String(id).trim() === ""
+        ) {
+
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "ID do restaurante é obrigatório"
+            });
+        }
+
+        // ==================================================
+        // VALIDAR STATUS
+        // ==================================================
 
         const statusPermitidos = [
             "ABERTO",
             "FECHADO"
         ];
 
-
         if (
-            !statusPermitidos.includes(status)
+            !statusPermitidos.includes(
+                statusRecebido
+            )
         ) {
 
             return res.status(400).json({
+
+                sucesso: false,
+
                 erro:
                     "Status inválido. Use ABERTO ou FECHADO."
             });
         }
 
+        // ==================================================
+        // BUSCAR RESTAURANTE
+        // ==================================================
 
-        const restaurante =
-            await Restaurant.atualizarStatus(
-                id,
-                status
-            );
+        const existente =
+            await Restaurant.buscarPorId(id);
 
-
-        if (!restaurante) {
+        if (!existente) {
 
             return res.status(404).json({
+
+                sucesso: false,
+
                 erro:
                     "Restaurante não encontrado"
             });
         }
 
+        // ==================================================
+        // SINCRONIZAR STATUS
+        // ==================================================
+
+        const online =
+            statusRecebido === "ABERTO";
+
+        const aberto =
+            statusRecebido === "ABERTO";
+
+        const dadosAtualizacao = {
+
+            status:
+                statusRecebido,
+
+            online:
+                online,
+
+            aberto:
+                aberto,
+
+            atualizadoEm:
+                new Date().toISOString()
+        };
+
+        // ==================================================
+        // SALVAR
+        // ==================================================
+
+        const restaurante =
+            await Restaurant.atualizar(
+                id,
+                dadosAtualizacao
+            );
+
+        if (!restaurante) {
+
+            return res.status(404).json({
+
+                sucesso: false,
+
+                erro:
+                    "Restaurante não encontrado"
+            });
+        }
+
+        // ==================================================
+        // GARANTIR CAMPOS
+        // ==================================================
+
+        restaurante.status =
+            statusRecebido;
+
+        restaurante.online =
+            online;
+
+        restaurante.aberto =
+            aberto;
+
+        // ==================================================
+        // WEBSOCKET
+        // ==================================================
+
+        if (global.io) {
+
+            const evento = {
+
+                restauranteId:
+                    String(restaurante.id),
+
+                id:
+                    restaurante.id,
+
+                nome:
+                    restaurante.nome,
+
+                status:
+                    restaurante.status,
+
+                online:
+                    restaurante.online,
+
+                aberto:
+                    restaurante.aberto,
+
+                atualizadoEm:
+                    restaurante.atualizadoEm
+            };
+
+            // ----------------------------------------------
+            // TODOS OS CLIENTES
+            // ----------------------------------------------
+
+            global.io.emit(
+                "restaurante_status_atualizado",
+                evento
+            );
+
+            // ----------------------------------------------
+            // SALA DO RESTAURANTE
+            // ----------------------------------------------
+
+            const sala =
+                "restaurante_" +
+                restaurante.id;
+
+            global.io
+                .to(sala)
+                .emit(
+                    "restaurante_status_atualizado",
+                    evento
+                );
+
+            console.log(
+                "📡 STATUS ENVIADO PELO WEBSOCKET"
+            );
+
+            console.log(
+                "🏪 SALA:",
+                sala
+            );
+
+            console.log(
+                "🟢 ONLINE:",
+                online
+            );
+
+            console.log(
+                "📌 STATUS:",
+                statusRecebido
+            );
+        }
+
+        // ==================================================
+        // LOG
+        // ==================================================
+
+        console.log(
+            online
+                ? "🟢 RESTAURANTE ONLINE"
+                : "🔴 RESTAURANTE OFFLINE"
+        );
+
+        console.log(
+            "STATUS:",
+            statusRecebido
+        );
+
+        console.log(
+            "ONLINE:",
+            online
+        );
+
+        console.log(
+            "ABERTO:",
+            aberto
+        );
+
+        console.log(
+            "================================"
+        );
+
+        // ==================================================
+        // RESPOSTA
+        // ==================================================
 
         return res.json({
 
+            sucesso: true,
+
+            restauranteOnline:
+                online,
+
             mensagem:
-                "Status do restaurante atualizado com sucesso",
+                online
+                    ? "Restaurante está online e aceitando pedidos"
+                    : "Restaurante está offline e não está aceitando pedidos",
 
             restaurante
         });
 
-
     } catch (erro) {
 
         console.error(
-            "ERRO AO ATUALIZAR STATUS:",
+            "================================"
+        );
+
+        console.error(
+            "❌ ERRO AO ATUALIZAR STATUS"
+        );
+
+        console.error(
             erro
         );
 
+        console.error(
+            "================================"
+        );
+
         return res.status(500).json({
+
+            sucesso: false,
+
+            restauranteOnline: false,
 
             erro:
                 "Erro interno ao atualizar status do restaurante",
