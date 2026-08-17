@@ -4,14 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
 import '../../config/api.dart';
-import '../orders/order_tracking_screen.dart';
 import 'cart_screen.dart';
+import 'order_tracking_screen.dart';
 
 class OrderReviewScreen extends StatefulWidget {
   final List<CartItem> itens;
   final double subtotal;
   final Map<String, String> endereco;
   final String pagamento;
+  final String restauranteId;
 
   const OrderReviewScreen({
     super.key,
@@ -19,6 +20,7 @@ class OrderReviewScreen extends StatefulWidget {
     required this.subtotal,
     required this.endereco,
     required this.pagamento,
+    required this.restauranteId,
   });
 
   @override
@@ -26,22 +28,19 @@ class OrderReviewScreen extends StatefulWidget {
       _OrderReviewScreenState();
 }
 
-class _OrderReviewScreenState
-    extends State<OrderReviewScreen> {
+class _OrderReviewScreenState extends State<OrderReviewScreen> {
   static const Color laranja = Color(0xFFF97316);
   static const Color fundo = Color(0xFFF5F5F5);
 
   bool enviando = false;
 
   // ============================================================
-  // IDS ATUAIS DO PROJETO
+  // CLIENTE
   // ============================================================
 
-  // Mantidos conforme sua implementação atual.
-  // Depois podemos buscar automaticamente do usuário logado.
+  // Temporário conforme sua estrutura atual.
+  // Depois podemos pegar automaticamente do usuário logado.
   final int clienteId = 1784355543711;
-
-  final int restauranteId = 1784400784535;
 
   // ============================================================
   // TAXAS
@@ -52,18 +51,15 @@ class _OrderReviewScreenState
   final double percentualTaxaServico = 0.10;
 
   double get taxaServico {
-    return widget.subtotal *
-        percentualTaxaServico;
+    return widget.subtotal * percentualTaxaServico;
   }
 
   double get totalPedido {
-    return widget.subtotal +
-        taxaServico +
-        taxaEntrega;
+    return widget.subtotal + taxaServico + taxaEntrega;
   }
 
   // ============================================================
-  // PREÇO
+  // FORMATAR PREÇO
   // ============================================================
 
   String formatarPreco(double valor) {
@@ -75,59 +71,42 @@ class _OrderReviewScreenState
   // ============================================================
 
   String enderecoCompleto() {
-    final rua =
-        widget.endereco['rua'] ?? '';
+    final rua = widget.endereco['rua'] ?? '';
+    final numero = widget.endereco['numero'] ?? '';
+    final complemento = widget.endereco['complemento'] ?? '';
+    final bairro = widget.endereco['bairro'] ?? '';
+    final cidade = widget.endereco['cidade'] ?? '';
+    final estado = widget.endereco['estado'] ?? '';
 
-    final numero =
-        widget.endereco['numero'] ?? '';
-
-    final complemento =
-        widget.endereco['complemento'] ?? '';
-
-    final bairro =
-        widget.endereco['bairro'] ?? '';
-
-    final cidade =
-        widget.endereco['cidade'] ?? '';
-
-    final estado =
-        widget.endereco['estado'] ?? '';
-
-    String resultado =
-        '$rua, $numero';
+    String resultado = '$rua, $numero';
 
     if (complemento.isNotEmpty) {
-      resultado +=
-          ' - $complemento';
+      resultado += ' - $complemento';
     }
 
     if (bairro.isNotEmpty) {
       resultado += '\n$bairro';
     }
 
-    if (cidade.isNotEmpty ||
-        estado.isNotEmpty) {
-      resultado +=
-          '\n$cidade - $estado';
+    if (cidade.isNotEmpty || estado.isNotEmpty) {
+      resultado += '\n$cidade - $estado';
     }
 
     return resultado;
   }
 
   // ============================================================
-  // ITENS
+  // MONTAR ITENS
   // ============================================================
 
-  List<Map<String, dynamic>>
-      _montarItensPedido() {
+  List<Map<String, dynamic>> _montarItensPedido() {
     return widget.itens.map((item) {
       return {
         'produtoId': item.produtoId,
         'nome': item.nome,
         'preco': item.preco,
         'quantidade': item.quantidade,
-        'subtotal':
-            item.preco * item.quantidade,
+        'subtotal': item.preco * item.quantidade,
       };
     }).toList();
   }
@@ -149,24 +128,34 @@ class _OrderReviewScreenState
       return;
     }
 
+    if (widget.restauranteId.isEmpty) {
+      _mensagem(
+        'Restaurante não identificado.',
+        erro: true,
+      );
+      return;
+    }
+
     setState(() {
       enviando = true;
     });
 
     try {
-      final itensPedido =
-          _montarItensPedido();
+      final itensPedido = _montarItensPedido();
+
+      // ========================================================
+      // PEDIDO
+      // ========================================================
 
       final pedido = {
         'clienteId': clienteId,
-        'restauranteId': restauranteId,
+        'restauranteId': widget.restauranteId,
         'itens': itensPedido,
         'endereco': widget.endereco,
         'pagamento': widget.pagamento,
         'subtotal': widget.subtotal,
         'taxaServico': taxaServico,
-        'percentualTaxaServico':
-            percentualTaxaServico,
+        'percentualTaxaServico': percentualTaxaServico,
         'taxaEntrega': taxaEntrega,
         'total': totalPedido,
       };
@@ -174,21 +163,33 @@ class _OrderReviewScreenState
       debugPrint('========================================');
       debugPrint('📦 ENVIANDO PEDIDO PARA API');
       debugPrint('👤 CLIENTE: $clienteId');
-      debugPrint('🏪 RESTAURANTE: $restauranteId');
+      debugPrint(
+        '🏪 RESTAURANTE: ${widget.restauranteId}',
+      );
       debugPrint('🛒 ITENS: $itensPedido');
       debugPrint(
-          '📍 ENDEREÇO: ${widget.endereco}');
+        '📍 ENDEREÇO: ${widget.endereco}',
+      );
       debugPrint(
-          '💳 PAGAMENTO: ${widget.pagamento}');
+        '💳 PAGAMENTO: ${widget.pagamento}',
+      );
       debugPrint(
-          '💵 SUBTOTAL: ${widget.subtotal}');
+        '💵 SUBTOTAL: ${widget.subtotal}',
+      );
       debugPrint(
-          '🧾 TAXA SERVIÇO: $taxaServico');
+        '🧾 TAXA SERVIÇO: $taxaServico',
+      );
       debugPrint(
-          '🛵 TAXA ENTREGA: $taxaEntrega');
+        '🛵 TAXA ENTREGA: $taxaEntrega',
+      );
       debugPrint(
-          '💰 TOTAL: $totalPedido');
+        '💰 TOTAL: $totalPedido',
+      );
       debugPrint('========================================');
+
+      // ========================================================
+      // URL
+      // ========================================================
 
       final url = Uri.parse(
         '${Api.baseUrl}/orders',
@@ -196,14 +197,16 @@ class _OrderReviewScreenState
 
       debugPrint('🌐 URL PEDIDO: $url');
 
+      // ========================================================
+      // POST
+      // ========================================================
+
       final resposta = await http
           .post(
             url,
             headers: {
-              'Content-Type':
-                  'application/json',
-              'Accept':
-                  'application/json',
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
             },
             body: jsonEncode(pedido),
           )
@@ -230,31 +233,31 @@ class _OrderReviewScreenState
         Map<String, dynamic> dados = {};
 
         try {
-          final resultado =
-              jsonDecode(resposta.body);
+          final resultado = jsonDecode(resposta.body);
 
-          if (resultado
-              is Map<String, dynamic>) {
+          if (resultado is Map<String, dynamic>) {
             dados = resultado;
           }
         } catch (e) {
           debugPrint(
-            'ERRO AO DECODIFICAR RESPOSTA: $e',
+            '⚠️ ERRO AO DECODIFICAR RESPOSTA: $e',
           );
         }
 
-        dynamic pedidoCriado =
-            dados['pedido'];
+        // ======================================================
+        // LOCALIZAR PEDIDO CRIADO
+        // ======================================================
 
-        // Algumas APIs podem retornar
-        // diretamente o objeto do pedido.
+        dynamic pedidoCriado = dados['pedido'];
+
+        // Caso a API retorne diretamente:
+        // { id: 123, ... }
         if (pedidoCriado == null &&
             dados['id'] != null) {
           pedidoCriado = dados;
         }
 
-        if (pedidoCriado
-            is! Map<String, dynamic>) {
+        if (pedidoCriado is! Map<String, dynamic>) {
           _mensagem(
             'Pedido criado, mas a API não retornou os dados do pedido.',
             erro: true,
@@ -262,8 +265,11 @@ class _OrderReviewScreenState
           return;
         }
 
-        final idRecebido =
-            pedidoCriado['id'];
+        // ======================================================
+        // ID DO PEDIDO
+        // ======================================================
+
+        final idRecebido = pedidoCriado['id'];
 
         if (idRecebido == null) {
           _mensagem(
@@ -273,8 +279,7 @@ class _OrderReviewScreenState
           return;
         }
 
-        final pedidoId =
-            int.tryParse(
+        final pedidoId = int.tryParse(
           idRecebido.toString(),
         );
 
@@ -289,25 +294,35 @@ class _OrderReviewScreenState
         debugPrint(
           '========================================',
         );
+
         debugPrint(
           '✅ PEDIDO CRIADO COM SUCESSO',
         );
+
         debugPrint(
           '🆔 PEDIDO ID: $pedidoId',
         );
+
+        debugPrint(
+          '🏪 RESTAURANTE: ${widget.restauranteId}',
+        );
+
+        debugPrint(
+          '💳 PAGAMENTO: ${widget.pagamento}',
+        );
+
         debugPrint(
           '========================================',
         );
 
         // ======================================================
-        // ABRIR ACOMPANHAMENTO
+        // ABRIR ACOMPANHAMENTO DO PEDIDO
         // ======================================================
 
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) =>
-                OrderTrackingScreen(
+            builder: (context) => OrderTrackingScreen(
               pedidoId: pedidoId,
             ),
           ),
@@ -323,11 +338,9 @@ class _OrderReviewScreenState
       Map<String, dynamic> erro = {};
 
       try {
-        final resultado =
-            jsonDecode(resposta.body);
+        final resultado = jsonDecode(resposta.body);
 
-        if (resultado
-            is Map<String, dynamic>) {
+        if (resultado is Map<String, dynamic>) {
           erro = resultado;
         }
       } catch (_) {}
@@ -372,22 +385,17 @@ class _OrderReviewScreenState
   }) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(texto),
         backgroundColor:
             erro ? Colors.red.shade700 : laranja,
-        behavior:
-            SnackBarBehavior.floating,
-        duration:
-            const Duration(seconds: 3),
-        shape:
-            RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.circular(12),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
       ),
     );
@@ -405,8 +413,7 @@ class _OrderReviewScreenState
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(
@@ -444,9 +451,10 @@ class _OrderReviewScreenState
 
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
+
         child: Column(
-          crossAxisAlignment:
-              CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.start,
+
           children: [
             const Text(
               'Confira seu pedido',
@@ -475,71 +483,59 @@ class _OrderReviewScreenState
 
             _card(
               child: Column(
-                children:
-                    List.generate(
+                children: List.generate(
                   widget.itens.length,
                   (index) {
-                    final item =
-                        widget.itens[index];
+                    final item = widget.itens[index];
 
                     final subtotalItem =
-                        item.preco *
-                            item.quantidade;
+                        item.preco * item.quantidade;
 
                     return Padding(
-                      padding:
-                          EdgeInsets.only(
+                      padding: EdgeInsets.only(
                         bottom:
-                            index ==
-                                    widget.itens.length -
-                                        1
-                            ? 0
-                            : 14,
+                            index == widget.itens.length - 1
+                                ? 0
+                                : 14,
                       ),
+
                       child: Row(
                         crossAxisAlignment:
-                            CrossAxisAlignment
-                                .start,
+                            CrossAxisAlignment.start,
+
                         children: [
                           Expanded(
                             child: Column(
                               crossAxisAlignment:
-                                  CrossAxisAlignment
-                                      .start,
+                                  CrossAxisAlignment.start,
+
                               children: [
                                 Text(
                                   item.nome,
-                                  style:
-                                      const TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 16,
-                                    fontWeight:
-                                        FontWeight.bold,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                const SizedBox(
-                                  height: 4,
-                                ),
+
+                                const SizedBox(height: 4),
+
                                 Text(
                                   '${item.quantidade}x ${formatarPreco(item.preco)}',
-                                  style:
-                                      const TextStyle(
-                                    color:
-                                        Colors.black54,
+                                  style: const TextStyle(
+                                    color: Colors.black54,
                                     fontSize: 14,
                                   ),
                                 ),
                               ],
                             ),
                           ),
+
                           Text(
-                            formatarPreco(
-                              subtotalItem,
-                            ),
-                            style:
-                                const TextStyle(
+                            formatarPreco(subtotalItem),
+                            style: const TextStyle(
                               fontSize: 16,
-                              fontWeight:
-                                  FontWeight.bold,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
@@ -570,21 +566,18 @@ class _OrderReviewScreenState
               child: Row(
                 crossAxisAlignment:
                     CrossAxisAlignment.start,
+
                 children: [
                   Container(
                     width: 42,
                     height: 42,
-                    decoration:
-                        BoxDecoration(
-                      color:
-                          const Color(
-                        0xFFFFE8D8,
-                      ),
+
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFE8D8),
                       borderRadius:
-                          BorderRadius.circular(
-                        12,
-                      ),
+                          BorderRadius.circular(12),
                     ),
+
                     child: const Icon(
                       Icons.location_on,
                       color: laranja,
@@ -596,10 +589,8 @@ class _OrderReviewScreenState
                   Expanded(
                     child: Text(
                       enderecoCompleto(),
-                      style:
-                          const TextStyle(
-                        color:
-                            Colors.black87,
+                      style: const TextStyle(
+                        color: Colors.black87,
                         fontSize: 15,
                         height: 1.5,
                       ),
@@ -631,17 +622,13 @@ class _OrderReviewScreenState
                   Container(
                     width: 42,
                     height: 42,
-                    decoration:
-                        BoxDecoration(
-                      color:
-                          const Color(
-                        0xFFFFE8D8,
-                      ),
+
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFE8D8),
                       borderRadius:
-                          BorderRadius.circular(
-                        12,
-                      ),
+                          BorderRadius.circular(12),
                     ),
+
                     child: const Icon(
                       Icons.payment,
                       color: laranja,
@@ -653,11 +640,9 @@ class _OrderReviewScreenState
                   Expanded(
                     child: Text(
                       widget.pagamento,
-                      style:
-                          const TextStyle(
+                      style: const TextStyle(
                         fontSize: 16,
-                        fontWeight:
-                            FontWeight.bold,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
@@ -704,8 +689,7 @@ class _OrderReviewScreenState
                   ),
 
                   const Padding(
-                    padding:
-                        EdgeInsets.symmetric(
+                    padding: EdgeInsets.symmetric(
                       vertical: 14,
                     ),
                     child: Divider(),
@@ -713,28 +697,23 @@ class _OrderReviewScreenState
 
                   Row(
                     mainAxisAlignment:
-                        MainAxisAlignment
-                            .spaceBetween,
+                        MainAxisAlignment.spaceBetween,
+
                     children: [
                       const Text(
                         'Total',
-                        style:
-                            TextStyle(
+                        style: TextStyle(
                           fontSize: 20,
-                          fontWeight:
-                              FontWeight.bold,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
+
                       Text(
-                        formatarPreco(
-                          totalPedido,
-                        ),
-                        style:
-                            const TextStyle(
+                        formatarPreco(totalPedido),
+                        style: const TextStyle(
                           color: laranja,
                           fontSize: 20,
-                          fontWeight:
-                              FontWeight.bold,
+                          fontWeight: FontWeight.bold,
                         ),
                       ),
                     ],
@@ -752,58 +731,56 @@ class _OrderReviewScreenState
             SizedBox(
               width: double.infinity,
               height: 56,
+
               child: ElevatedButton(
                 onPressed:
-                    enviando
-                        ? null
-                        : confirmarPedido,
-                style:
-                    ElevatedButton.styleFrom(
-                  backgroundColor:
-                      laranja,
-                  foregroundColor:
-                      Colors.white,
+                    enviando ? null : confirmarPedido,
+
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: laranja,
+                  foregroundColor: Colors.white,
                   disabledBackgroundColor:
                       Colors.grey.shade400,
                   elevation: 0,
-                  shape:
-                      RoundedRectangleBorder(
+
+                  shape: RoundedRectangleBorder(
                     borderRadius:
-                        BorderRadius.circular(
-                      14,
-                    ),
+                        BorderRadius.circular(14),
                   ),
                 ),
+
                 child: enviando
                     ? const SizedBox(
                         width: 25,
                         height: 25,
+
                         child:
                             CircularProgressIndicator(
                           strokeWidth: 3,
+
                           valueColor:
-                              AlwaysStoppedAnimation<
-                                  Color>(
+                              AlwaysStoppedAnimation<Color>(
                             Colors.white,
                           ),
                         ),
                       )
+
                     : const Row(
                         mainAxisAlignment:
-                            MainAxisAlignment
-                                .center,
+                            MainAxisAlignment.center,
+
                         children: [
                           Icon(
                             Icons.check_circle_outline,
                           ),
+
                           SizedBox(width: 8),
+
                           Text(
                             'CONFIRMAR PEDIDO',
-                            style:
-                                TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
-                              fontWeight:
-                                  FontWeight.bold,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
@@ -829,6 +806,7 @@ class _OrderReviewScreenState
     return Row(
       mainAxisAlignment:
           MainAxisAlignment.spaceBetween,
+
       children: [
         Text(
           titulo,
@@ -837,6 +815,7 @@ class _OrderReviewScreenState
             fontSize: 15,
           ),
         ),
+
         Text(
           formatarPreco(valor),
           style: const TextStyle(

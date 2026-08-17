@@ -1,9 +1,9 @@
-
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import '../../config/api.dart';
 
 class OrderTrackingScreen extends StatefulWidget {
   final int pedidoId;
@@ -14,23 +14,17 @@ class OrderTrackingScreen extends StatefulWidget {
   });
 
   @override
-  State<OrderTrackingScreen> createState() =>
-      _OrderTrackingScreenState();
+  State<OrderTrackingScreen> createState() => _OrderTrackingScreenState();
 }
 
-class _OrderTrackingScreenState
-    extends State<OrderTrackingScreen> {
+class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Timer? timer;
 
   bool carregando = true;
 
-  String statusPedido =
-      'AGUARDANDO_RESTAURANTE';
+  String statusPedido = 'AGUARDANDO_RESTAURANTE';
 
   Map<String, dynamic>? pedido;
-
-  final String apiUrl =
-      'http://192.168.1.101:3000';
 
   @override
   void initState() {
@@ -63,7 +57,7 @@ class _OrderTrackingScreenState
     try {
       final resposta = await http.get(
         Uri.parse(
-          '$apiUrl/api/orders/${widget.pedidoId}',
+          '${Api.baseUrl}/orders/${widget.pedidoId}',
         ),
       );
 
@@ -76,8 +70,7 @@ class _OrderTrackingScreenState
       );
 
       if (resposta.statusCode == 200) {
-        final dados =
-            jsonDecode(resposta.body);
+        final dados = jsonDecode(resposta.body);
 
         if (!mounted) {
           return;
@@ -88,9 +81,7 @@ class _OrderTrackingScreenState
           // { pedido: {...} }
           pedido = dados['pedido'] ?? dados;
 
-          statusPedido =
-              pedido?['status'] ??
-              'AGUARDANDO_RESTAURANTE';
+          statusPedido = pedido?['status'] ?? 'AGUARDANDO_RESTAURANTE';
 
           carregando = false;
         });
@@ -222,11 +213,9 @@ class _OrderTrackingScreenState
       'ENTREGUE',
     ];
 
-    final atual =
-        ordem.indexOf(statusPedido);
+    final atual = ordem.indexOf(statusPedido);
 
-    final item =
-        ordem.indexOf(status);
+    final item = ordem.indexOf(status);
 
     // Se o pedido foi cancelado,
     // nenhum status fica ativo
@@ -257,30 +246,22 @@ class _OrderTrackingScreenState
 
   @override
   Widget build(BuildContext context) {
-    const laranja =
-        Color(0xFFF97316);
+    const laranja = Color(0xFFF97316);
 
     return Scaffold(
-      backgroundColor:
-          const Color(0xFFF5F5F5),
+      backgroundColor: const Color(0xFFF5F5F5),
 
       // =================================================
       // APP BAR
       // =================================================
 
       appBar: AppBar(
-        backgroundColor:
-            laranja,
-
-        foregroundColor:
-            Colors.white,
-
+        backgroundColor: laranja,
+        foregroundColor: Colors.white,
         title: const Text(
           'Acompanhar Pedido',
-
           style: TextStyle(
-            fontWeight:
-                FontWeight.bold,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
@@ -291,90 +272,53 @@ class _OrderTrackingScreenState
 
       body: carregando
           ? const Center(
-              child:
-                  CircularProgressIndicator(),
+              child: CircularProgressIndicator(),
             )
           : RefreshIndicator(
-              onRefresh:
-                  buscarPedido,
-
-              child:
-                  SingleChildScrollView(
-                physics:
-                    const AlwaysScrollableScrollPhysics(),
-
-                padding:
-                    const EdgeInsets.all(20),
-
+              onRefresh: buscarPedido,
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(20),
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // ===================================
                     // STATUS PRINCIPAL
                     // ===================================
 
                     Card(
-                      color:
-                          Colors.white,
-
-                      child:
-                          Padding(
-                        padding:
-                            const EdgeInsets.all(
+                      color: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(
                           20,
                         ),
-
-                        child:
-                            Column(
+                        child: Column(
                           children: [
                             Icon(
                               iconeStatus(),
-
                               size: 70,
-
-                              color:
-                                  corStatus(),
+                              color: corStatus(),
                             ),
-
                             const SizedBox(
                               height: 15,
                             ),
-
                             Text(
                               textoStatus(),
-
-                              textAlign:
-                                  TextAlign.center,
-
-                              style:
-                                  TextStyle(
-                                fontSize:
-                                    23,
-
-                                fontWeight:
-                                    FontWeight.bold,
-
-                                color:
-                                    corStatus(),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 23,
+                                fontWeight: FontWeight.bold,
+                                color: corStatus(),
                               ),
                             ),
-
                             const SizedBox(
                               height: 8,
                             ),
-
                             Text(
                               'Pedido #${widget.pedidoId}',
-
-                              style:
-                                  const TextStyle(
-                                color:
-                                    Colors.grey,
-
-                                fontSize:
-                                    16,
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 16,
                               ),
                             ),
                           ],
@@ -392,14 +336,9 @@ class _OrderTrackingScreenState
 
                     const Text(
                       'Status do pedido',
-
-                      style:
-                          TextStyle(
-                        fontSize:
-                            20,
-
-                        fontWeight:
-                            FontWeight.bold,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
 
@@ -412,95 +351,55 @@ class _OrderTrackingScreenState
                     // ===================================
 
                     Card(
-                      color:
-                          Colors.white,
-
-                      child:
-                          Padding(
-                        padding:
-                            const EdgeInsets.all(
+                      color: Colors.white,
+                      child: Padding(
+                        padding: const EdgeInsets.all(
                           20,
                         ),
-
-                        child:
-                            Column(
+                        child: Column(
                           children: [
                             // RECEBIDO
                             _statusItem(
-                              titulo:
-                                  'Aguardando confirmação do restaurante',
-
-                              status:
-                                  'AGUARDANDO_RESTAURANTE',
-
-                              icone:
-                                  Icons.receipt_long,
-
-                              primeiro:
-                                  true,
+                              titulo: 'Aguardando confirmação do restaurante',
+                              status: 'AGUARDANDO_RESTAURANTE',
+                              icone: Icons.receipt_long,
+                              primeiro: true,
                             ),
 
                             // CONFIRMADO
                             _statusItem(
-                              titulo:
-                                  'Pedido confirmado',
-
-                              status:
-                                  'CONFIRMADO',
-
-                              icone:
-                                  Icons.check_circle,
+                              titulo: 'Pedido confirmado',
+                              status: 'CONFIRMADO',
+                              icone: Icons.check_circle,
                             ),
 
                             // PREPARANDO
                             _statusItem(
-                              titulo:
-                                  'Restaurante preparando',
-
-                              status:
-                                  'PREPARANDO',
-
-                              icone:
-                                  Icons.restaurant,
+                              titulo: 'Restaurante preparando',
+                              status: 'PREPARANDO',
+                              icone: Icons.restaurant,
                             ),
 
                             // PRONTO
                             _statusItem(
-                              titulo:
-                                  'Pedido pronto',
-
-                              status:
-                                  'PRONTO',
-
-                              icone:
-                                  Icons.inventory_2,
+                              titulo: 'Pedido pronto',
+                              status: 'PRONTO',
+                              icone: Icons.inventory_2,
                             ),
 
                             // EM ENTREGA
                             _statusItem(
-                              titulo:
-                                  'Saiu para entrega',
-
-                              status:
-                                  'EM_ENTREGA',
-
-                              icone:
-                                  Icons.delivery_dining,
+                              titulo: 'Saiu para entrega',
+                              status: 'EM_ENTREGA',
+                              icone: Icons.delivery_dining,
                             ),
 
                             // ENTREGUE
                             _statusItem(
-                              titulo:
-                                  'Pedido entregue',
-
-                              status:
-                                  'ENTREGUE',
-
-                              icone:
-                                  Icons.done_all,
-
-                              ultimo:
-                                  true,
+                              titulo: 'Pedido entregue',
+                              status: 'ENTREGUE',
+                              icone: Icons.done_all,
+                              ultimo: true,
                             ),
                           ],
                         ),
@@ -517,32 +416,19 @@ class _OrderTrackingScreenState
 
                     if (pedido != null)
                       Card(
-                        color:
-                            Colors.white,
-
-                        child:
-                            Padding(
-                          padding:
-                              const EdgeInsets.all(
+                        color: Colors.white,
+                        child: Padding(
+                          padding: const EdgeInsets.all(
                             20,
                           ),
-
-                          child:
-                              Column(
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               const Text(
                                 'Informações do pedido',
-
-                                style:
-                                    TextStyle(
-                                  fontSize:
-                                      18,
-
-                                  fontWeight:
-                                      FontWeight.bold,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
                                 ),
                               ),
 
@@ -551,42 +437,27 @@ class _OrderTrackingScreenState
                               ),
 
                               // TOTAL
-                              if (pedido![
-                                      'total'] !=
-                                  null)
+                              if (pedido!['total'] != null)
                                 Row(
                                   mainAxisAlignment:
-                                      MainAxisAlignment
-                                          .spaceBetween,
-
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     const Text(
                                       'Total',
-
-                                      style:
-                                          TextStyle(
-                                        color:
-                                            Colors.grey,
+                                      style: TextStyle(
+                                        color: Colors.grey,
                                       ),
                                     ),
-
                                     Text(
                                       formatarPreco(
                                         double.tryParse(
-                                              pedido![
-                                                      'total']
-                                                  .toString(),
+                                              pedido!['total'].toString(),
                                             ) ??
                                             0,
                                       ),
-
-                                      style:
-                                          const TextStyle(
-                                        fontWeight:
-                                            FontWeight.bold,
-
-                                        fontSize:
-                                            18,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
                                       ),
                                     ),
                                   ],
@@ -597,34 +468,21 @@ class _OrderTrackingScreenState
                               ),
 
                               // PAGAMENTO
-                              if (pedido![
-                                      'pagamento'] !=
-                                  null)
+                              if (pedido!['pagamento'] != null)
                                 Row(
                                   mainAxisAlignment:
-                                      MainAxisAlignment
-                                          .spaceBetween,
-
+                                      MainAxisAlignment.spaceBetween,
                                   children: [
                                     const Text(
                                       'Pagamento',
-
-                                      style:
-                                          TextStyle(
-                                        color:
-                                            Colors.grey,
+                                      style: TextStyle(
+                                        color: Colors.grey,
                                       ),
                                     ),
-
                                     Text(
-                                      pedido![
-                                              'pagamento']
-                                          .toString(),
-
-                                      style:
-                                          const TextStyle(
-                                        fontWeight:
-                                            FontWeight.bold,
+                                      pedido!['pagamento'].toString(),
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
                                       ),
                                     ),
                                   ],
@@ -643,44 +501,23 @@ class _OrderTrackingScreenState
                     // ===================================
 
                     SizedBox(
-                      width:
-                          double.infinity,
-
-                      child:
-                          ElevatedButton.icon(
-                        onPressed:
-                            buscarPedido,
-
-                        icon:
-                            const Icon(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: buscarPedido,
+                        icon: const Icon(
                           Icons.refresh,
                         ),
-
-                        label:
-                            const Text(
+                        label: const Text(
                           'ATUALIZAR PEDIDO',
                         ),
-
-                        style:
-                            ElevatedButton.styleFrom(
-                          backgroundColor:
-                              laranja,
-
-                          foregroundColor:
-                              Colors.white,
-
-                          padding:
-                              const EdgeInsets
-                                  .symmetric(
-                            vertical:
-                                16,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: laranja,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(
+                            vertical: 16,
                           ),
-
-                          shape:
-                              RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(
                               12,
                             ),
                           ),
@@ -705,16 +542,12 @@ class _OrderTrackingScreenState
     bool primeiro = false,
     bool ultimo = false,
   }) {
-    final ativo =
-        statusAtivo(status);
+    final ativo = statusAtivo(status);
 
-    const laranja =
-        Color(0xFFF97316);
+    const laranja = Color(0xFFF97316);
 
     return Row(
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
-
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // ===============================================
         // ÍCONE + LINHA
@@ -723,53 +556,29 @@ class _OrderTrackingScreenState
         Column(
           children: [
             Container(
-              width:
-                  45,
-
-              height:
-                  45,
-
-              decoration:
-                  BoxDecoration(
-                shape:
-                    BoxShape.circle,
-
-                color: ativo
-                    ? laranja
-                    : Colors.grey.shade300,
+              width: 45,
+              height: 45,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: ativo ? laranja : Colors.grey.shade300,
               ),
-
-              child:
-                  Icon(
+              child: Icon(
                 icone,
-
-                color: ativo
-                    ? Colors.white
-                    : Colors.grey,
-
-                size:
-                    22,
+                color: ativo ? Colors.white : Colors.grey,
+                size: 22,
               ),
             ),
-
             if (!ultimo)
               Container(
-                width:
-                    2,
-
-                height:
-                    45,
-
-                color: ativo
-                    ? laranja
-                    : Colors.grey.shade300,
+                width: 2,
+                height: 45,
+                color: ativo ? laranja : Colors.grey.shade300,
               ),
           ],
         ),
 
         const SizedBox(
-          width:
-              15,
+          width: 15,
         ),
 
         // ===============================================
@@ -777,32 +586,16 @@ class _OrderTrackingScreenState
         // ===============================================
 
         Expanded(
-          child:
-              Padding(
-            padding:
-                const EdgeInsets.only(
-              top:
-                  10,
+          child: Padding(
+            padding: const EdgeInsets.only(
+              top: 10,
             ),
-
-            child:
-                Text(
+            child: Text(
               titulo,
-
-              style:
-                  TextStyle(
-                fontSize:
-                    16,
-
-                fontWeight:
-                    ativo
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-
-                color:
-                    ativo
-                        ? Colors.black
-                        : Colors.grey,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: ativo ? FontWeight.bold : FontWeight.normal,
+                color: ativo ? Colors.black : Colors.grey,
               ),
             ),
           ),

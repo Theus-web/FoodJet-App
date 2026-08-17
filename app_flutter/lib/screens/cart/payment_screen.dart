@@ -7,12 +7,14 @@ class PaymentScreen extends StatefulWidget {
   final Map<String, String> endereco;
   final List<CartItem> itens;
   final double subtotal;
+  final String restauranteId;
 
   const PaymentScreen({
     super.key,
     required this.endereco,
     required this.itens,
-    required this.subtotal, required String restauranteId,
+    required this.subtotal,
+    required this.restauranteId,
   });
 
   @override
@@ -48,16 +50,17 @@ class _PaymentScreenState
     debugPrint('========================================');
 
     Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => OrderReviewScreen(
-          itens: widget.itens,
-          subtotal: widget.subtotal,
-          endereco: widget.endereco,
-          pagamento: pagamentoSelecionado,
-        ),
-      ),
-    );
+  context,
+  MaterialPageRoute(
+    builder: (context) => OrderReviewScreen(
+      itens: widget.itens,
+      subtotal: widget.subtotal,
+      endereco: widget.endereco,
+      pagamento: pagamentoSelecionado,
+      restauranteId: widget.restauranteId,
+    ),
+  ),
+);
   }
 
   // ============================================================
