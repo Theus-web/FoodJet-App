@@ -121,18 +121,6 @@
       "total": 0
     },
     {
-      "id": 1786945489724,
-      "clienteId": 1784355543711,
-      "restauranteId": "rest_1786542500158",
-      "itens": [
-        {
-          "produtoId": "1786938835441",
-          "nome": "Oniguiri",
-          "preco": 50,
-          "quantidade": 2,
-          "subtotal": 100
-        }
-      ],
       "endereco": {
         "cep": "35164-365",
         "rua": "Rua Cruzeiro",
@@ -153,6 +141,40 @@
         "mensagens": []
       },
       "atualizadoEm": "2026-08-17T05:46:44.135Z"
+    },
+    {
+      "id": 1786981862100,
+      "clienteId": 1784355543711,
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "1786938835441",
+          "nome": "Oniguiri",
+          "preco": 50,
+          "quantidade": 1,
+          "subtotal": 50
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "666",
+        "bairro": "Bethânia",
+        "complemento": "Lote",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "PIX",
+      "subtotal": 50,
+      "total": 61.5,
+      "status": "SAIU_PARA_ENTREGA",
+      "criadoEm": "2026-08-17T15:51:02.100Z",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "atualizadoEm": "2026-08-17T15:56:49.134Z"
     }
   ],
   "entregadores": [

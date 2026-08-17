@@ -28,25 +28,17 @@ class RestaurantScreen extends StatefulWidget {
       _RestaurantScreenState();
 }
 
-class _RestaurantScreenState
-    extends State<RestaurantScreen> {
-  static const Color laranja =
-      Color(0xFFF97316);
-
-  static const Color fundo =
-      Color(0xFFF7F7F8);
-
-  static const Color fundoImagem =
-      Color(0xFFFFE5D3);
+class _RestaurantScreenState extends State<RestaurantScreen> {
+  static const Color laranja = Color(0xFFF97316);
+  static const Color laranjaEscuro = Color(0xFFEA580C);
+  static const Color fundo = Color(0xFFF6F7F9);
+  static const Color fundoImagem = Color(0xFFFFE5D3);
 
   final List<CartItem> carrinho = [];
 
   bool favorito = false;
-
   bool carregandoProdutos = true;
-
   bool restauranteOnline = false;
-
   bool carregandoStatus = true;
 
   Timer? _timerStatus;
@@ -62,124 +54,94 @@ class _RestaurantScreenState
     super.initState();
 
     _salvarRestauranteSelecionado();
-
     _carregarProdutos();
-
     _verificarStatusRestaurante();
-
-    // ==========================================================
-    // ATUALIZAR STATUS AUTOMATICAMENTE
-    // ==========================================================
 
     _timerStatus = Timer.periodic(
       const Duration(seconds: 10),
-      (_) {
-        _verificarStatusRestaurante();
-      },
+      (_) => _verificarStatusRestaurante(),
     );
   }
 
   @override
   void dispose() {
     _timerStatus?.cancel();
-
     super.dispose();
   }
 
-  // ==========================================================
-  // SALVAR RESTAURANTE SELECIONADO
-  // ==========================================================
+  // ============================================================
+  // RESTAURANTE SELECIONADO
+  // ============================================================
 
-  Future<void>
-      _salvarRestauranteSelecionado() async {
-    final restauranteId =
-        widget.restauranteId.trim();
+  Future<void> _salvarRestauranteSelecionado() async {
+    final id = widget.restauranteId.trim();
 
-    if (restauranteId.isEmpty) {
-      debugPrint(
-        '⚠️ RESTAURANTE SEM ID.',
-      );
-
-      return;
-    }
+    if (id.isEmpty) return;
 
     try {
-      final prefs =
-          await SharedPreferences
-              .getInstance();
+      final prefs = await SharedPreferences.getInstance();
 
       await prefs.setString(
         'restauranteSelecionadoId',
-        restauranteId,
-      );
-
-      debugPrint(
-        '🏪 RESTAURANTE SELECIONADO: $restauranteId',
+        id,
       );
     } catch (e) {
-      debugPrint(
-        '❌ ERRO AO SALVAR RESTAURANTE: $e',
-      );
+      debugPrint('Erro ao salvar restaurante: $e');
     }
   }
 
-  // ==========================================================
-  // CONVERTER BOOLEANO
-  // ==========================================================
+  // ============================================================
+  // BOOLEANO
+  // ============================================================
 
   bool _converterBooleano(
     dynamic valor, {
     bool padrao = false,
   }) {
-    if (valor == null) {
-      return padrao;
-    }
+    if (valor == null) return padrao;
 
-    if (valor is bool) {
-      return valor;
-    }
+    if (valor is bool) return valor;
 
-    final texto =
-        valor.toString()
-            .trim()
-            .toLowerCase();
+    final texto = valor.toString().trim().toLowerCase();
 
-    if (texto == 'true' ||
-        texto == '1' ||
-        texto == 'sim' ||
-        texto == 'aberto' ||
-        texto == 'online') {
+    if ([
+      'true',
+      '1',
+      'sim',
+      'aberto',
+      'online',
+    ].contains(texto)) {
       return true;
     }
 
-    if (texto == 'false' ||
-        texto == '0' ||
-        texto == 'nao' ||
-        texto == 'não' ||
-        texto == 'fechado' ||
-        texto == 'offline') {
+    if ([
+      'false',
+      '0',
+      'nao',
+      'não',
+      'fechado',
+      'offline',
+    ].contains(texto)) {
       return false;
     }
 
     return padrao;
   }
 
-  // ==========================================================
-  // VERIFICAR STATUS RESTAURANTE
-  // ==========================================================
+  // ============================================================
+  // STATUS
+  // ============================================================
 
-  Future<void>
-      _verificarStatusRestaurante() async {
-    final restauranteId =
-        widget.restauranteId.trim();
+  Future<void> _verificarStatusRestaurante() async {
+    final restauranteId = widget.restauranteId.trim();
 
     if (restauranteId.isEmpty) {
-      if (mounted) {
-        setState(() {
-          restauranteOnline = false;
-          carregandoStatus = false;
-        });
-      }
+      if (!mounted) return;
+
+      setState(() {
+        restauranteOnline = false;
+        carregandoStatus = false;
+      });
 
       return;
     }
@@ -191,139 +153,63 @@ class _RestaurantScreenState
               '${Api.baseUrl}/restaurants/$restauranteId',
             ),
             headers: {
-              'Content-Type':
-                  'application/json',
+              'Content-Type': 'application/json',
             },
           )
           .timeout(
             const Duration(seconds: 10),
           );
 
-      debugPrint(
-        '========================================',
-      );
-
-      debugPrint(
-        '🏪 VERIFICANDO STATUS RESTAURANTE',
-      );
-
-      debugPrint(
-        'ID: $restauranteId',
-      );
-
-      debugPrint(
-        'STATUS HTTP: ${resposta.statusCode}',
-      );
-
-      debugPrint(
-        'RESPOSTA: ${resposta.body}',
-      );
-
-      debugPrint(
-        '========================================',
-      );
-
       if (resposta.statusCode != 200) {
-        if (mounted) {
-          setState(() {
-            carregandoStatus = false;
-          });
-        }
+        if (!mounted) return;
+
+        setState(() {
+          restauranteOnline = false;
+          carregandoStatus = false;
+        });
 
         return;
       }
 
-      final dados =
-          jsonDecode(resposta.body);
+      final dados = jsonDecode(resposta.body);
 
-      if (dados is! Map) {
-        return;
-      }
+      if (dados is! Map) return;
 
       final restaurante =
           dados['restaurante'] is Map
               ? Map<String, dynamic>.from(
                   dados['restaurante'],
                 )
-              : Map<String, dynamic>.from(
-                  dados,
-                );
-
-      // ========================================================
-      // PEGAR CAMPOS DO BACKEND
-      // ========================================================
+              : Map<String, dynamic>.from(dados);
 
       final status =
           restaurante['status']
-              ?.toString()
-              .trim()
-              .toUpperCase() ??
-          '';
+                  ?.toString()
+                  .trim()
+                  .toUpperCase() ??
+              '';
 
-      final online =
-          _converterBooleano(
+      final online = _converterBooleano(
         restaurante['online'],
-        padrao: false,
       );
 
-      final aberto =
-          _converterBooleano(
+      final aberto = _converterBooleano(
         restaurante['aberto'],
-        padrao: false,
       );
-
-      // ========================================================
-      // REGRA PRINCIPAL
-      // ========================================================
-      //
-      // FECHADO SEMPRE VENCE.
-      //
-      // Para estar disponível precisa:
-      //
-      // status = ABERTO
-      // online = true
-      // aberto = true
-      //
-      // ========================================================
 
       final disponivel =
           status == 'ABERTO' &&
           online &&
           aberto;
 
-      debugPrint(
-        '📌 STATUS: $status',
-      );
+      if (!mounted) return;
 
-      debugPrint(
-        '📌 ONLINE: $online',
-      );
-
-      debugPrint(
-        '📌 ABERTO: $aberto',
-      );
-
-      debugPrint(
-        '📌 DISPONÍVEL: $disponivel',
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      final estavaOnline =
-          restauranteOnline;
+      final estavaOnline = restauranteOnline;
 
       setState(() {
-        restauranteOnline =
-            disponivel;
-
+        restauranteOnline = disponivel;
         carregandoStatus = false;
       });
-
-      // ========================================================
-      // SE FICOU OFFLINE COM CARRINHO
-      // ========================================================
 
       if (estavaOnline &&
           !disponivel &&
@@ -332,30 +218,22 @@ class _RestaurantScreenState
           carrinho.clear();
         });
 
-        ScaffoldMessenger.of(context)
-            .showSnackBar(
+        ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
               'O restaurante ficou fechado. O carrinho foi atualizado.',
             ),
-            backgroundColor:
-                Colors.redAccent,
-            duration:
-                Duration(seconds: 3),
+            backgroundColor: Colors.redAccent,
           ),
         );
       }
     } catch (e) {
       debugPrint(
-        '❌ ERRO AO VERIFICAR STATUS: $e',
+        'Erro ao verificar restaurante: $e',
       );
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
-      // Em caso de erro de conexão,
-      // NÃO vamos fingir que está aberto.
       setState(() {
         restauranteOnline = false;
         carregandoStatus = false;
@@ -363,12 +241,11 @@ class _RestaurantScreenState
     }
   }
 
-  // ==========================================================
-  // BUSCAR PRODUTOS
-  // ==========================================================
+  // ============================================================
+  // PRODUTOS
+  // ============================================================
 
-  Future<void>
-      _carregarProdutos() async {
+  Future<void> _carregarProdutos() async {
     if (mounted) {
       setState(() {
         carregandoProdutos = true;
@@ -386,68 +263,44 @@ class _RestaurantScreenState
         );
       }
 
-      final url = Uri.parse(
-        '${Api.baseUrl}/products',
-      );
-
-      debugPrint(
-        '================================',
-      );
-
-      debugPrint(
-        '🍔 BUSCANDO PRODUTOS',
-      );
-
-      debugPrint(
-        '🏪 RESTAURANTE ID: $restauranteId',
-      );
-
-      debugPrint(
-        '🌐 URL: $url',
-      );
-
-      debugPrint(
-        '================================',
-      );
-
       final resposta = await http
           .get(
-            url,
+            Uri.parse(
+              '${Api.baseUrl}/products',
+            ),
             headers: {
-              'Content-Type':
-                  'application/json',
+              'Content-Type': 'application/json',
             },
           )
           .timeout(
             const Duration(seconds: 15),
           );
 
-      debugPrint(
-        '📡 STATUS PRODUTOS: ${resposta.statusCode}',
-      );
-
-      debugPrint(
-        '📡 RESPOSTA PRODUTOS: ${resposta.body}',
-      );
-
       if (resposta.statusCode < 200 ||
           resposta.statusCode >= 300) {
         throw Exception(
-          'Erro ${resposta.statusCode} ao buscar produtos.',
+          'Erro ${resposta.statusCode}',
         );
       }
 
-      final resultado =
-          jsonDecode(resposta.body);
+      final resultado = jsonDecode(
+        resposta.body,
+      );
 
       if (resultado is! List) {
         throw Exception(
-          'A API não retornou uma lista de produtos.',
+          'Resposta inválida da API.',
         );
       }
 
       final produtosApi = resultado
-          .whereType<Map<String, dynamic>>()
+          .whereType<Map>()
+          .map(
+            (produto) =>
+                Map<String, dynamic>.from(
+              produto,
+            ),
+          )
           .where(
             (produto) =>
                 produto['restauranteId']
@@ -460,13 +313,10 @@ class _RestaurantScreenState
           )
           .toList();
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         produtos = produtosApi;
-
         carregandoProdutos = false;
 
         if (!categorias.contains(
@@ -477,29 +327,25 @@ class _RestaurantScreenState
       });
     } catch (e) {
       debugPrint(
-        '❌ ERRO AO BUSCAR PRODUTOS: $e',
+        'Erro ao buscar produtos: $e',
       );
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         carregandoProdutos = false;
-
         erroProdutos =
             'Não foi possível carregar o cardápio.';
       });
     }
   }
 
-  // ==========================================================
+  // ============================================================
   // CATEGORIAS
-  // ==========================================================
+  // ============================================================
 
   List<String> get categorias {
-    final categoriasSet =
-        <String>{};
+    final conjunto = <String>{};
 
     for (final produto in produtos) {
       final categoria =
@@ -509,18 +355,18 @@ class _RestaurantScreenState
 
       if (categoria != null &&
           categoria.isNotEmpty) {
-        categoriasSet.add(categoria);
+        conjunto.add(categoria);
       }
     }
 
-    final lista =
-        categoriasSet.toList();
+    final lista = conjunto.toList();
 
     lista.sort(
-      (a, b) =>
-          a.toLowerCase().compareTo(
-                b.toLowerCase(),
-              ),
+      (a, b) => a
+          .toLowerCase()
+          .compareTo(
+            b.toLowerCase(),
+          ),
     );
 
     return [
@@ -531,8 +377,7 @@ class _RestaurantScreenState
 
   List<Map<String, dynamic>>
       get produtosFiltrados {
-    if (categoriaSelecionada ==
-        'Todos') {
+    if (categoriaSelecionada == 'Todos') {
       return produtos;
     }
 
@@ -548,17 +393,16 @@ class _RestaurantScreenState
         .toList();
   }
 
-  // ==========================================================
+  // ============================================================
   // FAVORITO
-  // ==========================================================
+  // ============================================================
 
   void alternarFavorito() {
     setState(() {
       favorito = !favorito;
     });
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
           favorito
@@ -566,15 +410,18 @@ class _RestaurantScreenState
               : '${widget.nome} removido dos favoritos',
         ),
         backgroundColor: laranja,
-        duration:
-            const Duration(seconds: 1),
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        duration: const Duration(seconds: 1),
       ),
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // ADICIONAR PRODUTO
-  // ==========================================================
+  // ============================================================
 
   void adicionarProduto({
     required String nome,
@@ -583,28 +430,17 @@ class _RestaurantScreenState
     String? produtoId,
   }) {
     if (!restauranteOnline) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Este restaurante está fechado e não está aceitando pedidos.',
-          ),
-          backgroundColor:
-              Colors.redAccent,
-          duration:
-              Duration(seconds: 2),
-        ),
+      _mensagem(
+        'Este restaurante está fechado e não está aceitando pedidos.',
+        vermelho: true,
       );
-
       return;
     }
 
     setState(() {
-      final index =
-          carrinho.indexWhere(
+      final index = carrinho.indexWhere(
         (item) =>
-            item.produtoId ==
-                produtoId &&
+            item.produtoId == produtoId &&
             produtoId != null,
       );
 
@@ -624,30 +460,43 @@ class _RestaurantScreenState
       }
     });
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    _mensagem(
+      '$nome adicionado ao carrinho!',
+    );
+  }
+
+  void _mensagem(
+    String texto, {
+    bool vermelho = false,
+  }) {
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(
-          '$nome adicionado ao carrinho!',
+        content: Text(texto),
+        backgroundColor:
+            vermelho
+                ? Colors.redAccent
+                : laranja,
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(18),
         ),
-        backgroundColor: laranja,
-        duration:
-            const Duration(seconds: 1),
+        duration: const Duration(seconds: 1),
       ),
     );
   }
 
-  // ==========================================================
-  // TOTAL
-  // ==========================================================
+  // ============================================================
+  // CARRINHO
+  // ============================================================
 
   double get totalCarrinho {
     return carrinho.fold(
       0,
       (total, item) =>
           total +
-          (item.preco *
-              item.quantidade),
+          item.preco *
+              item.quantidade,
     );
   }
 
@@ -655,29 +504,17 @@ class _RestaurantScreenState
     return carrinho.fold(
       0,
       (total, item) =>
-          total + item.quantidade,
+          total +
+          item.quantidade,
     );
   }
 
-  // ==========================================================
-  // ABRIR CARRINHO
-  // ==========================================================
-
   void abrirCarrinho() {
     if (!restauranteOnline) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Este restaurante está fechado e não está aceitando pedidos.',
-          ),
-          backgroundColor:
-              Colors.redAccent,
-          duration:
-              Duration(seconds: 2),
-        ),
+      _mensagem(
+        'Este restaurante está fechado e não está aceitando pedidos.',
+        vermelho: true,
       );
-
       return;
     }
 
@@ -685,28 +522,19 @@ class _RestaurantScreenState
         widget.restauranteId.trim();
 
     if (restauranteId.isEmpty) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Não foi possível identificar o restaurante.',
-          ),
-          backgroundColor:
-              Colors.redAccent,
-        ),
+      _mensagem(
+        'Não foi possível identificar o restaurante.',
+        vermelho: true,
       );
-
       return;
     }
 
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            CartScreen(
+        builder: (_) => CartScreen(
           itens: carrinho,
-          restauranteId:
-              restauranteId,
+          restauranteId: restauranteId,
         ),
       ),
     ).then((_) {
@@ -716,9 +544,9 @@ class _RestaurantScreenState
     });
   }
 
-  // ==========================================================
+  // ============================================================
   // PREÇO
-  // ==========================================================
+  // ============================================================
 
   double _precoProduto(
     dynamic valor,
@@ -742,9 +570,9 @@ class _RestaurantScreenState
     return 'R\$ ${preco.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 
-  // ==========================================================
-  // URL IMAGEM
-  // ==========================================================
+  // ============================================================
+  // IMAGEM
+  // ============================================================
 
   String _urlImagemProduto(
     String imagem,
@@ -767,14 +595,12 @@ class _RestaurantScreenState
     return '$baseUrl/$imagem';
   }
 
-  // ==========================================================
+  // ============================================================
   // BUILD
-  // ==========================================================
+  // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: fundo,
 
@@ -783,7 +609,6 @@ class _RestaurantScreenState
 
         onRefresh: () async {
           await _carregarProdutos();
-
           await _verificarStatusRestaurante();
         },
 
@@ -793,68 +618,57 @@ class _RestaurantScreenState
 
           slivers: [
             // ==================================================
-            // HEADER
+            // HEADER CORRIGIDO
             // ==================================================
 
             SliverAppBar(
-              expandedHeight: 315,
+              expandedHeight: 410,
               pinned: true,
               elevation: 0,
+              scrolledUnderElevation: 0,
               backgroundColor: laranja,
               foregroundColor: Colors.white,
 
-              leading: Padding(
-                padding:
-                    const EdgeInsets.all(8),
-
-                child: _botaoHeader(
-                  icon:
-                      Icons.arrow_back,
-                  onPressed: () {
-                    Navigator.pop(
-                      context,
-                    );
-                  },
-                ),
+              leading: _botaoHeader(
+                icon:
+                    Icons.arrow_back_ios_new_rounded,
+                onPressed: () =>
+                    Navigator.pop(context),
               ),
 
               actions: [
                 _botaoHeader(
                   icon: favorito
-                      ? Icons.favorite
-                      : Icons.favorite_border,
-
+                      ? Icons.favorite_rounded
+                      : Icons.favorite_border_rounded,
                   onPressed:
                       alternarFavorito,
                 ),
 
-                const SizedBox(
-                  width: 5,
-                ),
+                const SizedBox(width: 4),
 
                 _botaoHeader(
                   icon:
-                      Icons.receipt_long,
-
+                      Icons.receipt_long_rounded,
                   onPressed: () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder:
-                            (context) =>
-                                const RestaurantOrdersScreen(),
+                        builder: (_) =>
+                            const RestaurantOrdersScreen(),
                       ),
                     );
                   },
                 ),
 
-                const SizedBox(
-                  width: 8,
-                ),
+                const SizedBox(width: 8),
               ],
 
               flexibleSpace:
                   FlexibleSpaceBar(
+                collapseMode:
+                    CollapseMode.parallax,
+
                 background:
                     _cabecalhoRestaurante(),
               ),
@@ -872,17 +686,17 @@ class _RestaurantScreenState
               ),
 
             // ==================================================
-            // TÍTULO
+            // TÍTULO CARDÁPIO
             // ==================================================
 
             SliverToBoxAdapter(
               child: Padding(
                 padding:
                     const EdgeInsets.fromLTRB(
-                  16,
-                  25,
-                  16,
-                  10,
+                  18,
+                  24,
+                  18,
+                  12,
                 ),
 
                 child: Row(
@@ -891,48 +705,16 @@ class _RestaurantScreenState
                       child: Text(
                         'Cardápio',
                         style: TextStyle(
-                          fontSize: 23,
+                          fontSize: 25,
                           fontWeight:
-                              FontWeight.bold,
+                              FontWeight.w800,
+                          letterSpacing: -0.5,
                         ),
                       ),
                     ),
 
                     if (produtos.isNotEmpty)
-                      Container(
-                        padding:
-                            const EdgeInsets
-                                .symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-
-                        decoration:
-                            BoxDecoration(
-                          color:
-                              const Color(
-                            0xFFFFE8D8,
-                          ),
-                          borderRadius:
-                              BorderRadius
-                                  .circular(
-                            20,
-                          ),
-                        ),
-
-                        child: Text(
-                          '${produtos.length} itens',
-
-                          style:
-                              const TextStyle(
-                            color:
-                                laranja,
-                            fontSize: 11,
-                            fontWeight:
-                                FontWeight.bold,
-                          ),
-                        ),
-                      ),
+                      _contadorProdutos(),
                   ],
                 ),
               ),
@@ -945,116 +727,11 @@ class _RestaurantScreenState
             if (!carregandoProdutos &&
                 produtos.isNotEmpty)
               SliverToBoxAdapter(
-                child: SizedBox(
-                  height: 55,
-
-                  child:
-                      ListView.separated(
-                    padding:
-                        const EdgeInsets
-                            .symmetric(
-                      horizontal: 16,
-                    ),
-
-                    scrollDirection:
-                        Axis.horizontal,
-
-                    itemCount:
-                        categorias.length,
-
-                    separatorBuilder:
-                        (_, __) =>
-                            const SizedBox(
-                      width: 8,
-                    ),
-
-                    itemBuilder:
-                        (context, index) {
-                      final categoria =
-                          categorias[index];
-
-                      final selecionada =
-                          categoria ==
-                              categoriaSelecionada;
-
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            categoriaSelecionada =
-                                categoria;
-                          });
-                        },
-
-                        child:
-                            AnimatedContainer(
-                          duration:
-                              const Duration(
-                            milliseconds:
-                                180,
-                          ),
-
-                          padding:
-                              const EdgeInsets
-                                  .symmetric(
-                            horizontal: 17,
-                            vertical: 10,
-                          ),
-
-                          decoration:
-                              BoxDecoration(
-                            color:
-                                selecionada
-                                    ? laranja
-                                    : Colors.white,
-
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              25,
-                            ),
-
-                            border:
-                                Border.all(
-                              color:
-                                  selecionada
-                                      ? laranja
-                                      : Colors
-                                          .grey
-                                          .shade200,
-                            ),
-                          ),
-
-                          child: Center(
-                            child: Text(
-                              categoria,
-
-                              style:
-                                  TextStyle(
-                                color:
-                                    selecionada
-                                        ? Colors
-                                            .white
-                                        : Colors
-                                            .black87,
-
-                                fontWeight:
-                                    FontWeight
-                                        .w600,
-
-                                fontSize: 13,
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
+                child: _categorias(),
               ),
 
             const SliverToBoxAdapter(
-              child:
-                  SizedBox(height: 10),
+              child: SizedBox(height: 10),
             ),
 
             // ==================================================
@@ -1065,8 +742,7 @@ class _RestaurantScreenState
               const SliverToBoxAdapter(
                 child: Padding(
                   padding:
-                      EdgeInsets.all(60),
-
+                      EdgeInsets.all(70),
                   child: Center(
                     child:
                         CircularProgressIndicator(
@@ -1085,8 +761,7 @@ class _RestaurantScreenState
                 child:
                     _estadoVazioProdutos(),
               )
-            else if (produtosFiltrados
-                .isEmpty)
+            else if (produtosFiltrados.isEmpty)
               SliverToBoxAdapter(
                 child:
                     _estadoVazioCategoria(),
@@ -1094,28 +769,28 @@ class _RestaurantScreenState
             else
               SliverPadding(
                 padding:
-                    const EdgeInsets
-                        .fromLTRB(
+                    const EdgeInsets.fromLTRB(
                   16,
-                  5,
+                  4,
                   16,
-                  130,
+                  140,
                 ),
 
                 sliver: SliverList(
                   delegate:
                       SliverChildBuilderDelegate(
-                    (context, index) {
+                    (
+                      context,
+                      index,
+                    ) {
                       return produtoCard(
                         produto:
-                            produtosFiltrados[
-                                index],
+                            produtosFiltrados[index],
                       );
                     },
 
                     childCount:
-                        produtosFiltrados
-                            .length,
+                        produtosFiltrados.length,
                   ),
                 ),
               ),
@@ -1124,7 +799,7 @@ class _RestaurantScreenState
       ),
 
       // ========================================================
-      // CARRINHO
+      // CARRINHO FLUTUANTE
       // ========================================================
 
       floatingActionButton:
@@ -1134,14 +809,13 @@ class _RestaurantScreenState
               : null,
 
       floatingActionButtonLocation:
-          FloatingActionButtonLocation
-              .centerFloat,
+          FloatingActionButtonLocation.centerFloat,
     );
   }
 
-  // ==========================================================
-  // CABEÇALHO
-  // ==========================================================
+  // ============================================================
+  // HEADER RESTAURANTE — CORRIGIDO
+  // ============================================================
 
   Widget _cabecalhoRestaurante() {
     return Container(
@@ -1149,324 +823,293 @@ class _RestaurantScreenState
           const BoxDecoration(
         gradient:
             LinearGradient(
-          begin:
-              Alignment.topCenter,
-          end:
-              Alignment.bottomCenter,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
           colors: [
-            laranja,
-            Color(0xFFFF9A5A),
+            Color(0xFFF97316),
+            Color(0xFFEA580C),
+            Color(0xFFC2410C),
           ],
         ),
       ),
 
-      child: Column(
-        mainAxisAlignment:
-            MainAxisAlignment.end,
+      child: Stack(
+        children: [
+          // Círculo decorativo superior
+          Positioned(
+            right: -70,
+            top: 40,
+            child: Container(
+              width: 210,
+              height: 210,
+              decoration:
+                  BoxDecoration(
+                color: Colors.white.withValues(
+                  alpha: 0.08,
+                ),
+                shape:
+                    BoxShape.circle,
+              ),
+            ),
+          ),
+
+          // Círculo decorativo inferior
+          Positioned(
+            left: -90,
+            bottom: -70,
+            child: Container(
+              width: 230,
+              height: 230,
+              decoration:
+                  BoxDecoration(
+                color: Colors.black.withValues(
+                  alpha: 0.07,
+                ),
+                shape:
+                    BoxShape.circle,
+              ),
+            ),
+          ),
+
+          // ==================================================
+          // CONTEÚDO ADAPTÁVEL
+          // ==================================================
+
+          Align(
+            alignment:
+                Alignment.bottomCenter,
+
+            child: SingleChildScrollView(
+              physics:
+                  const NeverScrollableScrollPhysics(),
+
+              child: Padding(
+                padding:
+                    const EdgeInsets.fromLTRB(
+                  20,
+                  78,
+                  20,
+                  22,
+                ),
+
+                child: Column(
+                  mainAxisSize:
+                      MainAxisSize.min,
+
+                  mainAxisAlignment:
+                      MainAxisAlignment.end,
+
+                  children: [
+                    // ==================================================
+                    // LOGO
+                    // ==================================================
+
+                    Container(
+                      width: 100,
+                      height: 100,
+
+                      decoration:
+                          BoxDecoration(
+                        color: Colors.white,
+                        borderRadius:
+                            BorderRadius.circular(
+                          30,
+                        ),
+
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black
+                                .withValues(
+                              alpha: 0.20,
+                            ),
+                            blurRadius: 28,
+                            offset:
+                                const Offset(
+                              0,
+                              12,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      child: const Icon(
+                        Icons.restaurant_rounded,
+                        color: laranja,
+                        size: 48,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 12,
+                    ),
+
+                    // ==================================================
+                    // NOME
+                    // ==================================================
+
+                    Text(
+                      widget.nome,
+                      textAlign:
+                          TextAlign.center,
+                      maxLines: 1,
+                      overflow:
+                          TextOverflow.ellipsis,
+
+                      style:
+                          const TextStyle(
+                        color: Colors.white,
+                        fontSize: 25,
+                        fontWeight:
+                            FontWeight.w900,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 7,
+                    ),
+
+                    // ==================================================
+                    // STATUS
+                    // ==================================================
+
+                    _statusPremium(),
+
+                    const SizedBox(
+                      height: 8,
+                    ),
+
+                    // ==================================================
+                    // DESCRIÇÃO
+                    // ==================================================
+
+                    if (widget.descricao
+                        .trim()
+                        .isNotEmpty)
+                      Text(
+                        widget.descricao,
+                        textAlign:
+                            TextAlign.center,
+                        maxLines: 1,
+                        overflow:
+                            TextOverflow.ellipsis,
+
+                        style: TextStyle(
+                          color: Colors.white
+                              .withValues(
+                            alpha: 0.88,
+                          ),
+                          fontSize: 12,
+                        ),
+                      ),
+
+                    const SizedBox(
+                      height: 10,
+                    ),
+
+                    // ==================================================
+                    // INFORMAÇÕES
+                    // ==================================================
+
+                    Wrap(
+                      alignment:
+                          WrapAlignment.center,
+
+                      spacing: 7,
+                      runSpacing: 6,
+
+                      children: [
+                        _informacaoHeader(
+                          Icons.star_rounded,
+                          widget.avaliacao,
+                        ),
+
+                        _informacaoHeader(
+                          Icons.access_time_rounded,
+                          '30–45 min',
+                        ),
+
+                        _informacaoHeader(
+                          Icons.delivery_dining_rounded,
+                          'Entrega',
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // STATUS PREMIUM
+  // ============================================================
+
+  Widget _statusPremium() {
+    return Container(
+      constraints:
+          const BoxConstraints(
+        maxWidth: 280,
+      ),
+
+      padding:
+          const EdgeInsets.symmetric(
+        horizontal: 13,
+        vertical: 7,
+      ),
+
+      decoration:
+          BoxDecoration(
+        color: restauranteOnline
+            ? const Color(0xFF16A34A)
+            : const Color(0xFFDC2626),
+
+        borderRadius:
+            BorderRadius.circular(30),
+      ),
+
+      child: Row(
+        mainAxisSize:
+            MainAxisSize.min,
 
         children: [
           Container(
-            width: 105,
-            height: 105,
-
-            margin:
-                const EdgeInsets.only(
-              bottom: 13,
-            ),
-
-            decoration:
-                BoxDecoration(
-              color: Colors.white,
-
-              borderRadius:
-                  BorderRadius.circular(
-                28,
-              ),
-
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black
-                      .withValues(
-                    alpha: 0.15,
-                  ),
-
-                  blurRadius: 15,
-
-                  offset:
-                      const Offset(
-                    0,
-                    7,
-                  ),
-                ),
-              ],
-            ),
-
-            child: const Icon(
-              Icons.restaurant,
-              color: laranja,
-              size: 52,
-            ),
-          ),
-
-          Text(
-            widget.nome,
-
-            textAlign:
-                TextAlign.center,
-
-            maxLines: 1,
-
-            overflow:
-                TextOverflow.ellipsis,
-
-            style:
-                const TextStyle(
-              color: Colors.white,
-              fontSize: 25,
-              fontWeight:
-                  FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(
+            width: 8,
             height: 8,
-          ),
-
-          // ==================================================
-          // STATUS
-          // ==================================================
-
-          Container(
-            padding:
-                const EdgeInsets
-                    .symmetric(
-              horizontal: 13,
-              vertical: 7,
-            ),
 
             decoration:
-                BoxDecoration(
-              color: restauranteOnline
-                  ? Colors.green
-                      .withValues(
-                      alpha: 0.9,
-                    )
-                  : Colors.red
-                      .withValues(
-                      alpha: 0.9,
-                    ),
-
-              borderRadius:
-                  BorderRadius.circular(
-                20,
-              ),
-            ),
-
-            child: Row(
-              mainAxisSize:
-                  MainAxisSize.min,
-
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-
-                  decoration:
-                      const BoxDecoration(
-                    color: Colors.white,
-                    shape:
-                        BoxShape.circle,
-                  ),
-                ),
-
-                const SizedBox(
-                  width: 6,
-                ),
-
-                Text(
-                  restauranteOnline
-                      ? 'ONLINE • ACEITANDO PEDIDOS'
-                      : 'OFFLINE • PEDIDOS INDISPONÍVEIS',
-
-                  style:
-                      const TextStyle(
-                    color:
-                        Colors.white,
-                    fontSize: 10,
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
-                ),
-              ],
+                const BoxDecoration(
+              color: Colors.white,
+              shape:
+                  BoxShape.circle,
             ),
           ),
 
           const SizedBox(
-            height: 7,
+            width: 7,
           ),
 
-          Padding(
-            padding:
-                const EdgeInsets
-                    .symmetric(
-              horizontal: 25,
-            ),
-
+          Flexible(
             child: Text(
-              widget.descricao,
-
-              textAlign:
-                  TextAlign.center,
+              restauranteOnline
+                  ? 'ONLINE • ACEITANDO PEDIDOS'
+                  : 'OFFLINE • PEDIDOS INDISPONÍVEIS',
 
               maxLines: 1,
 
               overflow:
                   TextOverflow.ellipsis,
 
-              style: TextStyle(
-                color: Colors.white
-                    .withValues(
-                  alpha: 0.9,
-                ),
-
-                fontSize: 13,
+              style:
+                  const TextStyle(
+                color: Colors.white,
+                fontSize: 9.5,
+                fontWeight:
+                    FontWeight.w800,
               ),
-            ),
-          ),
-
-          const SizedBox(
-            height: 13,
-          ),
-
-          Row(
-            mainAxisAlignment:
-                MainAxisAlignment.center,
-
-            children: [
-              _informacaoHeader(
-                Icons.star_rounded,
-                widget.avaliacao,
-              ),
-
-              const SizedBox(
-                width: 12,
-              ),
-
-              _informacaoHeader(
-                Icons.access_time_rounded,
-                '30–45 min',
-              ),
-
-              const SizedBox(
-                width: 12,
-              ),
-
-              _informacaoHeader(
-                Icons.delivery_dining,
-                'Entrega',
-              ),
-            ],
-          ),
-
-          const SizedBox(
-            height: 22,
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ==========================================================
-  // AVISO OFFLINE
-  // ==========================================================
-
-  Widget _avisoRestauranteOffline() {
-    return Container(
-      margin:
-          const EdgeInsets.fromLTRB(
-        16,
-        15,
-        16,
-        0,
-      ),
-
-      padding:
-          const EdgeInsets.all(16),
-
-      decoration:
-          BoxDecoration(
-        color:
-            const Color(0xFFFFEBEE),
-
-        borderRadius:
-            BorderRadius.circular(
-          16,
-        ),
-
-        border: Border.all(
-          color:
-              Colors.red.shade100,
-        ),
-      ),
-
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-
-            decoration:
-                const BoxDecoration(
-              color: Colors.red,
-              shape:
-                  BoxShape.circle,
-            ),
-
-            child: const Icon(
-              Icons.storefront,
-              color:
-                  Colors.white,
-              size: 21,
-            ),
-          ),
-
-          const SizedBox(
-            width: 12,
-          ),
-
-          const Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment
-                      .start,
-
-              children: [
-                Text(
-                  'Restaurante fechado',
-                  style:
-                      TextStyle(
-                    fontWeight:
-                        FontWeight.bold,
-                    fontSize: 15,
-                    color:
-                        Colors.red,
-                  ),
-                ),
-
-                SizedBox(
-                  height: 3,
-                ),
-
-                Text(
-                  'Este restaurante não está aceitando pedidos no momento.',
-                  style:
-                      TextStyle(
-                    color:
-                        Colors.black54,
-                    fontSize: 12,
-                  ),
-                ),
-              ],
             ),
           ),
         ],
@@ -1474,9 +1117,9 @@ class _RestaurantScreenState
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // INFORMAÇÃO HEADER
-  // ==========================================================
+  // ============================================================
 
   Widget _informacaoHeader(
     IconData icon,
@@ -1491,23 +1134,30 @@ class _RestaurantScreenState
 
       decoration:
           BoxDecoration(
-        color: Colors.white
-            .withValues(
-          alpha: 0.16,
+        color: Colors.white.withValues(
+          alpha: 0.14,
         ),
 
         borderRadius:
-            BorderRadius.circular(
-          20,
+            BorderRadius.circular(20),
+
+        border:
+            Border.all(
+          color: Colors.white.withValues(
+            alpha: 0.10,
+          ),
         ),
       ),
 
       child: Row(
+        mainAxisSize:
+            MainAxisSize.min,
+
         children: [
           Icon(
             icon,
             color: Colors.white,
-            size: 15,
+            size: 14,
           ),
 
           const SizedBox(
@@ -1516,13 +1166,12 @@ class _RestaurantScreenState
 
           Text(
             texto,
-
             style:
                 const TextStyle(
               color: Colors.white,
-              fontSize: 11,
+              fontSize: 10,
               fontWeight:
-                  FontWeight.w600,
+                  FontWeight.w700,
             ),
           ),
         ],
@@ -1530,9 +1179,9 @@ class _RestaurantScreenState
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // BOTÃO HEADER
-  // ==========================================================
+  // ============================================================
 
   Widget _botaoHeader({
     required IconData icon,
@@ -1546,11 +1195,9 @@ class _RestaurantScreenState
 
       decoration:
           BoxDecoration(
-        color: Colors.black
-            .withValues(
+        color: Colors.black.withValues(
           alpha: 0.18,
         ),
-
         shape:
             BoxShape.circle,
       ),
@@ -1561,24 +1208,259 @@ class _RestaurantScreenState
         icon: Icon(
           icon,
           color: Colors.white,
-          size: 21,
+          size: 20,
         ),
       ),
     );
   }
 
-  // ==========================================================
-  // CARD PRODUTO
-  // ==========================================================
+  // ============================================================
+  // CONTADOR
+  // ============================================================
+
+  Widget _contadorProdutos() {
+    return Container(
+      padding:
+          const EdgeInsets.symmetric(
+        horizontal: 12,
+        vertical: 7,
+      ),
+
+      decoration:
+          BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(30),
+      ),
+
+      child: Text(
+        '${produtos.length} itens',
+
+        style:
+            const TextStyle(
+          color: laranja,
+          fontSize: 11,
+          fontWeight:
+              FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // CATEGORIAS
+  // ============================================================
+
+  Widget _categorias() {
+    return SizedBox(
+      height: 50,
+
+      child: ListView.separated(
+        padding:
+            const EdgeInsets.symmetric(
+          horizontal: 16,
+        ),
+
+        scrollDirection:
+            Axis.horizontal,
+
+        itemCount:
+            categorias.length,
+
+        separatorBuilder:
+            (_, __) =>
+                const SizedBox(
+          width: 9,
+        ),
+
+        itemBuilder:
+            (_, index) {
+          final categoria =
+              categorias[index];
+
+          final selecionada =
+              categoria ==
+                  categoriaSelecionada;
+
+          return GestureDetector(
+            onTap: () {
+              setState(() {
+                categoriaSelecionada =
+                    categoria;
+              });
+            },
+
+            child:
+                AnimatedContainer(
+              duration:
+                  const Duration(
+                milliseconds: 200,
+              ),
+
+              padding:
+                  const EdgeInsets.symmetric(
+                horizontal: 18,
+                vertical: 11,
+              ),
+
+              decoration:
+                  BoxDecoration(
+                gradient: selecionada
+                    ? const LinearGradient(
+                        colors: [
+                          laranja,
+                          laranjaEscuro,
+                        ],
+                      )
+                    : null,
+
+                color: selecionada
+                    ? null
+                    : Colors.white,
+
+                borderRadius:
+                    BorderRadius.circular(30),
+
+                border:
+                    Border.all(
+                  color: selecionada
+                      ? Colors.transparent
+                      : Colors.black12,
+                ),
+              ),
+
+              child: Text(
+                categoria,
+
+                style: TextStyle(
+                  color: selecionada
+                      ? Colors.white
+                      : Colors.black87,
+
+                  fontSize: 13,
+
+                  fontWeight:
+                      FontWeight.w700,
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ============================================================
+  // OFFLINE
+  // ============================================================
+
+  Widget _avisoRestauranteOffline() {
+    return Container(
+      margin:
+          const EdgeInsets.fromLTRB(
+        16,
+        15,
+        16,
+        0,
+      ),
+
+      padding:
+          const EdgeInsets.all(15),
+
+      decoration:
+          BoxDecoration(
+        color: Colors.white,
+
+        borderRadius:
+            BorderRadius.circular(20),
+
+        border:
+            Border.all(
+          color: Colors.red.withValues(
+            alpha: 0.10,
+          ),
+        ),
+      ),
+
+      child: Row(
+        children: [
+          Container(
+            width: 46,
+            height: 46,
+
+            decoration:
+                BoxDecoration(
+              color: Colors.red.withValues(
+                alpha: 0.10,
+              ),
+              shape:
+                  BoxShape.circle,
+            ),
+
+            child:
+                const Icon(
+              Icons.storefront_rounded,
+              color:
+                  Colors.redAccent,
+            ),
+          ),
+
+          const SizedBox(
+            width: 12,
+          ),
+
+          const Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+
+              children: [
+                Text(
+                  'Restaurante fechado',
+
+                  style: TextStyle(
+                    fontWeight:
+                        FontWeight.w800,
+                    fontSize: 15,
+                    color: Colors.red,
+                  ),
+                ),
+
+                SizedBox(
+                  height: 3,
+                ),
+
+                Text(
+                  'Este restaurante não está aceitando pedidos agora.',
+
+                  style: TextStyle(
+                    color: Colors.black54,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // PRODUTO CARD
+  // ============================================================
 
   Widget produtoCard({
-    required Map<String, dynamic>
-        produto,
+    required Map<String, dynamic> produto,
   }) {
     final nome =
         produto['nome']
-                ?.toString() ??
-            'Produto';
+                    ?.toString()
+                    .trim()
+                    .isNotEmpty ==
+                true
+            ? produto['nome'].toString()
+            : 'Produto';
 
     final descricao =
         produto['descricao']
@@ -1597,80 +1479,90 @@ class _RestaurantScreenState
         produto['id']?.toString();
 
     return Container(
+      width: double.infinity,
+
       margin:
           const EdgeInsets.only(
-        bottom: 13,
+        bottom: 14,
       ),
-
-      padding:
-          const EdgeInsets.all(12),
 
       decoration:
           BoxDecoration(
         color: Colors.white,
 
         borderRadius:
-            BorderRadius.circular(
-          20,
-        ),
+            BorderRadius.circular(24),
 
-        border: Border.all(
-          color: Colors.black
-              .withValues(
-            alpha: 0.04,
+        border:
+            Border.all(
+          color: Colors.black.withValues(
+            alpha: 0.035,
           ),
         ),
 
         boxShadow: [
           BoxShadow(
-            color: Colors.black
-                .withValues(
-              alpha: 0.045,
+            color: Colors.black.withValues(
+              alpha: 0.055,
             ),
 
-            blurRadius: 12,
+            blurRadius: 20,
 
             offset:
-                const Offset(
-              0,
-              4,
-            ),
+                const Offset(0, 8),
           ),
         ],
       ),
 
-      child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+      child: Padding(
+        padding:
+            const EdgeInsets.all(10),
 
-        children: [
-          ClipRRect(
-            borderRadius:
-                BorderRadius.circular(
-              16,
-            ),
+        child: Row(
+          crossAxisAlignment:
+              CrossAxisAlignment.center,
 
-            child:
-                _imagemProduto(
-              imagem,
-            ),
-          ),
+          children: [
+            // ==================================================
+            // IMAGEM
+            // ==================================================
 
-          const SizedBox(
-            width: 13,
-          ),
+            SizedBox(
+              width: 105,
+              height: 105,
 
-          Expanded(
-            child: Padding(
-              padding:
-                  const EdgeInsets.only(
-                top: 2,
+              child: Hero(
+                tag:
+                    'produto_${produtoId ?? nome}',
+
+                child: ClipRRect(
+                  borderRadius:
+                      BorderRadius.circular(20),
+
+                  child:
+                      _imagemProduto(
+                    imagem,
+                    tamanho: 105,
+                  ),
+                ),
               ),
+            ),
 
+            const SizedBox(
+              width: 12,
+            ),
+
+            // ==================================================
+            // INFORMAÇÕES
+            // ==================================================
+
+            Expanded(
               child: Column(
+                mainAxisSize:
+                    MainAxisSize.min,
+
                 crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
+                    CrossAxisAlignment.start,
 
                 children: [
                   Text(
@@ -1679,21 +1571,22 @@ class _RestaurantScreenState
                     maxLines: 2,
 
                     overflow:
-                        TextOverflow
-                            .ellipsis,
+                        TextOverflow.ellipsis,
 
                     style:
                         const TextStyle(
                       fontSize: 16,
+                      height: 1.15,
                       fontWeight:
-                          FontWeight.bold,
+                          FontWeight.w800,
                     ),
                   ),
 
                   if (descricao
+                      .trim()
                       .isNotEmpty) ...[
                     const SizedBox(
-                      height: 6,
+                      height: 7,
                     ),
 
                     Text(
@@ -1702,115 +1595,172 @@ class _RestaurantScreenState
                       maxLines: 2,
 
                       overflow:
-                          TextOverflow
-                              .ellipsis,
+                          TextOverflow.ellipsis,
 
                       style: TextStyle(
-                        color: Colors
-                            .grey
-                            .shade600,
-
+                        color:
+                            Colors.grey.shade600,
                         fontSize: 12,
-
                         height: 1.3,
                       ),
                     ),
                   ],
 
                   const SizedBox(
-                    height: 12,
+                    height: 10,
                   ),
 
-                  Text(
-                    _formatarPreco(
-                      preco,
-                    ),
+                  Row(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.center,
 
-                    style:
-                        const TextStyle(
-                      color: laranja,
-                      fontSize: 17,
-                      fontWeight:
-                          FontWeight.bold,
-                    ),
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _formatarPreco(
+                            preco,
+                          ),
+
+                          maxLines: 1,
+
+                          overflow:
+                              TextOverflow.ellipsis,
+
+                          style:
+                              const TextStyle(
+                            color: laranja,
+                            fontSize: 17,
+                            fontWeight:
+                                FontWeight.w900,
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(
+                        width: 8,
+                      ),
+
+                      _botaoAdicionar(
+                        nome: nome,
+                        preco: preco,
+                        imagem: imagem,
+                        produtoId:
+                            produtoId,
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          ),
-
-          Padding(
-            padding:
-                const EdgeInsets.only(
-              top: 38,
-            ),
-
-            child: GestureDetector(
-              onTap: () {
-                adicionarProduto(
-                  nome: nome,
-                  preco: preco,
-                  imagem: imagem,
-                  produtoId:
-                      produtoId,
-                );
-              },
-
-              child: Container(
-                width: 40,
-                height: 40,
-
-                decoration:
-                    BoxDecoration(
-                  color: restauranteOnline
-                      ? laranja
-                      : Colors.grey
-                          .shade400,
-
-                  shape:
-                      BoxShape.circle,
-                ),
-
-                child: Icon(
-                  restauranteOnline
-                      ? Icons.add
-                      : Icons.lock_outline,
-
-                  color:
-                      Colors.white,
-
-                  size: 23,
-                ),
-              ),
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
-  // ==========================================================
-  // IMAGEM
-  // ==========================================================
+  // ============================================================
+  // BOTÃO ADICIONAR
+  // ============================================================
+
+  Widget _botaoAdicionar({
+    required String nome,
+    required double preco,
+    String? imagem,
+    String? produtoId,
+  }) {
+    return GestureDetector(
+      behavior:
+          HitTestBehavior.opaque,
+
+      onTap: () {
+        adicionarProduto(
+          nome: nome,
+          preco: preco,
+          imagem: imagem,
+          produtoId: produtoId,
+        );
+      },
+
+      child: AnimatedContainer(
+        duration:
+            const Duration(
+          milliseconds: 180,
+        ),
+
+        width: 44,
+        height: 44,
+
+        decoration:
+            BoxDecoration(
+          gradient: restauranteOnline
+              ? const LinearGradient(
+                  colors: [
+                    laranja,
+                    laranjaEscuro,
+                  ],
+                )
+              : null,
+
+          color: restauranteOnline
+              ? null
+              : Colors.grey.shade400,
+
+          shape:
+              BoxShape.circle,
+
+          boxShadow:
+              restauranteOnline
+                  ? [
+                      BoxShadow(
+                        color:
+                            laranja.withValues(
+                          alpha: 0.30,
+                        ),
+                        blurRadius: 12,
+                        offset:
+                            const Offset(
+                          0,
+                          5,
+                        ),
+                      ),
+                    ]
+                  : null,
+        ),
+
+        child: Icon(
+          restauranteOnline
+              ? Icons.add_rounded
+              : Icons.lock_outline_rounded,
+
+          color: Colors.white,
+          size: 25,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // IMAGEM PRODUTO
+  // ============================================================
 
   Widget _imagemProduto(
-    String? imagem,
-  ) {
+    String? imagem, {
+    double tamanho = 105,
+  }) {
     if (imagem == null ||
-        imagem.isEmpty) {
-      return _placeholderImagem();
+        imagem.trim().isEmpty) {
+      return _placeholderImagem(
+        tamanho,
+      );
     }
 
-    final url =
-        _urlImagemProduto(
-      imagem,
-    );
-
     return Image.network(
-      url,
+      _urlImagemProduto(
+        imagem.trim(),
+      ),
 
-      width: 105,
-      height: 105,
+      width: tamanho,
+      height: tamanho,
 
       fit: BoxFit.cover,
 
@@ -1824,7 +1774,9 @@ class _RestaurantScreenState
           return child;
         }
 
-        return _loadingImagem();
+        return _loadingImagem(
+          tamanho,
+        );
       },
 
       errorBuilder:
@@ -1833,95 +1785,113 @@ class _RestaurantScreenState
         error,
         stackTrace,
       ) {
-        return _placeholderImagem();
+        return _placeholderImagem(
+          tamanho,
+        );
       },
     );
   }
 
-  Widget _placeholderImagem() {
+  Widget _placeholderImagem(
+    double tamanho,
+  ) {
     return Container(
-      width: 105,
-      height: 105,
+      width: tamanho,
+      height: tamanho,
 
       decoration:
-          BoxDecoration(
-        color: fundoImagem,
-
-        borderRadius:
-            BorderRadius.circular(
-          16,
+          const BoxDecoration(
+        gradient:
+            LinearGradient(
+          begin:
+              Alignment.topLeft,
+          end:
+              Alignment.bottomRight,
+          colors: [
+            Color(0xFFFFEAD9),
+            Color(0xFFFFD5B5),
+          ],
         ),
       ),
 
       child: const Icon(
         Icons.fastfood_rounded,
         color: laranja,
-        size: 40,
+        size: 42,
       ),
     );
   }
 
-  Widget _loadingImagem() {
+  Widget _loadingImagem(
+    double tamanho,
+  ) {
     return Container(
-      width: 105,
-      height: 105,
+      width: tamanho,
+      height: tamanho,
 
       color: fundoImagem,
 
       child: const Center(
-        child:
-            CircularProgressIndicator(
-          strokeWidth: 2,
-          color: laranja,
+        child: SizedBox(
+          width: 24,
+          height: 24,
+
+          child:
+              CircularProgressIndicator(
+            strokeWidth: 2,
+            color: laranja,
+          ),
         ),
       ),
     );
   }
 
-  // ==========================================================
-  // BOTÃO CARRINHO
-  // ==========================================================
+  // ============================================================
+  // CARRINHO FLUTUANTE
+  // ============================================================
 
   Widget _botaoCarrinho() {
     return GestureDetector(
       onTap: abrirCarrinho,
 
       child: Container(
-        height: 58,
+        height: 64,
 
         margin:
             const EdgeInsets.symmetric(
-          horizontal: 18,
+          horizontal: 16,
         ),
 
         padding:
             const EdgeInsets.symmetric(
-          horizontal: 18,
+          horizontal: 14,
         ),
 
         decoration:
             BoxDecoration(
-          color: laranja,
+          gradient:
+              const LinearGradient(
+            begin:
+                Alignment.centerLeft,
+            end:
+                Alignment.centerRight,
+            colors: [
+              Color(0xFFF97316),
+              Color(0xFFEA580C),
+            ],
+          ),
 
           borderRadius:
-              BorderRadius.circular(
-            18,
-          ),
+              BorderRadius.circular(22),
 
           boxShadow: [
             BoxShadow(
-              color: laranja
-                  .withValues(
-                alpha: 0.35,
+              color: laranja.withValues(
+                alpha: 0.38,
               ),
-
-              blurRadius: 15,
-
+              blurRadius: 24,
               offset:
-                  const Offset(
-                0,
-                6,
-              ),
+                  const Offset(0, 10),
             ),
           ],
         ),
@@ -1929,26 +1899,22 @@ class _RestaurantScreenState
         child: Row(
           children: [
             Container(
-              width: 38,
-              height: 38,
+              width: 43,
+              height: 43,
 
               decoration:
                   BoxDecoration(
-                color: Colors.white
-                    .withValues(
+                color: Colors.white.withValues(
                   alpha: 0.18,
                 ),
-
                 shape:
                     BoxShape.circle,
               ),
 
               child: const Icon(
-                Icons
-                    .shopping_bag_outlined,
-                color:
-                    Colors.white,
-                size: 21,
+                Icons.shopping_bag_rounded,
+                color: Colors.white,
+                size: 22,
               ),
             ),
 
@@ -1959,21 +1925,25 @@ class _RestaurantScreenState
             Expanded(
               child: Column(
                 mainAxisAlignment:
-                    MainAxisAlignment
-                        .center,
+                    MainAxisAlignment.center,
 
                 crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
+                    CrossAxisAlignment.start,
 
                 children: [
                   Text(
                     '$quantidadeItens ${quantidadeItens == 1 ? 'item' : 'itens'}',
 
-                    style:
-                        const TextStyle(
-                      color:
-                          Colors.white,
+                    maxLines: 1,
+
+                    overflow:
+                        TextOverflow.ellipsis,
+
+                    style: TextStyle(
+                      color: Colors.white
+                          .withValues(
+                        alpha: 0.85,
+                      ),
                       fontSize: 11,
                     ),
                   ),
@@ -1983,17 +1953,25 @@ class _RestaurantScreenState
                       totalCarrinho,
                     ),
 
+                    maxLines: 1,
+
+                    overflow:
+                        TextOverflow.ellipsis,
+
                     style:
                         const TextStyle(
-                      color:
-                          Colors.white,
-                      fontSize: 16,
+                      color: Colors.white,
+                      fontSize: 17,
                       fontWeight:
-                          FontWeight.bold,
+                          FontWeight.w900,
                     ),
                   ),
                 ],
               ),
+            ),
+
+            const SizedBox(
+              width: 6,
             ),
 
             const Text(
@@ -2001,25 +1979,20 @@ class _RestaurantScreenState
 
               style:
                   TextStyle(
-                color:
-                    Colors.white,
+                color: Colors.white,
+                fontSize: 14,
                 fontWeight:
-                    FontWeight.bold,
+                    FontWeight.w800,
               ),
             ),
 
             const SizedBox(
-              width: 5,
+              width: 7,
             ),
 
             const Icon(
-              Icons
-                  .arrow_forward_ios,
-
-              color:
-                  Colors.white,
-
-              size: 16,
+              Icons.arrow_forward_rounded,
+              color: Colors.white,
             ),
           ],
         ),
@@ -2027,218 +2000,91 @@ class _RestaurantScreenState
     );
   }
 
-  // ==========================================================
-  // ERRO
-  // ==========================================================
+  // ============================================================
+  // ESTADOS
+  // ============================================================
 
   Widget _estadoErroProdutos() {
-    return Container(
-      margin:
-          const EdgeInsets.all(16),
+    return _estadoBase(
+      icon:
+          Icons.cloud_off_rounded,
 
-      padding:
-          const EdgeInsets.all(30),
+      titulo:
+          'Não foi possível carregar o cardápio',
 
-      decoration:
-          BoxDecoration(
-        color: Colors.white,
+      descricao:
+          'Verifique a conexão com o servidor e tente novamente.',
 
-        borderRadius:
-            BorderRadius.circular(
-          20,
-        ),
-      ),
-
-      child: Column(
-        children: [
-          Container(
-            width: 70,
-            height: 70,
-
-            decoration:
-                const BoxDecoration(
-              color: fundoImagem,
-              shape:
-                  BoxShape.circle,
-            ),
-
-            child: const Icon(
-              Icons
-                  .cloud_off_rounded,
-              color: laranja,
-              size: 34,
-            ),
-          ),
-
-          const SizedBox(
-            height: 15,
-          ),
-
-          const Text(
-            'Não foi possível carregar o cardápio',
-
-            textAlign:
-                TextAlign.center,
-
-            style:
-                TextStyle(
-              fontSize: 17,
-              fontWeight:
-                  FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(
-            height: 7,
-          ),
-
-          const Text(
-            'Verifique a conexão com o servidor e tente novamente.',
-
-            textAlign:
-                TextAlign.center,
-
-            style:
-                TextStyle(
-              color: Colors.black54,
-              height: 1.4,
-            ),
-          ),
-
-          const SizedBox(
-            height: 18,
-          ),
-
+      botao:
           ElevatedButton.icon(
-            onPressed:
-                _carregarProdutos,
+        onPressed:
+            _carregarProdutos,
 
-            icon:
-                const Icon(
-              Icons.refresh,
-            ),
+        icon:
+            const Icon(
+          Icons.refresh_rounded,
+        ),
 
-            label:
-                const Text(
-              'Tentar novamente',
-            ),
+        label:
+            const Text(
+          'Tentar novamente',
+        ),
 
-            style:
-                ElevatedButton
-                    .styleFrom(
-              backgroundColor:
-                  laranja,
+        style:
+            ElevatedButton.styleFrom(
+          backgroundColor:
+              laranja,
 
-              foregroundColor:
-                  Colors.white,
+          foregroundColor:
+              Colors.white,
 
-              elevation: 0,
+          elevation: 0,
 
-              padding:
-                  const EdgeInsets
-                      .symmetric(
-                horizontal: 20,
-                vertical: 13,
-              ),
-
-              shape:
-                  RoundedRectangleBorder(
-                borderRadius:
-                    BorderRadius.circular(
-                  13,
-                ),
-              ),
-            ),
+          padding:
+              const EdgeInsets.symmetric(
+            horizontal: 20,
+            vertical: 13,
           ),
-        ],
+
+          shape:
+              RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(14),
+          ),
+        ),
       ),
     );
   }
-
-  // ==========================================================
-  // VAZIO
-  // ==========================================================
 
   Widget _estadoVazioProdutos() {
-    return Container(
-      margin:
-          const EdgeInsets.all(16),
+    return _estadoBase(
+      icon:
+          Icons.restaurant_menu_rounded,
 
-      padding:
-          const EdgeInsets.all(30),
+      titulo:
+          'Nenhum produto disponível',
 
-      decoration:
-          BoxDecoration(
-        color: Colors.white,
-
-        borderRadius:
-            BorderRadius.circular(
-          20,
-        ),
-      ),
-
-      child: Column(
-        children: [
-          Container(
-            width: 70,
-            height: 70,
-
-            decoration:
-                const BoxDecoration(
-              color: fundoImagem,
-              shape:
-                  BoxShape.circle,
-            ),
-
-            child: const Icon(
-              Icons
-                  .restaurant_menu_outlined,
-              color: laranja,
-              size: 34,
-            ),
-          ),
-
-          const SizedBox(
-            height: 15,
-          ),
-
-          const Text(
-            'Nenhum produto disponível',
-
-            style:
-                TextStyle(
-              fontSize: 17,
-              fontWeight:
-                  FontWeight.bold,
-            ),
-          ),
-
-          const SizedBox(
-            height: 7,
-          ),
-
-          const Text(
-            'Este restaurante ainda não possui produtos disponíveis.',
-
-            textAlign:
-                TextAlign.center,
-
-            style:
-                TextStyle(
-              color: Colors.black54,
-              height: 1.4,
-            ),
-          ),
-        ],
-      ),
+      descricao:
+          'Este restaurante ainda não possui produtos disponíveis.',
     );
   }
 
-  // ==========================================================
-  // VAZIO CATEGORIA
-  // ==========================================================
-
   Widget _estadoVazioCategoria() {
+    return _estadoBase(
+      icon:
+          Icons.search_off_rounded,
+
+      titulo:
+          'Nenhum produto nesta categoria',
+    );
+  }
+
+  Widget _estadoBase({
+    required IconData icon,
+    required String titulo,
+    String? descricao,
+    Widget? botao,
+  }) {
     return Container(
       margin:
           const EdgeInsets.all(16),
@@ -2251,48 +2097,85 @@ class _RestaurantScreenState
         color: Colors.white,
 
         borderRadius:
-            BorderRadius.circular(
-          20,
-        ),
+            BorderRadius.circular(24),
+
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: 0.04,
+            ),
+
+            blurRadius: 20,
+          ),
+        ],
       ),
 
       child: Column(
         children: [
           Container(
-            width: 70,
-            height: 70,
+            width: 76,
+            height: 76,
 
             decoration:
-                const BoxDecoration(
-              color: fundoImagem,
+                BoxDecoration(
+              color: laranja.withValues(
+                alpha: 0.10,
+              ),
+
               shape:
                   BoxShape.circle,
             ),
 
-            child: const Icon(
-              Icons.search_off_rounded,
+            child: Icon(
+              icon,
               color: laranja,
-              size: 34,
+              size: 36,
             ),
           ),
 
           const SizedBox(
-            height: 15,
+            height: 17,
           ),
 
-          const Text(
-            'Nenhum produto nesta categoria',
+          Text(
+            titulo,
 
             textAlign:
                 TextAlign.center,
 
             style:
-                TextStyle(
+                const TextStyle(
               fontSize: 17,
               fontWeight:
-                  FontWeight.bold,
+                  FontWeight.w800,
             ),
           ),
+
+          if (descricao != null) ...[
+            const SizedBox(
+              height: 8,
+            ),
+
+            Text(
+              descricao,
+
+              textAlign:
+                  TextAlign.center,
+
+              style:
+                  const TextStyle(
+                color: Colors.black54,
+                height: 1.4,
+              ),
+            ),
+          ],
+
+          if (botao != null) ...[
+            const SizedBox(
+              height: 20,
+            ),
+            botao,
+          ],
         ],
       ),
     );

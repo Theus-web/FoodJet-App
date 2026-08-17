@@ -19,18 +19,17 @@ class HomeScreen extends StatefulWidget {
   });
 
   @override
-  State<HomeScreen> createState() =>
-      _HomeScreenState();
+  State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
   static const Color laranja = Color(0xFFF97316);
+  static const Color laranjaEscuro = Color(0xFFEA580C);
   static const Color fundo = Color(0xFFF5F5F5);
 
   int _indiceSelecionado = 0;
 
   bool carregandoRestaurantes = true;
-
   String? erroRestaurantes;
 
   List<Map<String, dynamic>> restaurantes = [];
@@ -43,8 +42,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     carregarRestaurantes();
 
-    // Atualiza o status dos restaurantes
-    // automaticamente a cada 10 segundos.
     _timerStatus = Timer.periodic(
       const Duration(seconds: 10),
       (_) {
@@ -80,28 +77,16 @@ class _HomeScreenState extends State<HomeScreen> {
         '${Api.baseUrl}/restaurants',
       );
 
-      debugPrint(
-        '======================================',
-      );
-
-      debugPrint(
-        'FOODJET - BUSCANDO RESTAURANTES',
-      );
-
-      debugPrint(
-        'URL: $url',
-      );
-
-      debugPrint(
-        '======================================',
-      );
+      debugPrint('======================================');
+      debugPrint('FOODJET - BUSCANDO RESTAURANTES');
+      debugPrint('URL: $url');
+      debugPrint('======================================');
 
       final resposta = await http
           .get(
             url,
             headers: {
-              'Content-Type':
-                  'application/json',
+              'Content-Type': 'application/json',
             },
           )
           .timeout(
@@ -123,8 +108,9 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
 
-      final resultado =
-          jsonDecode(resposta.body);
+      final resultado = jsonDecode(
+        resposta.body,
+      );
 
       List<dynamic> lista;
 
@@ -133,13 +119,11 @@ class _HomeScreenState extends State<HomeScreen> {
       } else if (
           resultado is Map &&
           resultado['restaurantes'] is List) {
-        lista =
-            resultado['restaurantes'];
+        lista = resultado['restaurantes'];
       } else if (
           resultado is Map &&
           resultado['restaurants'] is List) {
-        lista =
-            resultado['restaurants'];
+        lista = resultado['restaurants'];
       } else {
         throw Exception(
           'Formato de restaurantes inválido.',
@@ -148,11 +132,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final listaFinal = lista
           .whereType<Map>()
-          .map(
-            (restaurante) =>
-                Map<String, dynamic>.from(
-              restaurante,
-            ),
+          .map<Map<String, dynamic>>(
+            (restaurante) {
+              final mapa =
+                  Map<String, dynamic>.from(
+                restaurante,
+              );
+
+              // ==================================================
+              // NORMALIZAÇÃO DA LOGO
+              // ==================================================
+
+              final logo =
+                  obterLogoRestaurante(mapa);
+
+              mapa['logo'] = logo;
+
+              return mapa;
+            },
           )
           .where(
             (restaurante) {
@@ -167,25 +164,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   restaurante['restauranteNome'];
 
               return id != null &&
-                  id
-                      .toString()
-                      .trim()
-                      .isNotEmpty &&
+                  id.toString().trim().isNotEmpty &&
                   nome != null &&
-                  nome
-                      .toString()
-                      .trim()
-                      .isNotEmpty;
+                  nome.toString().trim().isNotEmpty;
             },
           )
           .toList();
 
-      // ========================================================
-      // DEBUG DOS STATUS
-      // ========================================================
-
-      for (final restaurante
-          in listaFinal) {
+      for (final restaurante in listaFinal) {
         debugPrint(
           '--------------------------------------',
         );
@@ -216,14 +202,17 @@ class _HomeScreenState extends State<HomeScreen> {
         );
 
         debugPrint(
-          '✅ RESULTADO HOME: '
+          '🖼️ LOGO: '
+          '${obterLogoRestaurante(restaurante) ?? 'SEM LOGO'}',
+        );
+
+        debugPrint(
+          '🟢 RESULTADO HOME: '
           '${restauranteAberto(restaurante)}',
         );
       }
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         restaurantes = listaFinal;
@@ -235,13 +224,10 @@ class _HomeScreenState extends State<HomeScreen> {
         '❌ ERRO AO CARREGAR RESTAURANTES: $e',
       );
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       setState(() {
         carregandoRestaurantes = false;
-
         erroRestaurantes =
             'Não foi possível carregar os restaurantes.';
       });
@@ -252,9 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
   // NAVEGAÇÃO
   // ============================================================
 
-  void _selecionarPagina(
-    int indice,
-  ) {
+  void _selecionarPagina(int indice) {
     if (indice == 0) {
       setState(() {
         _indiceSelecionado = 0;
@@ -268,7 +252,9 @@ class _HomeScreenState extends State<HomeScreen> {
         context,
         MaterialPageRoute(
           builder: (context) =>
-              const OrderHistoryScreen(),
+              OrderHistoryScreen(
+            usuario: widget.usuario,
+          ),
         ),
       );
 
@@ -331,10 +317,7 @@ class _HomeScreenState extends State<HomeScreen> {
         restaurante['tipo'];
 
     if (descricao == null ||
-        descricao
-            .toString()
-            .trim()
-            .isEmpty) {
+        descricao.toString().trim().isEmpty) {
       return 'Delícias preparadas especialmente para você';
     }
 
@@ -376,16 +359,102 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // STATUS OFICIAL
+  // LOGO DO RESTAURANTE
   // ============================================================
   //
-  // SOMENTE O CAMPO "status" DA API DEFINE
-  // SE O RESTAURANTE ESTÁ ABERTO OU FECHADO.
+  // PRIORIDADE:
   //
-  // FECHADO = SEMPRE FECHADO
-  // ABERTO   = ABERTO
-  // QUALQUER OUTRO VALOR = FECHADO
+  // 1. logo
+  // 2. logoUrl
+  // 3. imagem
+  // 4. imagemUrl
+  // 5. foto
+  // 6. fotoUrl
   //
+  // Assim a logo cadastrada no Restaurant Settings
+  // será usada automaticamente no App Cliente.
+  //
+  // ============================================================
+
+  String? obterLogoRestaurante(
+    Map<String, dynamic> restaurante,
+  ) {
+    final campos = [
+      'logo',
+      'logoUrl',
+      'imagem',
+      'imagemUrl',
+      'foto',
+      'fotoUrl',
+    ];
+
+    for (final campo in campos) {
+      final valor = restaurante[campo];
+
+      if (valor == null) {
+        continue;
+      }
+
+      final texto = valor.toString().trim();
+
+      if (texto.isEmpty ||
+          texto.toLowerCase() == 'null') {
+        continue;
+      }
+
+      return texto;
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // COMPATIBILIDADE
+  // ============================================================
+
+  String? imagemRestaurante(
+    Map<String, dynamic> restaurante,
+  ) {
+    return obterLogoRestaurante(
+      restaurante,
+    );
+  }
+
+  // ============================================================
+  // URL DA LOGO
+  // ============================================================
+
+  String urlImagemRestaurante(
+    String imagem,
+  ) {
+    final valor = imagem.trim();
+
+    if (valor.isEmpty) {
+      return '';
+    }
+
+    // URL completa
+    if (valor.startsWith('http://') ||
+        valor.startsWith('https://')) {
+      return valor;
+    }
+
+    final baseUrl =
+        Api.baseUrl.replaceFirst(
+      RegExp(r'/api/?$'),
+      '',
+    );
+
+    // Caminho absoluto
+    if (valor.startsWith('/')) {
+      return '$baseUrl$valor';
+    }
+
+    return '$baseUrl/$valor';
+  }
+
+  // ============================================================
+  // STATUS OFICIAL
   // ============================================================
 
   bool restauranteAberto(
@@ -405,68 +474,51 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // ABRIR RESTAURANTE
-  // ============================================================
+// ABRIR RESTAURANTE
+// ============================================================
 
-  void abrirRestaurante(
-    Map<String, dynamic> restaurante,
-  ) {
-    final id =
-        idRestaurante(restaurante);
+void abrirRestaurante(
+  Map<String, dynamic> restaurante,
+) {
+  final id = idRestaurante(restaurante);
 
-    if (id.isEmpty ||
-        id == 'null') {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Este restaurante não possui um ID válido.',
-          ),
-        ),
-      );
-
-      return;
-    }
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) =>
-            RestaurantScreen(
-          nome:
-              nomeRestaurante(
-            restaurante,
-          ),
-          descricao:
-              descricaoRestaurante(
-            restaurante,
-          ),
-          avaliacao:
-              avaliacaoRestaurante(
-            restaurante,
-          ),
-          restauranteId: id,
+  if (id.isEmpty || id == 'null') {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Este restaurante não possui um ID válido.',
         ),
       ),
-    ).then((_) {
-      // Atualiza quando voltar para a Home.
-      carregarRestaurantes(
-        mostrarCarregamento: false,
-      );
-    });
+    );
+
+    return;
   }
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => RestaurantScreen(
+        restauranteId: id,
+        nome: nomeRestaurante(restaurante),
+        descricao: descricaoRestaurante(restaurante),
+        avaliacao: avaliacaoRestaurante(restaurante),
+      ),
+    ),
+  ).then((_) {
+    carregarRestaurantes(
+      mostrarCarregamento: false,
+    );
+  });
+}
 
   // ============================================================
   // BUILD
   // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     final String nomeUsuario =
-        widget.usuario['nome']
-                ?.toString() ??
+        widget.usuario['nome']?.toString() ??
             'Usuário';
 
     return Scaffold(
@@ -500,8 +552,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   'Ipatinga, MG',
                   style: TextStyle(
                     fontSize: 15,
-                    fontWeight:
-                        FontWeight.bold,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
               ],
@@ -539,12 +590,10 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               Text(
                 'Olá, $nomeUsuario! 👋',
-                style:
-                    const TextStyle(
+                style: const TextStyle(
                   color: Colors.black,
                   fontSize: 24,
-                  fontWeight:
-                      FontWeight.bold,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
 
@@ -565,31 +614,24 @@ class _HomeScreenState extends State<HomeScreen> {
               // ==================================================
 
               TextField(
-                decoration:
-                    InputDecoration(
+                decoration: InputDecoration(
                   hintText:
                       'Buscar restaurantes ou pratos',
 
                   prefixIcon:
-                      const Icon(
-                    Icons.search,
-                  ),
+                      const Icon(Icons.search),
 
                   suffixIcon:
-                      const Icon(
-                    Icons.tune,
-                  ),
+                      const Icon(Icons.tune),
 
                   filled: true,
 
-                  fillColor:
-                      Colors.white,
+                  fillColor: Colors.white,
 
                   border:
                       OutlineInputBorder(
                     borderRadius:
-                        BorderRadius
-                            .circular(15),
+                        BorderRadius.circular(15),
                     borderSide:
                         BorderSide.none,
                   ),
@@ -656,8 +698,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   const Expanded(
                     child: Text(
                       'Restaurantes',
-                      style:
-                          TextStyle(
+                      style: TextStyle(
                         fontSize: 20,
                         fontWeight:
                             FontWeight.bold,
@@ -686,21 +727,17 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Padding(
                     padding:
                         EdgeInsets.all(40),
+
                     child:
                         CircularProgressIndicator(
                       color: laranja,
                     ),
                   ),
                 )
-
-              else if (
-                  erroRestaurantes != null)
+              else if (erroRestaurantes != null)
                 _estadoErro()
-
-              else if (
-                  restaurantes.isEmpty)
+              else if (restaurantes.isEmpty)
                 _estadoVazio()
-
               else
                 ...restaurantes.map(
                   (restaurante) =>
@@ -715,9 +752,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
 
-      // ========================================================
+      // ==========================================================
       // CARRINHO
-      // ========================================================
+      // ==========================================================
 
       floatingActionButton:
           FloatingActionButton.extended(
@@ -749,9 +786,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
       ),
 
-      // ========================================================
-      // MENU INFERIOR
-      // ========================================================
+      // ==========================================================
+      // MENU
+      // ==========================================================
 
       bottomNavigationBar:
           BottomNavigationBar(
@@ -772,27 +809,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
         items: const [
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons.home,
-            ),
+            icon:
+                Icon(Icons.home),
             label: 'Início',
           ),
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons.receipt_long,
-            ),
+            icon:
+                Icon(Icons.receipt_long),
             label: 'Pedidos',
           ),
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons.favorite_border,
-            ),
+            icon:
+                Icon(Icons.favorite_border),
             label: 'Favoritos',
           ),
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons.person_outline,
-            ),
+            icon:
+                Icon(Icons.person_outline),
             label: 'Perfil',
           ),
         ],
@@ -827,14 +860,12 @@ class _HomeScreenState extends State<HomeScreen> {
               color: Colors.white,
 
               borderRadius:
-                  BorderRadius.circular(
-                35,
-              ),
+                  BorderRadius.circular(35),
 
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black
-                      .withValues(
+                  color:
+                      Colors.black.withValues(
                     alpha: 0.05,
                   ),
                   blurRadius: 5,
@@ -893,12 +924,13 @@ class _HomeScreenState extends State<HomeScreen> {
       restaurante,
     );
 
-    // ==========================================================
-    // STATUS OFICIAL
-    // ==========================================================
-
     final aberto =
         restauranteAberto(
+      restaurante,
+    );
+
+    final logo =
+        obterLogoRestaurante(
       restaurante,
     );
 
@@ -913,28 +945,24 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.white,
 
         borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
+            BorderRadius.circular(20),
 
         boxShadow: [
           BoxShadow(
             color:
                 Colors.black.withValues(
-              alpha: 0.05,
+              alpha: 0.055,
             ),
-            blurRadius: 8,
+            blurRadius: 12,
             offset:
-                const Offset(0, 3),
+                const Offset(0, 4),
           ),
         ],
       ),
 
       child: InkWell(
         borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
+            BorderRadius.circular(20),
 
         onTap: () {
           abrirRestaurante(
@@ -965,16 +993,80 @@ class _HomeScreenState extends State<HomeScreen> {
 
                   borderRadius:
                       BorderRadius.circular(
-                    16,
+                    17,
                   ),
+
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          Colors.black
+                              .withValues(
+                        alpha: 0.06,
+                      ),
+                      blurRadius: 8,
+                      offset:
+                          const Offset(
+                        0,
+                        3,
+                      ),
+                    ),
+                  ],
                 ),
 
-                child:
-                    const Icon(
-                  Icons.restaurant,
-                  color: laranja,
-                  size: 40,
-                ),
+                clipBehavior:
+                    Clip.antiAlias,
+
+                child: logo != null
+                    ? Image.network(
+                        urlImagemRestaurante(
+                          logo,
+                        ),
+
+                        width: 82,
+                        height: 82,
+
+                        fit: BoxFit.cover,
+
+                        cacheWidth: 300,
+                        cacheHeight: 300,
+
+                        loadingBuilder:
+                            (
+                          context,
+                          child,
+                          progress,
+                        ) {
+                          if (progress ==
+                              null) {
+                            return child;
+                          }
+
+                          return const Center(
+                            child:
+                                SizedBox(
+                              width: 24,
+                              height: 24,
+                              child:
+                                  CircularProgressIndicator(
+                                strokeWidth:
+                                    2,
+                                color:
+                                    laranja,
+                              ),
+                            ),
+                          );
+                        },
+
+                        errorBuilder:
+                            (
+                          _,
+                          __,
+                          ___,
+                        ) {
+                          return _logoPadrao();
+                        },
+                      )
+                    : _logoPadrao(),
               ),
 
               const SizedBox(
@@ -988,16 +1080,16 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: Column(
                   crossAxisAlignment:
-                      CrossAxisAlignment
-                          .start,
+                      CrossAxisAlignment.start,
 
                   children: [
                     Text(
                       nome,
+
                       maxLines: 1,
+
                       overflow:
-                          TextOverflow
-                              .ellipsis,
+                          TextOverflow.ellipsis,
 
                       style:
                           const TextStyle(
@@ -1015,26 +1107,24 @@ class _HomeScreenState extends State<HomeScreen> {
 
                     Text(
                       descricao,
+
                       maxLines: 2,
+
                       overflow:
-                          TextOverflow
-                              .ellipsis,
+                          TextOverflow.ellipsis,
 
                       style: TextStyle(
                         color:
                             Colors.grey
                                 .shade600,
                         fontSize: 12,
+                        height: 1.3,
                       ),
                     ),
 
                     const SizedBox(
                       height: 9,
                     ),
-
-                    // ==================================================
-                    // AVALIAÇÃO + STATUS
-                    // ==================================================
 
                     Row(
                       children: [
@@ -1088,7 +1178,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               TextStyle(
                             color: aberto
                                 ? Colors.green
-                                : Colors.orange,
+                                : Colors.red,
 
                             fontSize: 12,
 
@@ -1106,16 +1196,45 @@ class _HomeScreenState extends State<HomeScreen> {
                 width: 5,
               ),
 
-              const Icon(
-                Icons
-                    .arrow_forward_ios,
-                color:
-                    Colors.black38,
-                size: 17,
+              Container(
+                width: 34,
+                height: 34,
+
+                decoration:
+                    BoxDecoration(
+                  color:
+                      laranja.withValues(
+                    alpha: 0.08,
+                  ),
+                  shape:
+                      BoxShape.circle,
+                ),
+
+                child:
+                    const Icon(
+                  Icons
+                      .arrow_forward_ios_rounded,
+                  color: laranja,
+                  size: 15,
+                ),
               ),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // LOGO PADRÃO
+  // ============================================================
+
+  Widget _logoPadrao() {
+    return const Center(
+      child: Icon(
+        Icons.restaurant_rounded,
+        color: laranja,
+        size: 40,
       ),
     );
   }
@@ -1146,7 +1265,9 @@ class _HomeScreenState extends State<HomeScreen> {
             size: 55,
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(
+            height: 12,
+          ),
 
           const Text(
             'Não foi possível carregar os restaurantes.',
@@ -1161,7 +1282,9 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          const SizedBox(height: 15),
+          const SizedBox(
+            height: 15,
+          ),
 
           ElevatedButton.icon(
             onPressed:
@@ -1219,7 +1342,9 @@ class _HomeScreenState extends State<HomeScreen> {
             size: 60,
           ),
 
-          const SizedBox(height: 15),
+          const SizedBox(
+            height: 15,
+          ),
 
           const Text(
             'Nenhum restaurante disponível',
@@ -1234,10 +1359,13 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          const SizedBox(height: 7),
+          const SizedBox(
+            height: 7,
+          ),
 
           Text(
             'Quando um novo restaurante for cadastrado no FoodJet, ele aparecerá aqui automaticamente.',
+
             textAlign:
                 TextAlign.center,
 
