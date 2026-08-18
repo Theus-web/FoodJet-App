@@ -1,21 +1,26 @@
 const Order = require("../models/order");
 const Restaurant = require("../models/restaurant");
 
+
 // ======================================================
 // FUNÇÃO AUXILIAR
 // NORMALIZAR ID
 // ======================================================
 
 function normalizarId(id) {
-    if (id === undefined || id === null) {
+
+    if (
+        id === undefined ||
+        id === null
+    ) {
         return "";
     }
 
     return String(id).trim();
 }
 
+
 // ======================================================
-// FUNÇÃO AUXILIAR
 // SALVAR PEDIDOS
 // ======================================================
 
@@ -24,18 +29,24 @@ async function salvarPedidos(pedidos) {
     const { db } =
         require("../config/database");
 
-    // Garantir que a estrutura exista
+
     if (!db.data) {
+
         db.data = {};
+
     }
+
 
     db.data.pedidos =
         Array.isArray(pedidos)
             ? pedidos
             : [];
 
+
     await db.write();
+
 }
+
 
 
 // ======================================================
@@ -43,52 +54,50 @@ async function salvarPedidos(pedidos) {
 // POST /api/orders
 // ======================================================
 
-exports.create = async (req, res) => {
+exports.create = async (
+    req,
+    res
+) => {
+
 
     try {
 
-        // ==================================================
-        // DADOS RECEBIDOS
-        // ==================================================
 
         const restauranteId =
             normalizarId(
                 req.body.restauranteId
             );
 
+
         const clienteId =
             normalizarId(
                 req.body.clienteId
             );
 
+
         const itens =
-            Array.isArray(req.body.itens)
-                ? req.body.itens
-                : [];
+            Array.isArray(
+                req.body.itens
+            )
+            ? req.body.itens
+            : [];
 
 
-        // ==================================================
-        // VALIDAR RESTAURANTE
-        // ==================================================
 
         if (!restauranteId) {
 
             return res.status(400).json({
 
-                sucesso: false,
-
-                restauranteOffline: false,
+                sucesso:false,
 
                 erro:
-                    "restauranteId é obrigatório"
+                "restauranteId é obrigatório"
 
             });
+
         }
 
 
-        // ==================================================
-        // BUSCAR RESTAURANTE
-        // ==================================================
 
         const restaurante =
             await Restaurant.buscarPorId(
@@ -96,470 +105,373 @@ exports.create = async (req, res) => {
             );
 
 
+
         if (!restaurante) {
 
-            console.log(
-                "❌ RESTAURANTE NÃO ENCONTRADO:",
-                restauranteId
-            );
 
             return res.status(404).json({
 
-                sucesso: false,
-
-                restauranteOffline: false,
+                sucesso:false,
 
                 erro:
-                    "Restaurante não encontrado"
+                "Restaurante não encontrado"
 
             });
+
+
         }
 
 
-        // ==================================================
-        // NORMALIZAR STATUS
-        // ==================================================
 
-        const status =
+        const statusRestaurante =
             String(
                 restaurante.status || ""
             )
-                .trim()
-                .toUpperCase();
+            .toUpperCase();
 
 
-        // ==================================================
-        // NORMALIZAR ONLINE
-        // ==================================================
 
         const online =
             restaurante.online === true ||
             String(
                 restaurante.online
-            ).trim().toLowerCase() === "true";
+            )
+            .toLowerCase() === "true";
 
 
-        // ==================================================
-        // NORMALIZAR ABERTO
-        // ==================================================
 
         const aberto =
             restaurante.aberto === true ||
             String(
                 restaurante.aberto
-            ).trim().toLowerCase() === "true";
+            )
+            .toLowerCase() === "true";
 
 
-        // ==================================================
-        // LOG
-        // ==================================================
-
-        console.log(
-            "=========================================="
-        );
-
-        console.log(
-            "🔎 VERIFICAÇÃO DO RESTAURANTE"
-        );
-
-        console.log(
-            "🏪 ID:",
-            restauranteId
-        );
-
-        console.log(
-            "🏪 NOME:",
-            restaurante.nome
-        );
-
-        console.log(
-            "📌 STATUS:",
-            status
-        );
-
-        console.log(
-            "🟢 ONLINE:",
-            online
-        );
-
-        console.log(
-            "🚪 ABERTO:",
-            aberto
-        );
-
-        console.log(
-            "=========================================="
-        );
 
 
-        // ==================================================
-        // VERIFICAR SE ESTÁ DISPONÍVEL
-        // ==================================================
-
-        const restauranteDisponivel =
-            status === "ABERTO" &&
-            online === true &&
-            aberto === true;
+        const disponivel =
+            statusRestaurante === "ABERTO" &&
+            online &&
+            aberto;
 
 
-        if (!restauranteDisponivel) {
 
-            console.log(
-                "🔴 PEDIDO BLOQUEADO"
-            );
+        if (!disponivel) {
+
 
             return res.status(409).json({
 
-                sucesso: false,
+                sucesso:false,
 
-                restauranteOffline: true,
+                restauranteOffline:true,
 
                 erro:
-                    "O restaurante está offline e não está aceitando pedidos.",
-
-                mensagem:
-                    "Este restaurante está fechado no momento. Tente novamente mais tarde.",
-
-                restaurante: {
-
-                    id:
-                        restaurante.id,
-
-                    nome:
-                        restaurante.nome,
-
-                    status:
-                        status || "FECHADO",
-
-                    online:
-                        online,
-
-                    aberto:
-                        aberto
-
-                }
+                "Restaurante offline"
 
             });
+
+
         }
 
 
-        // ==================================================
-        // VALIDAR ITENS
-        // ==================================================
 
-        if (itens.length === 0) {
+        if (
+            itens.length === 0
+        ) {
+
 
             return res.status(400).json({
 
-                sucesso: false,
-
-                restauranteOffline: false,
+                sucesso:false,
 
                 erro:
-                    "O pedido precisa ter pelo menos um produto."
+                "Pedido sem itens"
 
             });
+
+
         }
 
 
-        // ==================================================
-        // CRIAR PEDIDO
-        // ==================================================
+
 
         const pedido = {
 
+
             id:
-                Date.now(),
+            Date.now(),
 
-            clienteId:
-                clienteId,
 
-            restauranteId:
-                restauranteId,
 
-            itens:
-                itens,
+            clienteId,
+
+
+
+            restauranteId,
+
+
+
+            itens,
+
+
 
             endereco:
-                req.body.endereco || {},
+            req.body.endereco || {},
+
+
 
             pagamento:
-                req.body.pagamento || "PIX",
+            req.body.pagamento || "PIX",
+
+
 
             subtotal:
-                Number(
-                    req.body.subtotal
-                ) || 0,
+            Number(
+                req.body.subtotal
+            ) || 0,
+
+
 
             taxaEntrega:
-                Number(
-                    req.body.taxaEntrega
-                ) || 0,
+            Number(
+                req.body.taxaEntrega
+            ) || 0,
+
+
 
             total:
-                Number(
-                    req.body.total
-                ) || 0,
+            Number(
+                req.body.total
+            ) || 0,
+
+
 
             status:
-                "AGUARDANDO_RESTAURANTE",
+            "AGUARDANDO_RESTAURANTE",
+
+
 
             criadoEm:
-                new Date().toISOString()
+            new Date().toISOString()
+
 
         };
 
 
-        // ==================================================
-        // SALVAR
-        // ==================================================
+
+
 
         await Order.criar(
             pedido
         );
 
 
-        // ==================================================
-        // WEBSOCKET
-        // AVISAR RESTAURANTE
-        // ==================================================
+
+
+
+        // =============================================
+        // SOCKET NOVO PEDIDO
+        // =============================================
+
 
         if (global.io) {
 
-            const salaRestaurante =
-                `restaurante_${restauranteId}`;
+
+            const sala =
+            `restaurante_${restauranteId}`;
+
 
 
             global.io
-                .to(salaRestaurante)
-                .emit(
-                    "novo_pedido",
-                    pedido
-                );
+            .to(sala)
+            .emit(
+                "novo_pedido",
+                pedido
+            );
+
 
 
             console.log(
-                "🔔 NOVO PEDIDO ENVIADO PARA A SALA:",
-                salaRestaurante
+                "🔔 Pedido enviado:",
+                sala
             );
 
-        } else {
-
-            console.log(
-                "⚠️ global.io não está disponível."
-            );
 
         }
 
 
-        // ==================================================
-        // LOG
-        // ==================================================
-
-        console.log(
-            "=========================================="
-        );
-
-        console.log(
-            "📦 NOVO PEDIDO CRIADO"
-        );
-
-        console.log(
-            "🆔 ID:",
-            pedido.id
-        );
-
-        console.log(
-            "🏪 RESTAURANTE:",
-            pedido.restauranteId
-        );
-
-        console.log(
-            "👤 CLIENTE:",
-            pedido.clienteId
-        );
-
-        console.log(
-            "💰 TOTAL:",
-            pedido.total
-        );
-
-        console.log(
-            "📌 STATUS:",
-            pedido.status
-        );
-
-        console.log(
-            "=========================================="
-        );
 
 
-        // ==================================================
-        // RESPOSTA
-        // ==================================================
 
         return res.status(201).json({
 
-            sucesso: true,
-
-            restauranteOffline: false,
+            sucesso:true,
 
             mensagem:
-                "Pedido criado com sucesso",
+            "Pedido criado com sucesso",
 
-            pedido:
-                pedido
+            pedido
+
 
         });
 
 
-    } catch (erro) {
+
+
+
+    } catch(error) {
+
 
         console.error(
-            "❌ ERRO AO CRIAR PEDIDO:",
-            erro
+            "❌ ERRO CREATE PEDIDO:",
+            error
         );
+
+
 
         return res.status(500).json({
 
-            sucesso: false,
-
-            restauranteOffline: false,
+            sucesso:false,
 
             erro:
-                "Erro ao criar pedido",
+            "Erro ao criar pedido",
 
             detalhes:
-                erro.message
+            error.message
+
 
         });
 
+
     }
+
+
 };
+
+
 
 
 // ======================================================
 // LISTAR TODOS OS PEDIDOS
-// GET /api/orders
 // ======================================================
 
-exports.list = async (req, res) => {
+exports.list = async (
+    req,
+    res
+)=>{
 
-    try {
+
+    try{
+
 
         const pedidos =
-            await Order.listar();
+        await Order.listar();
 
-        return res.status(200).json(
+
+
+        return res.json(
+
             Array.isArray(pedidos)
-                ? pedidos
-                : []
+            ? pedidos
+            : []
+
         );
 
-    } catch (erro) {
 
-        console.error(
-            "❌ ERRO AO LISTAR PEDIDOS:",
-            erro
-        );
+
+    }catch(error){
+
 
         return res.status(500).json({
 
-            sucesso: false,
-
             erro:
-                "Erro ao listar pedidos",
-
-            detalhes:
-                erro.message
+            "Erro ao listar pedidos"
 
         });
 
+
     }
+
+
 };
 
 
+
+
 // ======================================================
-// BUSCAR PEDIDO PELO ID
-// GET /api/orders/:id
+// BUSCAR PEDIDO POR ID
 // ======================================================
 
-exports.getById = async (req, res) => {
+exports.getById = async (
+    req,
+    res
+)=>{
 
-    try {
+
+    try{
+
 
         const id =
-            Number(
-                req.params.id
-            );
+        Number(
+            req.params.id
+        );
 
-
-        if (!Number.isFinite(id)) {
-
-            return res.status(400).json({
-
-                sucesso: false,
-
-                erro:
-                    "ID do pedido inválido"
-
-            });
-        }
 
 
         const pedido =
-            await Order.buscarPorId(
-                id
-            );
+        await Order.buscarPorId(
+            id
+        );
 
 
-        if (!pedido) {
+
+        if(!pedido){
+
 
             return res.status(404).json({
 
-                sucesso: false,
-
                 erro:
-                    "Pedido não encontrado"
+                "Pedido não encontrado"
 
             });
+
+
         }
 
 
-        return res.status(200).json(
+
+        return res.json(
             pedido
         );
 
 
-    } catch (erro) {
 
-        console.error(
-            "❌ ERRO AO BUSCAR PEDIDO:",
-            erro
-        );
+    }catch(error){
+
 
         return res.status(500).json({
 
-            sucesso: false,
-
             erro:
-                "Erro interno ao buscar pedido",
-
-            detalhes:
-                erro.message
+            "Erro ao buscar pedido"
 
         });
 
-    }
-};
 
+    }
+
+
+};
 
 // ======================================================
 // ATUALIZAR STATUS DO PEDIDO
 // PUT /api/orders/:id/status
 // ======================================================
 
-exports.updateStatus = async (req, res) => {
+exports.updateStatus = async (
+    req,
+    res
+) => {
 
     try {
 
@@ -567,6 +479,7 @@ exports.updateStatus = async (req, res) => {
             Number(
                 req.params.id
             );
+
 
         const novoStatus =
             String(
@@ -574,30 +487,20 @@ exports.updateStatus = async (req, res) => {
             ).trim();
 
 
+
         if (!Number.isFinite(id)) {
 
             return res.status(400).json({
 
-                sucesso: false,
+                sucesso:false,
 
                 erro:
-                    "ID do pedido inválido"
+                "ID inválido"
 
             });
+
         }
 
-
-        if (!novoStatus) {
-
-            return res.status(400).json({
-
-                sucesso: false,
-
-                erro:
-                    "Status não informado"
-
-            });
-        }
 
 
         const pedido =
@@ -606,60 +509,51 @@ exports.updateStatus = async (req, res) => {
             );
 
 
+
         if (!pedido) {
 
             return res.status(404).json({
 
-                sucesso: false,
+                sucesso:false,
 
                 erro:
-                    "Pedido não encontrado"
+                "Pedido não encontrado"
 
             });
+
         }
 
 
-        // ==================================================
-        // ATUALIZAR
-        // ==================================================
 
         pedido.status =
             novoStatus;
+
 
         pedido.atualizadoEm =
             new Date().toISOString();
 
 
-        // ==================================================
-        // SALVAR
-        // ==================================================
 
         const pedidos =
             await Order.listar();
 
 
+
         const index =
             pedidos.findIndex(
                 item =>
-                    Number(item.id) === id
+                Number(item.id) === id
             );
 
 
-        if (index === -1) {
 
-            return res.status(404).json({
+        if(index !== -1){
 
-                sucesso: false,
+            pedidos[index] =
+                pedido;
 
-                erro:
-                    "Pedido não encontrado no banco"
-
-            });
         }
 
-
-        pedidos[index] =
-            pedido;
 
 
         await salvarPedidos(
@@ -667,83 +561,65 @@ exports.updateStatus = async (req, res) => {
         );
 
 
-        // ==================================================
-        // AVISAR CLIENTE
-        // ==================================================
 
-        if (global.io) {
+        if(global.io){
 
             global.io.emit(
                 "status_pedido_atualizado",
                 pedido
             );
 
-            console.log(
-                "📡 STATUS ENVIADO AO CLIENTE:",
-                pedido.id,
-                pedido.status
-            );
         }
 
 
-        // ==================================================
-        // RESPOSTA
-        // ==================================================
 
-        return res.status(200).json({
+        return res.json({
 
-            sucesso: true,
+            sucesso:true,
 
             mensagem:
-                "Status atualizado com sucesso",
+            "Status atualizado",
 
-            pedido:
-                pedido
+            pedido
 
         });
 
 
-    } catch (erro) {
 
-        console.error(
-            "❌ ERRO AO ATUALIZAR STATUS:",
-            erro
-        );
+    }catch(error){
+
+
+        console.error(error);
+
 
         return res.status(500).json({
 
-            sucesso: false,
-
             erro:
-                "Erro ao atualizar status",
-
-            detalhes:
-                erro.message
+            "Erro atualizar status"
 
         });
 
+
     }
+
 };
 
 
+
+
 // ======================================================
-// BUSCAR PEDIDOS DO RESTAURANTE
+// PEDIDOS DO RESTAURANTE
 // GET /api/orders/restaurante/:id
 // ======================================================
 
-exports.restaurantOrders = async (req, res) => {
+exports.restaurantOrders = async (
+    req,
+    res
+)=>{
 
-    try {
 
-        // ==================================================
-        // IMPORTANTE:
-        // NÃO USAR Number() AQUI
-        //
-        // O FoodJet usa IDs como:
-        //
-        // rest_1786542500158
-        //
-        // ==================================================
+    try{
+
 
         const restauranteId =
             normalizarId(
@@ -751,163 +627,127 @@ exports.restaurantOrders = async (req, res) => {
             );
 
 
-        if (!restauranteId) {
-
-            return res.status(400).json({
-
-                sucesso: false,
-
-                erro:
-                    "ID do restaurante não informado"
-
-            });
-        }
-
-
-        console.log(
-            "=========================================="
-        );
-
-        console.log(
-            "🔎 BUSCANDO PEDIDOS DO RESTAURANTE"
-        );
-
-        console.log(
-            "🏪 RESTAURANTE:",
-            restauranteId
-        );
-
 
         const pedidos =
             await Order.listar();
 
 
+
         const resultado =
-            (Array.isArray(pedidos)
-                ? pedidos
-                : []
-            ).filter(
-                pedido => {
-
-                    const pedidoRestauranteId =
-                        normalizarId(
-                            pedido.restauranteId
-                        );
-
-                    return (
-                        pedidoRestauranteId ===
-                        restauranteId
-                    );
-
-                }
+            pedidos.filter(
+                pedido =>
+                normalizarId(
+                    pedido.restauranteId
+                )
+                === restauranteId
             );
 
 
-        console.log(
-            "📦 TOTAL DE PEDIDOS:",
-            resultado.length
-        );
 
-        console.log(
-            "=========================================="
-        );
-
-
-        return res.status(200).json(
+        return res.json(
             resultado
         );
 
 
-    } catch (erro) {
 
-        console.error(
-            "❌ ERRO AO BUSCAR PEDIDOS DO RESTAURANTE:",
-            erro
-        );
+    }catch(error){
+
 
         return res.status(500).json({
 
-            sucesso: false,
-
             erro:
-                "Erro ao buscar pedidos do restaurante",
-
-            detalhes:
-                erro.message
+            "Erro buscar pedidos restaurante"
 
         });
 
+
     }
+
+
 };
+
+
 
 
 // ======================================================
 // PEDIDOS DISPONÍVEIS PARA ENTREGA
-// GET /api/orders/delivery/available
 // ======================================================
 
-exports.availableDeliveries = async (req, res) => {
+exports.availableDeliveries =
+async (
+    req,
+    res
+)=>{
 
-    try {
+
+    try{
+
 
         const pedidos =
             await Order.listar();
 
 
-        const disponiveis =
-            (Array.isArray(pedidos)
-                ? pedidos
-                : []
-            ).filter(
-                pedido =>
-                    String(
-                        pedido.status || ""
-                    ).trim().toUpperCase() ===
-                    "PRONTO"
-            );
 
+        const resultado =
+        pedidos.filter(
 
-        return res.status(200).json(
-            disponiveis
+            pedido =>
+
+            String(
+                pedido.status
+            )
+            .toUpperCase()
+            ===
+            "PRONTO"
+
         );
 
 
-    } catch (erro) {
 
-        console.error(
-            "❌ ERRO AO BUSCAR PEDIDOS DISPONÍVEIS:",
-            erro
+        return res.json(
+            resultado
         );
+
+
+
+    }catch(error){
+
 
         return res.status(500).json({
 
-            sucesso: false,
-
             erro:
-                "Erro ao buscar pedidos disponíveis",
-
-            detalhes:
-                erro.message
+            "Erro buscar entregas"
 
         });
 
+
     }
+
+
 };
 
 
+
+
 // ======================================================
-// ENTREGADOR ACEITA O PEDIDO
-// PUT /api/orders/:id/accept-delivery
+// ENTREGADOR ACEITA PEDIDO
 // ======================================================
 
-exports.acceptDelivery = async (req, res) => {
+exports.acceptDelivery =
+async (
+    req,
+    res
+)=>{
 
-    try {
+
+    try{
+
 
         const id =
             Number(
                 req.params.id
             );
+
 
         const entregadorId =
             normalizarId(
@@ -915,31 +755,6 @@ exports.acceptDelivery = async (req, res) => {
             );
 
 
-        if (!Number.isFinite(id)) {
-
-            return res.status(400).json({
-
-                sucesso: false,
-
-                erro:
-                    "ID do pedido inválido"
-
-            });
-        }
-
-
-        if (!entregadorId) {
-
-            return res.status(400).json({
-
-                sucesso: false,
-
-                erro:
-                    "ID do entregador não informado"
-
-            });
-        }
-
 
         const pedido =
             await Order.buscarPorId(
@@ -947,50 +762,46 @@ exports.acceptDelivery = async (req, res) => {
             );
 
 
-        if (!pedido) {
+
+        if(!pedido){
 
             return res.status(404).json({
 
-                sucesso: false,
-
                 erro:
-                    "Pedido não encontrado"
+                "Pedido não encontrado"
 
             });
+
         }
 
 
-        // ==================================================
-        // ATUALIZAR
-        // ==================================================
 
         pedido.entregadorId =
             entregadorId;
 
+
+
         pedido.status =
             "EM_ENTREGA";
 
-        pedido.aceitoEm =
-            new Date().toISOString();
 
 
         const pedidos =
             await Order.listar();
 
 
+
         const index =
             pedidos.findIndex(
-                item =>
-                    Number(item.id) === id
+                p =>
+                Number(p.id)===id
             );
 
 
-        if (index !== -1) {
 
-            pedidos[index] =
-                pedido;
+        pedidos[index] =
+            pedido;
 
-        }
 
 
         await salvarPedidos(
@@ -998,11 +809,8 @@ exports.acceptDelivery = async (req, res) => {
         );
 
 
-        // ==================================================
-        // AVISAR CLIENTE
-        // ==================================================
 
-        if (global.io) {
+        if(global.io){
 
             global.io.emit(
                 "status_pedido_atualizado",
@@ -1012,68 +820,55 @@ exports.acceptDelivery = async (req, res) => {
         }
 
 
-        return res.status(200).json({
 
-            sucesso: true,
+        return res.json({
 
-            mensagem:
-                "Pedido aceito pelo entregador",
+            sucesso:true,
 
-            pedido:
-                pedido
+            pedido
 
         });
 
 
-    } catch (erro) {
 
-        console.error(
-            "❌ ERRO AO ACEITAR PEDIDO:",
-            erro
-        );
+    }catch(error){
+
 
         return res.status(500).json({
 
-            sucesso: false,
-
             erro:
-                "Erro ao aceitar pedido",
-
-            detalhes:
-                erro.message
+            "Erro aceitar entrega"
 
         });
 
+
     }
+
+
 };
+
+
 
 
 // ======================================================
 // FINALIZAR ENTREGA
-// PUT /api/orders/:id/complete
 // ======================================================
 
-exports.completeDelivery = async (req, res) => {
+exports.completeDelivery =
+async (
+    req,
+    res
+)=>{
 
-    try {
+
+    try{
+
 
         const id =
             Number(
                 req.params.id
             );
 
-
-        if (!Number.isFinite(id)) {
-
-            return res.status(400).json({
-
-                sucesso: false,
-
-                erro:
-                    "ID do pedido inválido"
-
-            });
-        }
 
 
         const pedido =
@@ -1082,43 +877,46 @@ exports.completeDelivery = async (req, res) => {
             );
 
 
-        if (!pedido) {
+
+        if(!pedido){
 
             return res.status(404).json({
 
-                sucesso: false,
-
                 erro:
-                    "Pedido não encontrado"
+                "Pedido não encontrado"
 
             });
+
         }
+
 
 
         pedido.status =
             "ENTREGUE";
 
+
+
         pedido.entregueEm =
             new Date().toISOString();
+
 
 
         const pedidos =
             await Order.listar();
 
 
+
         const index =
             pedidos.findIndex(
-                item =>
-                    Number(item.id) === id
+                p =>
+                Number(p.id)===id
             );
 
 
-        if (index !== -1) {
 
-            pedidos[index] =
-                pedido;
+        pedidos[index] =
+            pedido;
 
-        }
 
 
         await salvarPedidos(
@@ -1126,11 +924,8 @@ exports.completeDelivery = async (req, res) => {
         );
 
 
-        // ==================================================
-        // AVISAR CLIENTE
-        // ==================================================
 
-        if (global.io) {
+        if(global.io){
 
             global.io.emit(
                 "status_pedido_atualizado",
@@ -1140,236 +935,401 @@ exports.completeDelivery = async (req, res) => {
         }
 
 
-        console.log(
-            "✅ PEDIDO ENTREGUE:",
-            id
-        );
 
+        return res.json({
 
-        return res.status(200).json({
-
-            sucesso: true,
+            sucesso:true,
 
             mensagem:
-                "Entrega finalizada com sucesso",
+            "Entrega finalizada",
 
-            pedido:
-                pedido
+            pedido
 
         });
 
 
-    } catch (erro) {
 
-        console.error(
-            "❌ ERRO AO FINALIZAR ENTREGA:",
-            erro
-        );
+    }catch(error){
+
 
         return res.status(500).json({
 
-            sucesso: false,
-
             erro:
-                "Erro ao finalizar entrega",
-
-            detalhes:
-                erro.message
+            "Erro finalizar entrega"
 
         });
 
+
     }
+
+
 };
 
-
 // ======================================================
-// EXCLUIR PEDIDO
-// DELETE /api/orders/:id
+// PEDIDOS DO CLIENTE
+// GET /api/orders/cliente/:id
 // ======================================================
 
-exports.deleteOrder = async (req, res) => {
+exports.clientOrders = async (req, res) => {
 
     try {
 
-        const id =
-            Number(
+        const clienteId =
+            normalizarId(
                 req.params.id
             );
 
 
-        if (!Number.isFinite(id)) {
+        if (!clienteId) {
 
             return res.status(400).json({
 
-                sucesso: false,
+                sucesso:false,
 
                 erro:
-                    "ID do pedido inválido"
+                "Cliente não informado"
 
             });
+
         }
 
-
-        // ==================================================
-        // BUSCAR PEDIDO
-        // ==================================================
-
-        const pedido =
-            await Order.buscarPorId(
-                id
-            );
-
-
-        if (!pedido) {
-
-            return res.status(404).json({
-
-                sucesso: false,
-
-                erro:
-                    "Pedido não encontrado"
-
-            });
-        }
-
-
-        // ==================================================
-        // LISTAR
-        // ==================================================
 
         const pedidos =
             await Order.listar();
 
 
-        // ==================================================
-        // REMOVER
-        // ==================================================
-
-        const pedidosAtualizados =
+        const resultado =
             pedidos.filter(
-                item =>
-                    Number(item.id) !== id
+                pedido =>
+                    normalizarId(
+                        pedido.clienteId
+                    ) === clienteId
             );
 
 
-        // ==================================================
-        // SALVAR
-        // ==================================================
-
-        await salvarPedidos(
-            pedidosAtualizados
+        return res.status(200).json(
+            resultado
         );
 
 
-        // ==================================================
-        // AVISAR APLICATIVOS
-        // ==================================================
+    } catch(error) {
 
-        if (global.io) {
-
-            const evento =
-                {
-
-                    id:
-                        id,
-
-                    restauranteId:
-                        pedido.restauranteId,
-
-                    clienteId:
-                        pedido.clienteId
-
-                };
+        console.error(
+            "Erro pedidos cliente:",
+            error
+        );
 
 
-            global.io.emit(
-                "pedido_excluido",
-                evento
+        return res.status(500).json({
+
+            sucesso:false,
+
+            erro:
+            "Erro ao buscar pedidos do cliente"
+
+        });
+
+    }
+
+};
+
+
+
+// ======================================================
+// RESTAURANTE ACEITA PEDIDO
+// PUT /api/orders/:id/accept
+// ======================================================
+
+exports.acceptRestaurant = async(req,res)=>{
+
+    try{
+
+        const id =
+            Number(req.params.id);
+
+
+        const pedido =
+            await Order.buscarPorId(id);
+
+
+        if(!pedido){
+
+            return res.status(404).json({
+
+                erro:
+                "Pedido não encontrado"
+
+            });
+
+        }
+
+
+        pedido.status =
+            "EM_PREPARO";
+
+
+        pedido.aceitoRestauranteEm =
+            new Date().toISOString();
+
+
+
+        const pedidos =
+            await Order.listar();
+
+
+
+        const index =
+            pedidos.findIndex(
+                p =>
+                Number(p.id)===id
             );
 
 
-            // Também avisa especificamente
-            // o restaurante
-
-            const salaRestaurante =
-                `restaurante_${pedido.restauranteId}`;
+        pedidos[index]=pedido;
 
 
-            global.io
-                .to(salaRestaurante)
-                .emit(
-                    "pedido_excluido",
-                    evento
-                );
+        await salvarPedidos(
+            pedidos
+        );
 
 
-            console.log(
-                "📡 PEDIDO EXCLUÍDO PELO SOCKET:",
-                id
+        if(global.io){
+
+            global.io.emit(
+                "status_pedido_atualizado",
+                pedido
             );
 
         }
 
 
-        console.log(
-            "=========================================="
-        );
 
-        console.log(
-            "🗑️ PEDIDO EXCLUÍDO"
-        );
+        return res.json({
 
-        console.log(
-            "🆔 ID:",
-            id
-        );
+            sucesso:true,
 
-        console.log(
-            "🏪 RESTAURANTE:",
-            pedido.restauranteId
-        );
-
-        console.log(
-            "👤 CLIENTE:",
-            pedido.clienteId
-        );
-
-        console.log(
-            "=========================================="
-        );
-
-
-        return res.status(200).json({
-
-            sucesso: true,
-
-            mensagem:
-                "Pedido excluído com sucesso",
-
-            pedidoId:
-                id
+            pedido
 
         });
 
 
-    } catch (erro) {
 
-        console.error(
-            "❌ ERRO AO EXCLUIR PEDIDO:",
-            erro
-        );
+    }catch(error){
 
         return res.status(500).json({
 
-            sucesso: false,
-
             erro:
-                "Erro ao excluir pedido",
-
-            detalhes:
-                erro.message
+            error.message
 
         });
 
     }
+
+};
+
+
+
+// ======================================================
+// RESTAURANTE RECUSA PEDIDO
+// PUT /api/orders/:id/reject
+// ======================================================
+
+exports.rejectRestaurant = async(req,res)=>{
+
+    try{
+
+
+        const id =
+            Number(req.params.id);
+
+
+
+        const pedido =
+            await Order.buscarPorId(id);
+
+
+
+        if(!pedido){
+
+            return res.status(404).json({
+
+                erro:
+                "Pedido não encontrado"
+
+            });
+
+        }
+
+
+
+        pedido.status =
+            "CANCELADO";
+
+
+        pedido.canceladoEm =
+            new Date().toISOString();
+
+
+
+        const pedidos =
+            await Order.listar();
+
+
+
+        const index =
+            pedidos.findIndex(
+                p =>
+                Number(p.id)===id
+            );
+
+
+
+        pedidos[index]=pedido;
+
+
+
+        await salvarPedidos(
+            pedidos
+        );
+
+
+
+        if(global.io){
+
+            global.io.emit(
+                "status_pedido_atualizado",
+                pedido
+            );
+
+        }
+
+
+
+        return res.json({
+
+            sucesso:true,
+
+            mensagem:
+            "Pedido recusado",
+
+            pedido
+
+        });
+
+
+
+    }catch(error){
+
+
+        return res.status(500).json({
+
+            erro:
+            error.message
+
+        });
+
+    }
+
+};
+
+
+
+
+// ======================================================
+// ABRIR SUPORTE DO PEDIDO
+// POST /api/orders/:id/support
+// ======================================================
+
+exports.openSupport = async(req,res)=>{
+
+
+    try{
+
+
+        const id =
+            Number(req.params.id);
+
+
+
+        const pedido =
+            await Order.buscarPorId(id);
+
+
+
+        if(!pedido){
+
+            return res.status(404).json({
+
+                erro:
+                "Pedido não encontrado"
+
+            });
+
+        }
+
+
+
+        pedido.suporte = {
+
+            aberto:true,
+
+            mensagem:
+            req.body.mensagem || 
+            "Solicitação de suporte",
+
+            criadoEm:
+            new Date().toISOString()
+
+        };
+
+
+
+        const pedidos =
+            await Order.listar();
+
+
+
+        const index =
+            pedidos.findIndex(
+                p =>
+                Number(p.id)===id
+            );
+
+
+
+        pedidos[index]=pedido;
+
+
+
+        await salvarPedidos(
+            pedidos
+        );
+
+
+
+        return res.json({
+
+            sucesso:true,
+
+            mensagem:
+            "Suporte aberto",
+
+            pedido
+
+        });
+
+
+
+    }catch(error){
+
+
+        return res.status(500).json({
+
+            erro:
+            error.message
+
+        });
+
+    }
+
 };

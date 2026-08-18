@@ -7,6 +7,15 @@ const { Server } = require("socket.io");
 
 const { conectar } = require("./config/database");
 
+const promotionRoutes =
+require("./routes/promotion_routes");
+
+
+app.use(
+ "/api/promocoes",
+ promotionRoutes
+);
+
 // ============================================================
 // CONFIGURAÇÕES
 // ============================================================

@@ -7,7 +7,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../config/api.dart';
 import '../cart/cart_screen.dart';
-import 'restaurant_orders_screen.dart';
 
 class RestaurantScreen extends StatefulWidget {
   final String restauranteId;
@@ -36,12 +35,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   final List<CartItem> carrinho = [];
 
+  Timer? _timerStatus;
+
   bool favorito = false;
   bool carregandoProdutos = true;
   bool restauranteOnline = false;
   bool carregandoStatus = true;
-
-  Timer? _timerStatus;
 
   String? erroProdutos;
 
@@ -49,17 +48,40 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   String categoriaSelecionada = 'Todos';
 
+  // ============================================================
+  // LOGO DO RESTAURANTE
+  // ============================================================
+
+  String? logoRestaurante;
+
+  String? logoBase64;
+
+  // ============================================================
+  // INICIALIZAÇÃO
+  // ============================================================
+
   @override
   void initState() {
     super.initState();
 
-    _salvarRestauranteSelecionado();
-    _carregarProdutos();
-    _verificarStatusRestaurante();
+    _inicializar();
+  }
+
+  Future<void> _inicializar() async {
+    await _salvarRestauranteSelecionado();
+
+    await Future.wait([
+      _carregarProdutos(),
+      _verificarStatusRestaurante(),
+    ]);
+
+    if (!mounted) return;
 
     _timerStatus = Timer.periodic(
       const Duration(seconds: 10),
-      (_) => _verificarStatusRestaurante(),
+      (_) {
+        _verificarStatusRestaurante();
+      },
     );
   }
 
@@ -85,8 +107,15 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         'restauranteSelecionadoId',
         id,
       );
+
+      await prefs.setString(
+        'restauranteId',
+        id,
+      );
     } catch (e) {
-      debugPrint('Erro ao salvar restaurante: $e');
+      debugPrint(
+        'Erro ao salvar restaurante selecionado: $e',
+      );
     }
   }
 
@@ -98,18 +127,33 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     dynamic valor, {
     bool padrao = false,
   }) {
-    if (valor == null) return padrao;
+    if (valor == null) {
+      return padrao;
+    }
 
-    if (valor is bool) return valor;
+    if (valor is bool) {
+      return valor;
+    }
 
-    final texto = valor.toString().trim().toLowerCase();
+    if (valor is num) {
+      return valor != 0;
+    }
+
+    final texto = valor
+        .toString()
+        .trim()
+        .toLowerCase();
 
     if ([
       'true',
       '1',
       'sim',
+      'yes',
       'aberto',
       'online',
+      'ativo',
+      'disponivel',
+      'disponível',
     ].contains(texto)) {
       return true;
     }
@@ -119,8 +163,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       '0',
       'nao',
       'não',
+      'no',
       'fechado',
       'offline',
+      'inativo',
+      'indisponivel',
+      'indisponível',
     ].contains(texto)) {
       return false;
     }
@@ -129,7 +177,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
-  // STATUS
+  // STATUS + DADOS DO RESTAURANTE
   // ============================================================
 
   Future<void> _verificarStatusRestaurante() async {
@@ -147,12 +195,15 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     }
 
     try {
+      final uri = Uri.parse(
+        '${Api.baseUrl}/restaurants/$restauranteId',
+      );
+
       final resposta = await http
           .get(
-            Uri.parse(
-              '${Api.baseUrl}/restaurants/$restauranteId',
-            ),
+            uri,
             headers: {
+              'Accept': 'application/json',
               'Content-Type': 'application/json',
             },
           )
@@ -160,7 +211,28 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             const Duration(seconds: 10),
           );
 
-      if (resposta.statusCode != 200) {
+      debugPrint(
+        'STATUS RESTAURANTE: ${resposta.statusCode}',
+      );
+
+      debugPrint(
+        'RESPOSTA RESTAURANTE: ${resposta.body}',
+      );
+
+      if (resposta.statusCode < 200 ||
+          resposta.statusCode >= 300) {
+        if (!mounted) return;
+
+        setState(() {
+          carregandoStatus = false;
+        });
+
+        return;
+      }
+
+      final dados = jsonDecode(resposta.body);
+
+      if (dados is! Map) {
         if (!mounted) return;
 
         setState(() {
@@ -171,36 +243,116 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         return;
       }
 
-      final dados = jsonDecode(resposta.body);
+      Map<String, dynamic> restaurante;
 
-      if (dados is! Map) return;
+      if (dados['restaurante'] is Map) {
+        restaurante = Map<String, dynamic>.from(
+          dados['restaurante'] as Map,
+        );
+      } else if (dados['restaurant'] is Map) {
+        restaurante = Map<String, dynamic>.from(
+          dados['restaurant'] as Map,
+        );
+      } else {
+        restaurante = Map<String, dynamic>.from(
+          dados,
+        );
+      }
 
-      final restaurante =
-          dados['restaurante'] is Map
-              ? Map<String, dynamic>.from(
-                  dados['restaurante'],
-                )
-              : Map<String, dynamic>.from(dados);
+      // ========================================================
+      // BUSCAR LOGO REAL DO RESTAURANTE
+      // ========================================================
 
-      final status =
-          restaurante['status']
-                  ?.toString()
-                  .trim()
-                  .toUpperCase() ??
-              '';
+      String? logo;
+
+      final possiveisLogos = [
+        restaurante['logo'],
+        restaurante['logoUrl'],
+        restaurante['imagem'],
+        restaurante['imagemUrl'],
+        restaurante['foto'],
+        restaurante['fotoUrl'],
+      ];
+
+      for (final valor in possiveisLogos) {
+        if (valor != null &&
+            valor.toString().trim().isNotEmpty) {
+          logo = valor.toString().trim();
+          break;
+        }
+      }
+
+      String? base64Logo;
+
+      final possiveisBase64 = [
+        restaurante['logoBase64'],
+        restaurante['imagemBase64'],
+        restaurante['fotoBase64'],
+      ];
+
+      for (final valor in possiveisBase64) {
+        if (valor != null &&
+            valor.toString().trim().isNotEmpty) {
+          base64Logo = valor.toString().trim();
+          break;
+        }
+      }
+
+      final status = restaurante['status']
+              ?.toString()
+              .trim()
+              .toUpperCase() ??
+          '';
 
       final online = _converterBooleano(
         restaurante['online'],
+        padrao: true,
       );
 
       final aberto = _converterBooleano(
         restaurante['aberto'],
+        padrao: true,
       );
 
-      final disponivel =
-          status == 'ABERTO' &&
-          online &&
-          aberto;
+      final ativo = _converterBooleano(
+        restaurante['ativo'],
+        padrao: true,
+      );
+
+      bool disponivel;
+
+      if (status.isNotEmpty) {
+        final statusAberto = [
+          'ABERTO',
+          'ONLINE',
+          'ATIVO',
+          'DISPONIVEL',
+          'DISPONÍVEL',
+        ].contains(status);
+
+        final statusFechado = [
+          'FECHADO',
+          'OFFLINE',
+          'INATIVO',
+          'INDISPONIVEL',
+          'INDISPONÍVEL',
+        ].contains(status);
+
+        if (statusFechado) {
+          disponivel = false;
+        } else {
+          disponivel =
+              statusAberto &&
+              online &&
+              aberto &&
+              ativo;
+        }
+      } else {
+        disponivel =
+            online &&
+            aberto &&
+            ativo;
+      }
 
       if (!mounted) return;
 
@@ -209,7 +361,19 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       setState(() {
         restauranteOnline = disponivel;
         carregandoStatus = false;
+
+        if (logo != null) {
+          logoRestaurante = logo;
+        }
+
+        if (base64Logo != null) {
+          logoBase64 = base64Logo;
+        }
       });
+
+      // ========================================================
+      // LIMPAR CARRINHO SOMENTE SE REALMENTE FICOU OFFLINE
+      // ========================================================
 
       if (estavaOnline &&
           !disponivel &&
@@ -218,24 +382,20 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           carrinho.clear();
         });
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'O restaurante ficou fechado. O carrinho foi atualizado.',
-            ),
-            backgroundColor: Colors.redAccent,
-          ),
+        _mensagem(
+          'O restaurante ficou fechado. O carrinho foi atualizado.',
+          vermelho: true,
+          duracao: const Duration(seconds: 2),
         );
       }
     } catch (e) {
       debugPrint(
-        'Erro ao verificar restaurante: $e',
+        'Erro ao verificar status do restaurante: $e',
       );
 
       if (!mounted) return;
 
       setState(() {
-        restauranteOnline = false;
         carregandoStatus = false;
       });
     }
@@ -246,12 +406,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   // ============================================================
 
   Future<void> _carregarProdutos() async {
-    if (mounted) {
-      setState(() {
-        carregandoProdutos = true;
-        erroProdutos = null;
-      });
-    }
+    if (!mounted) return;
+
+    setState(() {
+      carregandoProdutos = true;
+      erroProdutos = null;
+    });
 
     try {
       final restauranteId =
@@ -263,12 +423,15 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         );
       }
 
+      final uri = Uri.parse(
+        '${Api.baseUrl}/products',
+      );
+
       final resposta = await http
           .get(
-            Uri.parse(
-              '${Api.baseUrl}/products',
-            ),
+            uri,
             headers: {
+              'Accept': 'application/json',
               'Content-Type': 'application/json',
             },
           )
@@ -276,10 +439,18 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             const Duration(seconds: 15),
           );
 
+      debugPrint(
+        'PRODUTOS STATUS: ${resposta.statusCode}',
+      );
+
+      debugPrint(
+        'PRODUTOS RESPOSTA: ${resposta.body}',
+      );
+
       if (resposta.statusCode < 200 ||
           resposta.statusCode >= 300) {
         throw Exception(
-          'Erro ${resposta.statusCode}',
+          'Erro HTTP ${resposta.statusCode}',
         );
       }
 
@@ -287,31 +458,66 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         resposta.body,
       );
 
-      if (resultado is! List) {
+      List<dynamic> listaProdutos;
+
+      if (resultado is List) {
+        listaProdutos = resultado;
+      } else if (resultado is Map &&
+          resultado['produtos'] is List) {
+        listaProdutos =
+            resultado['produtos'] as List;
+      } else if (resultado is Map &&
+          resultado['products'] is List) {
+        listaProdutos =
+            resultado['products'] as List;
+      } else if (resultado is Map &&
+          resultado['data'] is List) {
+        listaProdutos =
+            resultado['data'] as List;
+      } else {
         throw Exception(
-          'Resposta inválida da API.',
+          'Formato de resposta inválido.',
         );
       }
 
-      final produtosApi = resultado
-          .whereType<Map>()
-          .map(
-            (produto) =>
-                Map<String, dynamic>.from(
-              produto,
-            ),
-          )
-          .where(
-            (produto) =>
-                produto['restauranteId']
-                    ?.toString() ==
-                restauranteId,
-          )
-          .where(
-            (produto) =>
-                produto['disponivel'] != false,
-          )
-          .toList();
+      final produtosApi =
+          <Map<String, dynamic>>[];
+
+      for (final item in listaProdutos) {
+        if (item is! Map) continue;
+
+        final produto =
+            Map<String, dynamic>.from(item);
+
+        final idProduto =
+            produto['restauranteId'] ??
+            produto['restaurantId'] ??
+            produto['restaurante_id'];
+
+        if (idProduto == null) {
+          continue;
+        }
+
+        if (idProduto.toString().trim() !=
+            restauranteId) {
+          continue;
+        }
+
+        final disponivel =
+            _converterBooleano(
+          produto['disponivel'],
+          padrao: true,
+        );
+
+        if (!disponivel) {
+          continue;
+        }
+
+        produto['restauranteId'] =
+            idProduto.toString();
+
+        produtosApi.add(produto);
+      }
 
       if (!mounted) return;
 
@@ -325,6 +531,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           categoriaSelecionada = 'Todos';
         }
       });
+
+      debugPrint(
+        'PRODUTOS DO RESTAURANTE: ${produtos.length}',
+      );
     } catch (e) {
       debugPrint(
         'Erro ao buscar produtos: $e',
@@ -348,10 +558,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     final conjunto = <String>{};
 
     for (final produto in produtos) {
-      final categoria =
-          produto['categoria']
-              ?.toString()
-              .trim();
+      final categoria = produto['categoria']
+          ?.toString()
+          .trim();
 
       if (categoria != null &&
           categoria.isNotEmpty) {
@@ -386,8 +595,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           (produto) =>
               produto['categoria']
                   ?.toString()
+                  .trim()
                   .toLowerCase() ==
               categoriaSelecionada
+                  .trim()
                   .toLowerCase(),
         )
         .toList();
@@ -402,20 +613,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       favorito = !favorito;
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          favorito
-              ? '${widget.nome} adicionado aos favoritos ❤️'
-              : '${widget.nome} removido dos favoritos',
-        ),
-        backgroundColor: laranja,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-        duration: const Duration(seconds: 1),
-      ),
+    _mensagem(
+      favorito
+          ? '${widget.nome} adicionado aos favoritos ❤️'
+          : '${widget.nome} removido dos favoritos',
     );
   }
 
@@ -437,6 +638,17 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       return;
     }
 
+    final restauranteId =
+        widget.restauranteId.trim();
+
+    if (restauranteId.isEmpty) {
+      _mensagem(
+        'Não foi possível identificar o restaurante.',
+        vermelho: true,
+      );
+      return;
+    }
+
     setState(() {
       final index = carrinho.indexWhere(
         (item) =>
@@ -453,8 +665,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             nome: nome,
             preco: preco,
             imagem: imagem,
-            restauranteId:
-                widget.restauranteId,
+            restauranteId: restauranteId,
           ),
         );
       }
@@ -465,25 +676,39 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     );
   }
 
+  // ============================================================
+  // MENSAGEM
+  // ============================================================
+
   void _mensagem(
     String texto, {
     bool vermelho = false,
+    Duration duracao =
+        const Duration(seconds: 1),
   }) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(texto),
-        backgroundColor:
-            vermelho
-                ? Colors.redAccent
-                : laranja,
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(texto),
+          backgroundColor:
+              vermelho
+                  ? Colors.redAccent
+                  : laranja,
+          behavior:
+              SnackBarBehavior.floating,
+          margin:
+              const EdgeInsets.all(16),
+          shape:
+              RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(18),
+          ),
+          duration: duracao,
         ),
-        duration: const Duration(seconds: 1),
-      ),
-    );
+      );
   }
 
   // ============================================================
@@ -548,30 +773,44 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   // PREÇO
   // ============================================================
 
-  double _precoProduto(
-    dynamic valor,
-  ) {
+  double _precoProduto(dynamic valor) {
     if (valor is num) {
       return valor.toDouble();
     }
 
+    final texto =
+        valor?.toString().trim() ?? '';
+
+    if (texto.isEmpty) {
+      return 0;
+    }
+
+    String normalizado;
+
+    if (texto.contains(',')) {
+      normalizado = texto
+          .replaceAll('R\$', '')
+          .replaceAll(' ', '')
+          .replaceAll('.', '')
+          .replaceAll(',', '.');
+    } else {
+      normalizado = texto
+          .replaceAll('R\$', '')
+          .replaceAll(' ', '');
+    }
+
     return double.tryParse(
-          valor
-                  ?.toString()
-                  .replaceAll(',', '.') ??
-              '',
+          normalizado,
         ) ??
         0;
   }
 
-  String _formatarPreco(
-    double preco,
-  ) {
+  String _formatarPreco(double preco) {
     return 'R\$ ${preco.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 
   // ============================================================
-  // IMAGEM
+  // URL IMAGEM
   // ============================================================
 
   String _urlImagemProduto(
@@ -596,6 +835,74 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
+  // URL LOGO
+  // ============================================================
+
+  String _urlLogo(
+    String imagem,
+  ) {
+    final valor = imagem.trim();
+
+    if (valor.startsWith('http://') ||
+        valor.startsWith('https://')) {
+      return valor;
+    }
+
+    final baseUrl =
+        Api.baseUrl.replaceFirst(
+      RegExp(r'/api/?$'),
+      '',
+    );
+
+    if (valor.startsWith('/')) {
+      return '$baseUrl$valor';
+    }
+
+    return '$baseUrl/$valor';
+  }
+
+  // ============================================================
+  // LOGO BASE64
+  // ============================================================
+
+  Widget? _logoBase64Widget() {
+    if (logoBase64 == null ||
+        logoBase64!.trim().isEmpty) {
+      return null;
+    }
+
+    try {
+      String base64String =
+          logoBase64!.trim();
+
+      if (base64String.contains(',')) {
+        base64String =
+            base64String.split(',').last;
+      }
+
+      final bytes =
+          base64Decode(base64String);
+
+      return Image.memory(
+        bytes,
+        width: 100,
+        height: 100,
+        fit: BoxFit.cover,
+        errorBuilder:
+            (_, __, ___) {
+          return _iconeLogo();
+        },
+      );
+    } catch (e) {
+      debugPrint(
+        'Erro ao carregar logoBase64: $e',
+      );
+
+      return null;
+    }
+  }
+
+  // ============================================================
   // BUILD
   // ============================================================
 
@@ -603,22 +910,20 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: fundo,
-
       body: RefreshIndicator(
         color: laranja,
-
         onRefresh: () async {
-          await _carregarProdutos();
-          await _verificarStatusRestaurante();
+          await Future.wait([
+            _carregarProdutos(),
+            _verificarStatusRestaurante(),
+          ]);
         },
-
         child: CustomScrollView(
           physics:
               const AlwaysScrollableScrollPhysics(),
-
           slivers: [
             // ==================================================
-            // HEADER CORRIGIDO
+            // HEADER
             // ==================================================
 
             SliverAppBar(
@@ -628,14 +933,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               scrolledUnderElevation: 0,
               backgroundColor: laranja,
               foregroundColor: Colors.white,
-
               leading: _botaoHeader(
                 icon:
                     Icons.arrow_back_ios_new_rounded,
-                onPressed: () =>
-                    Navigator.pop(context),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
               ),
-
               actions: [
                 _botaoHeader(
                   icon: favorito
@@ -644,31 +948,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                   onPressed:
                       alternarFavorito,
                 ),
-
-                const SizedBox(width: 4),
-
-                _botaoHeader(
-                  icon:
-                      Icons.receipt_long_rounded,
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            const RestaurantOrdersScreen(),
-                      ),
-                    );
-                  },
-                ),
-
                 const SizedBox(width: 8),
               ],
-
               flexibleSpace:
                   FlexibleSpaceBar(
                 collapseMode:
                     CollapseMode.parallax,
-
                 background:
                     _cabecalhoRestaurante(),
               ),
@@ -686,7 +971,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               ),
 
             // ==================================================
-            // TÍTULO CARDÁPIO
+            // CARDÁPIO
             // ==================================================
 
             SliverToBoxAdapter(
@@ -698,7 +983,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                   18,
                   12,
                 ),
-
                 child: Row(
                   children: [
                     const Expanded(
@@ -712,7 +996,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                         ),
                       ),
                     ),
-
                     if (produtos.isNotEmpty)
                       _contadorProdutos(),
                   ],
@@ -775,7 +1058,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                   16,
                   140,
                 ),
-
                 sliver: SliverList(
                   delegate:
                       SliverChildBuilderDelegate(
@@ -788,7 +1070,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                             produtosFiltrados[index],
                       );
                     },
-
                     childCount:
                         produtosFiltrados.length,
                   ),
@@ -799,7 +1080,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       ),
 
       // ========================================================
-      // CARRINHO FLUTUANTE
+      // CARRINHO
       // ========================================================
 
       floatingActionButton:
@@ -814,7 +1095,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
-  // HEADER RESTAURANTE — CORRIGIDO
+  // HEADER DO RESTAURANTE
   // ============================================================
 
   Widget _cabecalhoRestaurante() {
@@ -832,10 +1113,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           ],
         ),
       ),
-
       child: Stack(
         children: [
-          // Círculo decorativo superior
           Positioned(
             right: -70,
             top: 40,
@@ -844,7 +1123,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               height: 210,
               decoration:
                   BoxDecoration(
-                color: Colors.white.withValues(
+                color:
+                    Colors.white.withValues(
                   alpha: 0.08,
                 ),
                 shape:
@@ -853,7 +1133,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             ),
           ),
 
-          // Círculo decorativo inferior
           Positioned(
             left: -90,
             bottom: -70,
@@ -862,7 +1141,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               height: 230,
               decoration:
                   BoxDecoration(
-                color: Colors.black.withValues(
+                color:
+                    Colors.black.withValues(
                   alpha: 0.07,
                 ),
                 shape:
@@ -871,175 +1151,208 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             ),
           ),
 
-          // ==================================================
-          // CONTEÚDO ADAPTÁVEL
-          // ==================================================
-
           Align(
             alignment:
                 Alignment.bottomCenter,
+            child: Padding(
+              padding:
+                  const EdgeInsets.fromLTRB(
+                20,
+                78,
+                20,
+                22,
+              ),
+              child: Column(
+                mainAxisSize:
+                    MainAxisSize.min,
+                children: [
+                  // ==================================================
+                  // LOGO REAL DO RESTAURANTE
+                  // ==================================================
 
-            child: SingleChildScrollView(
-              physics:
-                  const NeverScrollableScrollPhysics(),
+                  _logoRestaurante(),
 
-              child: Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(
-                  20,
-                  78,
-                  20,
-                  22,
-                ),
+                  const SizedBox(height: 12),
 
-                child: Column(
-                  mainAxisSize:
-                      MainAxisSize.min,
+                  // ==================================================
+                  // NOME
+                  // ==================================================
 
-                  mainAxisAlignment:
-                      MainAxisAlignment.end,
-
-                  children: [
-                    // ==================================================
-                    // LOGO
-                    // ==================================================
-
-                    Container(
-                      width: 100,
-                      height: 100,
-
-                      decoration:
-                          BoxDecoration(
-                        color: Colors.white,
-                        borderRadius:
-                            BorderRadius.circular(
-                          30,
-                        ),
-
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black
-                                .withValues(
-                              alpha: 0.20,
-                            ),
-                            blurRadius: 28,
-                            offset:
-                                const Offset(
-                              0,
-                              12,
-                            ),
-                          ),
-                        ],
-                      ),
-
-                      child: const Icon(
-                        Icons.restaurant_rounded,
-                        color: laranja,
-                        size: 48,
-                      ),
+                  Text(
+                    widget.nome,
+                    textAlign:
+                        TextAlign.center,
+                    maxLines: 1,
+                    overflow:
+                        TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(
+                      color: Colors.white,
+                      fontSize: 25,
+                      fontWeight:
+                          FontWeight.w900,
                     ),
+                  ),
 
-                    const SizedBox(
-                      height: 12,
-                    ),
+                  const SizedBox(height: 7),
 
-                    // ==================================================
-                    // NOME
-                    // ==================================================
+                  // STATUS
 
+                  _statusPremium(),
+
+                  const SizedBox(height: 8),
+
+                  // DESCRIÇÃO
+
+                  if (widget.descricao
+                      .trim()
+                      .isNotEmpty)
                     Text(
-                      widget.nome,
+                      widget.descricao,
                       textAlign:
                           TextAlign.center,
                       maxLines: 1,
                       overflow:
                           TextOverflow.ellipsis,
-
-                      style:
-                          const TextStyle(
-                        color: Colors.white,
-                        fontSize: 25,
-                        fontWeight:
-                            FontWeight.w900,
+                      style: TextStyle(
+                        color:
+                            Colors.white.withValues(
+                          alpha: 0.88,
+                        ),
+                        fontSize: 12,
                       ),
                     ),
 
-                    const SizedBox(
-                      height: 7,
-                    ),
+                  const SizedBox(height: 10),
 
-                    // ==================================================
-                    // STATUS
-                    // ==================================================
+                  // INFORMAÇÕES
 
-                    _statusPremium(),
-
-                    const SizedBox(
-                      height: 8,
-                    ),
-
-                    // ==================================================
-                    // DESCRIÇÃO
-                    // ==================================================
-
-                    if (widget.descricao
-                        .trim()
-                        .isNotEmpty)
-                      Text(
-                        widget.descricao,
-                        textAlign:
-                            TextAlign.center,
-                        maxLines: 1,
-                        overflow:
-                            TextOverflow.ellipsis,
-
-                        style: TextStyle(
-                          color: Colors.white
-                              .withValues(
-                            alpha: 0.88,
-                          ),
-                          fontSize: 12,
-                        ),
+                  Wrap(
+                    alignment:
+                        WrapAlignment.center,
+                    spacing: 7,
+                    runSpacing: 6,
+                    children: [
+                      _informacaoHeader(
+                        Icons.star_rounded,
+                        widget.avaliacao.isEmpty
+                            ? '5,0'
+                            : widget.avaliacao,
                       ),
-
-                    const SizedBox(
-                      height: 10,
-                    ),
-
-                    // ==================================================
-                    // INFORMAÇÕES
-                    // ==================================================
-
-                    Wrap(
-                      alignment:
-                          WrapAlignment.center,
-
-                      spacing: 7,
-                      runSpacing: 6,
-
-                      children: [
-                        _informacaoHeader(
-                          Icons.star_rounded,
-                          widget.avaliacao,
-                        ),
-
-                        _informacaoHeader(
-                          Icons.access_time_rounded,
-                          '30–45 min',
-                        ),
-
-                        _informacaoHeader(
-                          Icons.delivery_dining_rounded,
-                          'Entrega',
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+                      _informacaoHeader(
+                        Icons.access_time_rounded,
+                        '30–45 min',
+                      ),
+                      _informacaoHeader(
+                        Icons.delivery_dining_rounded,
+                        'Entrega',
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // LOGO RESTAURANTE
+  // ============================================================
+
+  Widget _logoRestaurante() {
+    final logoBase64Widget =
+        _logoBase64Widget();
+
+    return Container(
+      width: 100,
+      height: 100,
+      decoration:
+          BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color:
+                Colors.black.withValues(
+              alpha: 0.20,
+            ),
+            blurRadius: 28,
+            offset:
+                const Offset(
+              0,
+              12,
+            ),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius:
+            BorderRadius.circular(30),
+        child:
+            // ==================================================
+            // PRIORIDADE 1: BASE64
+            // ==================================================
+            logoBase64Widget ??
+                // ==================================================
+                // PRIORIDADE 2: URL DA LOGO
+                // ==================================================
+                (logoRestaurante != null &&
+                        logoRestaurante!
+                            .trim()
+                            .isNotEmpty
+                    ? Image.network(
+                        _urlLogo(
+                          logoRestaurante!,
+                        ),
+                        width: 100,
+                        height: 100,
+                        fit: BoxFit.cover,
+                        loadingBuilder:
+                            (
+                          context,
+                          child,
+                          progress,
+                        ) {
+                          if (progress ==
+                              null) {
+                            return child;
+                          }
+
+                          return _iconeLogo();
+                        },
+                        errorBuilder:
+                            (
+                          context,
+                          error,
+                          stackTrace,
+                        ) {
+                          return _iconeLogo();
+                        },
+                      )
+                    : _iconeLogo()),
+      ),
+    );
+  }
+
+  // ============================================================
+  // ÍCONE PADRÃO DA LOGO
+  // ============================================================
+
+  Widget _iconeLogo() {
+    return Container(
+      width: 100,
+      height: 100,
+      color: Colors.white,
+      child: const Center(
+        child: Icon(
+          Icons.restaurant_rounded,
+          color: laranja,
+          size: 48,
+        ),
       ),
     );
   }
@@ -1054,32 +1367,26 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           const BoxConstraints(
         maxWidth: 280,
       ),
-
       padding:
           const EdgeInsets.symmetric(
         horizontal: 13,
         vertical: 7,
       ),
-
       decoration:
           BoxDecoration(
         color: restauranteOnline
             ? const Color(0xFF16A34A)
             : const Color(0xFFDC2626),
-
         borderRadius:
             BorderRadius.circular(30),
       ),
-
       child: Row(
         mainAxisSize:
             MainAxisSize.min,
-
         children: [
           Container(
             width: 8,
             height: 8,
-
             decoration:
                 const BoxDecoration(
               color: Colors.white,
@@ -1087,22 +1394,15 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                   BoxShape.circle,
             ),
           ),
-
-          const SizedBox(
-            width: 7,
-          ),
-
+          const SizedBox(width: 7),
           Flexible(
             child: Text(
               restauranteOnline
                   ? 'ONLINE • ACEITANDO PEDIDOS'
                   : 'OFFLINE • PEDIDOS INDISPONÍVEIS',
-
               maxLines: 1,
-
               overflow:
                   TextOverflow.ellipsis,
-
               style:
                   const TextStyle(
                 color: Colors.white,
@@ -1118,7 +1418,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
-  // INFORMAÇÃO HEADER
+  // INFORMAÇÃO
   // ============================================================
 
   Widget _informacaoHeader(
@@ -1131,39 +1431,32 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         horizontal: 10,
         vertical: 7,
       ),
-
       decoration:
           BoxDecoration(
-        color: Colors.white.withValues(
+        color:
+            Colors.white.withValues(
           alpha: 0.14,
         ),
-
         borderRadius:
             BorderRadius.circular(20),
-
         border:
             Border.all(
-          color: Colors.white.withValues(
+          color:
+              Colors.white.withValues(
             alpha: 0.10,
           ),
         ),
       ),
-
       child: Row(
         mainAxisSize:
             MainAxisSize.min,
-
         children: [
           Icon(
             icon,
             color: Colors.white,
             size: 14,
           ),
-
-          const SizedBox(
-            width: 4,
-          ),
-
+          const SizedBox(width: 4),
           Text(
             texto,
             style:
@@ -1192,19 +1485,17 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           const EdgeInsets.symmetric(
         vertical: 8,
       ),
-
       decoration:
           BoxDecoration(
-        color: Colors.black.withValues(
+        color:
+            Colors.black.withValues(
           alpha: 0.18,
         ),
         shape:
             BoxShape.circle,
       ),
-
       child: IconButton(
         onPressed: onPressed,
-
         icon: Icon(
           icon,
           color: Colors.white,
@@ -1225,17 +1516,14 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         horizontal: 12,
         vertical: 7,
       ),
-
       decoration:
           BoxDecoration(
         color: Colors.white,
         borderRadius:
             BorderRadius.circular(30),
       ),
-
       child: Text(
-        '${produtos.length} itens',
-
+        '${produtos.length} ${produtos.length == 1 ? 'item' : 'itens'}',
         style:
             const TextStyle(
           color: laranja,
@@ -1254,25 +1542,18 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   Widget _categorias() {
     return SizedBox(
       height: 50,
-
       child: ListView.separated(
         padding:
             const EdgeInsets.symmetric(
           horizontal: 16,
         ),
-
         scrollDirection:
             Axis.horizontal,
-
         itemCount:
             categorias.length,
-
         separatorBuilder:
             (_, __) =>
-                const SizedBox(
-          width: 9,
-        ),
-
+                const SizedBox(width: 9),
         itemBuilder:
             (_, index) {
           final categoria =
@@ -1289,20 +1570,17 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     categoria;
               });
             },
-
             child:
                 AnimatedContainer(
               duration:
                   const Duration(
                 milliseconds: 200,
               ),
-
               padding:
                   const EdgeInsets.symmetric(
                 horizontal: 18,
                 vertical: 11,
               ),
-
               decoration:
                   BoxDecoration(
                 gradient: selecionada
@@ -1313,14 +1591,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                         ],
                       )
                     : null,
-
                 color: selecionada
                     ? null
                     : Colors.white,
-
                 borderRadius:
-                    BorderRadius.circular(30),
-
+                    BorderRadius.circular(
+                  30,
+                ),
                 border:
                     Border.all(
                   color: selecionada
@@ -1328,17 +1605,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                       : Colors.black12,
                 ),
               ),
-
               child: Text(
                 categoria,
-
                 style: TextStyle(
                   color: selecionada
                       ? Colors.white
                       : Colors.black87,
-
                   fontSize: 13,
-
                   fontWeight:
                       FontWeight.w700,
                 ),
@@ -1363,40 +1636,35 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         16,
         0,
       ),
-
       padding:
           const EdgeInsets.all(15),
-
       decoration:
           BoxDecoration(
         color: Colors.white,
-
         borderRadius:
             BorderRadius.circular(20),
-
         border:
             Border.all(
-          color: Colors.red.withValues(
+          color:
+              Colors.red.withValues(
             alpha: 0.10,
           ),
         ),
       ),
-
       child: Row(
         children: [
           Container(
             width: 46,
             height: 46,
-
             decoration:
                 BoxDecoration(
-              color: Colors.red.withValues(
+              color:
+                  Colors.red.withValues(
                 alpha: 0.10,
               ),
               shape:
                   BoxShape.circle,
             ),
-
             child:
                 const Icon(
               Icons.storefront_rounded,
@@ -1404,20 +1672,14 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                   Colors.redAccent,
             ),
           ),
-
-          const SizedBox(
-            width: 12,
-          ),
-
+          const SizedBox(width: 12),
           const Expanded(
             child: Column(
               crossAxisAlignment:
                   CrossAxisAlignment.start,
-
               children: [
                 Text(
                   'Restaurante fechado',
-
                   style: TextStyle(
                     fontWeight:
                         FontWeight.w800,
@@ -1425,14 +1687,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     color: Colors.red,
                   ),
                 ),
-
-                SizedBox(
-                  height: 3,
-                ),
-
+                SizedBox(height: 3),
                 Text(
                   'Este restaurante não está aceitando pedidos agora.',
-
                   style: TextStyle(
                     color: Colors.black54,
                     fontSize: 12,
@@ -1476,69 +1733,59 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         produto['imagem']?.toString();
 
     final produtoId =
-        produto['id']?.toString();
+        (produto['id'] ??
+                produto['_id'] ??
+                produto['produtoId'])
+            ?.toString();
 
     return Container(
       width: double.infinity,
-
       margin:
           const EdgeInsets.only(
         bottom: 14,
       ),
-
       decoration:
           BoxDecoration(
         color: Colors.white,
-
         borderRadius:
             BorderRadius.circular(24),
-
         border:
             Border.all(
-          color: Colors.black.withValues(
+          color:
+              Colors.black.withValues(
             alpha: 0.035,
           ),
         ),
-
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(
+            color:
+                Colors.black.withValues(
               alpha: 0.055,
             ),
-
             blurRadius: 20,
-
             offset:
                 const Offset(0, 8),
           ),
         ],
       ),
-
       child: Padding(
         padding:
             const EdgeInsets.all(10),
-
         child: Row(
           crossAxisAlignment:
               CrossAxisAlignment.center,
-
           children: [
-            // ==================================================
-            // IMAGEM
-            // ==================================================
-
             SizedBox(
               width: 105,
               height: 105,
-
               child: Hero(
                 tag:
                     'produto_${produtoId ?? nome}',
-
                 child: ClipRRect(
                   borderRadius:
-                      BorderRadius.circular(20),
-
+                      BorderRadius.circular(
+                    20,
+                  ),
                   child:
                       _imagemProduto(
                     imagem,
@@ -1548,31 +1795,20 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               ),
             ),
 
-            const SizedBox(
-              width: 12,
-            ),
-
-            // ==================================================
-            // INFORMAÇÕES
-            // ==================================================
+            const SizedBox(width: 12),
 
             Expanded(
               child: Column(
                 mainAxisSize:
                     MainAxisSize.min,
-
                 crossAxisAlignment:
                     CrossAxisAlignment.start,
-
                 children: [
                   Text(
                     nome,
-
                     maxLines: 2,
-
                     overflow:
                         TextOverflow.ellipsis,
-
                     style:
                         const TextStyle(
                       fontSize: 16,
@@ -1585,18 +1821,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                   if (descricao
                       .trim()
                       .isNotEmpty) ...[
-                    const SizedBox(
-                      height: 7,
-                    ),
-
+                    const SizedBox(height: 7),
                     Text(
                       descricao,
-
                       maxLines: 2,
-
                       overflow:
                           TextOverflow.ellipsis,
-
                       style: TextStyle(
                         color:
                             Colors.grey.shade600,
@@ -1606,26 +1836,20 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     ),
                   ],
 
-                  const SizedBox(
-                    height: 10,
-                  ),
+                  const SizedBox(height: 10),
 
                   Row(
                     crossAxisAlignment:
                         CrossAxisAlignment.center,
-
                     children: [
                       Expanded(
                         child: Text(
                           _formatarPreco(
                             preco,
                           ),
-
                           maxLines: 1,
-
                           overflow:
                               TextOverflow.ellipsis,
-
                           style:
                               const TextStyle(
                             color: laranja,
@@ -1635,11 +1859,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                           ),
                         ),
                       ),
-
-                      const SizedBox(
-                        width: 8,
-                      ),
-
+                      const SizedBox(width: 8),
                       _botaoAdicionar(
                         nome: nome,
                         preco: preco,
@@ -1671,7 +1891,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return GestureDetector(
       behavior:
           HitTestBehavior.opaque,
-
       onTap: () {
         adicionarProduto(
           nome: nome,
@@ -1680,16 +1899,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           produtoId: produtoId,
         );
       },
-
       child: AnimatedContainer(
         duration:
             const Duration(
           milliseconds: 180,
         ),
-
         width: 44,
         height: 44,
-
         decoration:
             BoxDecoration(
           gradient: restauranteOnline
@@ -1700,14 +1916,11 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                   ],
                 )
               : null,
-
           color: restauranteOnline
               ? null
               : Colors.grey.shade400,
-
           shape:
               BoxShape.circle,
-
           boxShadow:
               restauranteOnline
                   ? [
@@ -1726,12 +1939,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     ]
                   : null,
         ),
-
         child: Icon(
           restauranteOnline
               ? Icons.add_rounded
               : Icons.lock_outline_rounded,
-
           color: Colors.white,
           size: 25,
         ),
@@ -1758,12 +1969,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       _urlImagemProduto(
         imagem.trim(),
       ),
-
       width: tamanho,
       height: tamanho,
-
       fit: BoxFit.cover,
-
       loadingBuilder:
           (
         context,
@@ -1778,7 +1986,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           tamanho,
         );
       },
-
       errorBuilder:
           (
         context,
@@ -1798,7 +2005,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return Container(
       width: tamanho,
       height: tamanho,
-
       decoration:
           const BoxDecoration(
         gradient:
@@ -1813,7 +2019,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           ],
         ),
       ),
-
       child: const Icon(
         Icons.fastfood_rounded,
         color: laranja,
@@ -1828,14 +2033,11 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return Container(
       width: tamanho,
       height: tamanho,
-
       color: fundoImagem,
-
       child: const Center(
         child: SizedBox(
           width: 24,
           height: 24,
-
           child:
               CircularProgressIndicator(
             strokeWidth: 2,
@@ -1853,20 +2055,16 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   Widget _botaoCarrinho() {
     return GestureDetector(
       onTap: abrirCarrinho,
-
       child: Container(
         height: 64,
-
         margin:
             const EdgeInsets.symmetric(
           horizontal: 16,
         ),
-
         padding:
             const EdgeInsets.symmetric(
           horizontal: 14,
         ),
-
         decoration:
             BoxDecoration(
           gradient:
@@ -1880,13 +2078,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               Color(0xFFEA580C),
             ],
           ),
-
           borderRadius:
               BorderRadius.circular(22),
-
           boxShadow: [
             BoxShadow(
-              color: laranja.withValues(
+              color:
+                  laranja.withValues(
                 alpha: 0.38,
               ),
               blurRadius: 24,
@@ -1895,22 +2092,20 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             ),
           ],
         ),
-
         child: Row(
           children: [
             Container(
               width: 43,
               height: 43,
-
               decoration:
                   BoxDecoration(
-                color: Colors.white.withValues(
+                color:
+                    Colors.white.withValues(
                   alpha: 0.18,
                 ),
                 shape:
                     BoxShape.circle,
               ),
-
               child: const Icon(
                 Icons.shopping_bag_rounded,
                 color: Colors.white,
@@ -1918,46 +2113,35 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               ),
             ),
 
-            const SizedBox(
-              width: 11,
-            ),
+            const SizedBox(width: 11),
 
             Expanded(
               child: Column(
                 mainAxisAlignment:
                     MainAxisAlignment.center,
-
                 crossAxisAlignment:
                     CrossAxisAlignment.start,
-
                 children: [
                   Text(
                     '$quantidadeItens ${quantidadeItens == 1 ? 'item' : 'itens'}',
-
                     maxLines: 1,
-
                     overflow:
                         TextOverflow.ellipsis,
-
                     style: TextStyle(
-                      color: Colors.white
-                          .withValues(
+                      color:
+                          Colors.white.withValues(
                         alpha: 0.85,
                       ),
                       fontSize: 11,
                     ),
                   ),
-
                   Text(
                     _formatarPreco(
                       totalCarrinho,
                     ),
-
                     maxLines: 1,
-
                     overflow:
                         TextOverflow.ellipsis,
-
                     style:
                         const TextStyle(
                       color: Colors.white,
@@ -1970,13 +2154,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               ),
             ),
 
-            const SizedBox(
-              width: 6,
-            ),
+            const SizedBox(width: 6),
 
             const Text(
               'Ver carrinho',
-
               style:
                   TextStyle(
                 color: Colors.white,
@@ -1986,9 +2167,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               ),
             ),
 
-            const SizedBox(
-              width: 7,
-            ),
+            const SizedBox(width: 7),
 
             const Icon(
               Icons.arrow_forward_rounded,
@@ -2008,44 +2187,34 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return _estadoBase(
       icon:
           Icons.cloud_off_rounded,
-
       titulo:
           'Não foi possível carregar o cardápio',
-
       descricao:
           'Verifique a conexão com o servidor e tente novamente.',
-
       botao:
           ElevatedButton.icon(
         onPressed:
             _carregarProdutos,
-
         icon:
             const Icon(
           Icons.refresh_rounded,
         ),
-
         label:
             const Text(
           'Tentar novamente',
         ),
-
         style:
             ElevatedButton.styleFrom(
           backgroundColor:
               laranja,
-
           foregroundColor:
               Colors.white,
-
           elevation: 0,
-
           padding:
               const EdgeInsets.symmetric(
             horizontal: 20,
             vertical: 13,
           ),
-
           shape:
               RoundedRectangleBorder(
             borderRadius:
@@ -2060,10 +2229,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return _estadoBase(
       icon:
           Icons.restaurant_menu_rounded,
-
       titulo:
           'Nenhum produto disponível',
-
       descricao:
           'Este restaurante ainda não possui produtos disponíveis.',
     );
@@ -2073,7 +2240,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return _estadoBase(
       icon:
           Icons.search_off_rounded,
-
       titulo:
           'Nenhum produto nesta categoria',
     );
@@ -2088,44 +2254,37 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return Container(
       margin:
           const EdgeInsets.all(16),
-
       padding:
           const EdgeInsets.all(30),
-
       decoration:
           BoxDecoration(
         color: Colors.white,
-
         borderRadius:
             BorderRadius.circular(24),
-
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(
+            color:
+                Colors.black.withValues(
               alpha: 0.04,
             ),
-
             blurRadius: 20,
           ),
         ],
       ),
-
       child: Column(
         children: [
           Container(
             width: 76,
             height: 76,
-
             decoration:
                 BoxDecoration(
-              color: laranja.withValues(
+              color:
+                  laranja.withValues(
                 alpha: 0.10,
               ),
-
               shape:
                   BoxShape.circle,
             ),
-
             child: Icon(
               icon,
               color: laranja,
@@ -2133,16 +2292,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             ),
           ),
 
-          const SizedBox(
-            height: 17,
-          ),
+          const SizedBox(height: 17),
 
           Text(
             titulo,
-
             textAlign:
                 TextAlign.center,
-
             style:
                 const TextStyle(
               fontSize: 17,
@@ -2152,16 +2307,11 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           ),
 
           if (descricao != null) ...[
-            const SizedBox(
-              height: 8,
-            ),
-
+            const SizedBox(height: 8),
             Text(
               descricao,
-
               textAlign:
                   TextAlign.center,
-
               style:
                   const TextStyle(
                 color: Colors.black54,
@@ -2171,9 +2321,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           ],
 
           if (botao != null) ...[
-            const SizedBox(
-              height: 20,
-            ),
+            const SizedBox(height: 20),
             botao,
           ],
         ],

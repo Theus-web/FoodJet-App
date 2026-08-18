@@ -10,43 +10,67 @@ class FavoritesScreen extends StatefulWidget {
 
 class _FavoritesScreenState
     extends State<FavoritesScreen> {
-  final Color laranja =
-      const Color(0xFFF97316);
+  static const Color laranja =
+      Color(0xFFF97316);
 
-  // Favoritos de teste
-  final List<Map<String, String>> favoritos = [
-    {
-      'nome': 'Restaurante FoodJet',
-      'descricao': 'Hambúrguer • Pizza • Lanches',
-      'avaliacao': '4.8',
-    },
-    {
-      'nome': 'Pizza Minas',
-      'descricao': 'Pizza • Massas • Bebidas',
-      'avaliacao': '4.7',
-    },
-  ];
+  // ============================================================
+  // FAVORITOS
+  // ============================================================
+  //
+  // IMPORTANTE:
+  // Não existem mais restaurantes fixos aqui.
+  //
+  // A lista começa vazia e deverá receber somente os restaurantes
+  // que o usuário realmente adicionar aos favoritos.
+  //
+  final List<Map<String, String>> favoritos = [];
+
+  // ============================================================
+  // REMOVER FAVORITO
+  // ============================================================
 
   void removerFavorito(int index) {
+    if (index < 0 ||
+        index >= favoritos.length) {
+      return;
+    }
+
     final nome =
-        favoritos[index]['nome'] ?? 'Restaurante';
+        favoritos[index]['nome'] ??
+            'Restaurante';
 
     setState(() {
       favoritos.removeAt(index);
     });
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          '$nome removido dos favoritos.',
+    if (!mounted) {
+      return;
+    }
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            '$nome removido dos favoritos.',
+          ),
+          backgroundColor: laranja,
+          behavior:
+              SnackBarBehavior.floating,
+          margin:
+              const EdgeInsets.all(16),
+          shape:
+              RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(14),
+          ),
         ),
-        action: SnackBarAction(
-          label: 'OK',
-          onPressed: () {},
-        ),
-      ),
-    );
+      );
   }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -72,10 +96,8 @@ class _FavoritesScreenState
           : ListView.builder(
               padding:
                   const EdgeInsets.all(16),
-
               itemCount:
                   favoritos.length,
-
               itemBuilder:
                   (context, index) {
                 final favorito =
@@ -90,9 +112,9 @@ class _FavoritesScreenState
     );
   }
 
-  // ==========================================
+  // ============================================================
   // TELA SEM FAVORITOS
-  // ==========================================
+  // ============================================================
 
   Widget _telaVazia() {
     return Center(
@@ -106,20 +128,20 @@ class _FavoritesScreenState
 
           children: [
             Container(
-              width: 100,
-              height: 100,
-
+              width: 110,
+              height: 110,
               decoration:
                   BoxDecoration(
                 color:
-                    Colors.orange.shade50,
+                    laranja.withValues(
+                  alpha: 0.10,
+                ),
                 shape:
                     BoxShape.circle,
               ),
-
-              child: Icon(
-                Icons.favorite_border,
-                size: 55,
+              child: const Icon(
+                Icons.favorite_border_rounded,
+                size: 58,
                 color: laranja,
               ),
             ),
@@ -130,12 +152,14 @@ class _FavoritesScreenState
 
             const Text(
               'Nenhum favorito ainda',
+              textAlign:
+                  TextAlign.center,
               style: TextStyle(
                 fontSize: 22,
                 fontWeight:
-                    FontWeight.bold,
+                    FontWeight.w800,
                 color:
-                    Colors.black,
+                    Colors.black87,
               ),
             ),
 
@@ -149,6 +173,7 @@ class _FavoritesScreenState
                   TextAlign.center,
               style: TextStyle(
                 fontSize: 15,
+                height: 1.4,
                 color:
                     Colors.grey,
               ),
@@ -158,10 +183,18 @@ class _FavoritesScreenState
               height: 30,
             ),
 
-            ElevatedButton(
+            ElevatedButton.icon(
               onPressed: () {
                 Navigator.pop(context);
               },
+
+              icon: const Icon(
+                Icons.restaurant_rounded,
+              ),
+
+              label: const Text(
+                'Explorar restaurantes',
+              ),
 
               style:
                   ElevatedButton.styleFrom(
@@ -169,10 +202,11 @@ class _FavoritesScreenState
                     laranja,
                 foregroundColor:
                     Colors.white,
+                elevation: 0,
 
                 padding:
                     const EdgeInsets.symmetric(
-                  horizontal: 30,
+                  horizontal: 25,
                   vertical: 15,
                 ),
 
@@ -184,15 +218,6 @@ class _FavoritesScreenState
                   ),
                 ),
               ),
-
-              child: const Text(
-                'Explorar restaurantes',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight:
-                      FontWeight.bold,
-                ),
-              ),
             ),
           ],
         ),
@@ -200,9 +225,9 @@ class _FavoritesScreenState
     );
   }
 
-  // ==========================================
+  // ============================================================
   // CARD DO FAVORITO
-  // ==========================================
+  // ============================================================
 
   Widget _cardFavorito(
     int index,
@@ -241,27 +266,35 @@ class _FavoritesScreenState
                 Colors.black.withValues(
               alpha: 0.05,
             ),
-
-            blurRadius: 6,
-
+            blurRadius: 12,
             offset:
-                const Offset(0, 2),
+                const Offset(0, 4),
           ),
         ],
       ),
 
       child: Row(
         children: [
+          // ====================================================
           // ÍCONE
+          // ====================================================
+
           Container(
             width: 75,
             height: 75,
 
             decoration:
                 BoxDecoration(
-              color:
-                  const Color(
-                0xFFFFB36B,
+              gradient:
+                  const LinearGradient(
+                begin:
+                    Alignment.topLeft,
+                end:
+                    Alignment.bottomRight,
+                colors: [
+                  Color(0xFFFFE5D3),
+                  Color(0xFFFFC58F),
+                ],
               ),
 
               borderRadius:
@@ -270,8 +303,8 @@ class _FavoritesScreenState
               ),
             ),
 
-            child: Icon(
-              Icons.restaurant,
+            child: const Icon(
+              Icons.restaurant_rounded,
               color: laranja,
               size: 38,
             ),
@@ -281,7 +314,10 @@ class _FavoritesScreenState
             width: 15,
           ),
 
+          // ====================================================
           // INFORMAÇÕES
+          // ====================================================
+
           Expanded(
             child: Column(
               crossAxisAlignment:
@@ -290,6 +326,9 @@ class _FavoritesScreenState
               children: [
                 Text(
                   nome,
+                  maxLines: 1,
+                  overflow:
+                      TextOverflow.ellipsis,
 
                   style:
                       const TextStyle(
@@ -307,6 +346,9 @@ class _FavoritesScreenState
 
                 Text(
                   descricao,
+                  maxLines: 2,
+                  overflow:
+                      TextOverflow.ellipsis,
 
                   style:
                       const TextStyle(
@@ -323,7 +365,7 @@ class _FavoritesScreenState
                 Row(
                   children: [
                     const Icon(
-                      Icons.star,
+                      Icons.star_rounded,
                       size: 18,
                       color:
                           Colors.orange,
@@ -348,7 +390,10 @@ class _FavoritesScreenState
             ),
           ),
 
+          // ====================================================
           // BOTÃO REMOVER
+          // ====================================================
+
           IconButton(
             onPressed: () {
               removerFavorito(
@@ -357,7 +402,7 @@ class _FavoritesScreenState
             },
 
             icon: const Icon(
-              Icons.favorite,
+              Icons.favorite_rounded,
               color: Colors.red,
             ),
 

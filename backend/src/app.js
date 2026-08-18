@@ -11,6 +11,8 @@ const adminRoutes = require("./routes/admin");
 const dashboardRoutes = require("./routes/dashboard");
 const supportRoutes = require("./routes/support");
 const complaintRoutes = require("./routes/complaint");
+const promotionRoutes = require("./routes/promotion");
+const couponRoutes = require("./routes/coupon");
 
 const app = express();
 
@@ -106,8 +108,31 @@ app.use(
 );
 
 // ======================================================
+// CUPONS
+// ======================================================
+
+app.use(
+    "/api/coupons",
+    couponRoutes
+);
+
+app.use(
+    "/api/promotions",
+    promotionRoutes
+);
+
+// ======================================================
 // LOGS
 // ======================================================
+
+console.log(
+    "🏆 ROTA /api/coupons REGISTRADA"
+);
+
+console.log(
+    "🏆 ROTA /api/ranking REGISTRADA"
+);
+
 
 console.log(
     "✅ ROTA /api/auth REGISTRADA"

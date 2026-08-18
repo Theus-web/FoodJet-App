@@ -4,9 +4,11 @@ import 'package:fl_chart/fl_chart.dart';
 import '../core/services/auth_service.dart';
 import '../services/dashboard_service.dart';
 import '../services/restaurant_service.dart';
+import '../services/promotion_service.dart';
 
-import '../screens/orders/restaurant_orders_screen.dart';
-import '../screens/products/products_screen.dart';
+import 'promocoes/promocoes_screen.dart';
+import 'orders/restaurant_orders_screen.dart';
+import 'products/products_screen.dart';
 import '../finance/restaurant_finance_screen.dart';
 import 'settings/restaurant_settings_screen.dart';
 
@@ -25,6 +27,7 @@ class _RestaurantHomeScreenState extends State<RestaurantHomeScreen> {
   final AuthService _authService = AuthService();
   final DashboardService _dashboardService = DashboardService();
   final RestaurantService _restaurantService = RestaurantService();
+  final PromotionService _promotionService = PromotionService();
 
   Map<String, dynamic>? dashboard;
   Map<String, dynamic>? restaurante;
@@ -38,6 +41,16 @@ class _RestaurantHomeScreenState extends State<RestaurantHomeScreen> {
   String restauranteNome = "Meu Restaurante";
 
   // ============================================================
+  // PROMOÇÕES
+  // ============================================================
+
+  List<Map<String, dynamic>> promocoes = [];
+
+  bool carregandoPromocoes = false;
+
+  String erroPromocoes = "";
+
+  // ============================================================
   // INIT
   // ============================================================
 
@@ -48,6 +61,77 @@ class _RestaurantHomeScreenState extends State<RestaurantHomeScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       carregarRestaurante();
     });
+  }
+
+  // ============================================================
+  // CARREGAR PROMOÇÕES
+  // ============================================================
+
+  Future<void> carregarPromocoes() async {
+    if (restauranteId.isEmpty) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        carregandoPromocoes = true;
+        erroPromocoes = "";
+      });
+    }
+
+    try {
+      final resultado = await _promotionService.buscarPromocoes(restauranteId);
+
+      if (!mounted) return;
+
+      setState(() {
+        promocoes = resultado;
+        carregandoPromocoes = false;
+        erroPromocoes = "";
+      });
+
+      debugPrint("========================================");
+      debugPrint("FOODJET - PROMOÇÕES");
+      debugPrint("RESTAURANTE: $restauranteId");
+      debugPrint("TOTAL PROMOÇÕES: ${promocoes.length}");
+      debugPrint("PROMOÇÕES ATIVAS: ${quantidadePromocoesAtivas}");
+      debugPrint("========================================");
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        carregandoPromocoes = false;
+        erroPromocoes = e.toString();
+      });
+
+      debugPrint("ERRO AO CARREGAR PROMOÇÕES: $e");
+    }
+  }
+
+  // ============================================================
+  // QUANTIDADE DE PROMOÇÕES ATIVAS
+  // ============================================================
+
+  int get quantidadePromocoesAtivas {
+    return promocoes.where((promocao) {
+      final ativa = promocao["ativa"];
+
+      if (ativa is bool) {
+        return ativa;
+      }
+
+      if (ativa is String) {
+        return ativa.toLowerCase() == "true" ||
+            ativa.toLowerCase() == "ativa" ||
+            ativa == "1";
+      }
+
+      if (ativa is num) {
+        return ativa == 1;
+      }
+
+      return false;
+    }).length;
   }
 
   // ============================================================
@@ -170,6 +254,12 @@ class _RestaurantHomeScreenState extends State<RestaurantHomeScreen> {
       // ========================================================
 
       await carregarDashboard();
+
+      // ========================================================
+      // 7. PROMOÇÕES
+      // ========================================================
+
+      await carregarPromocoes();
     } catch (e) {
       if (!mounted) return;
 
@@ -487,6 +577,21 @@ class _RestaurantHomeScreenState extends State<RestaurantHomeScreen> {
                             ),
                           );
                         }),
+
+                        _acao("Promoções", Icons.local_offer_rounded, () {
+                          if (restauranteId.isEmpty) {
+                            return;
+                          }
+
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  PromocoesScreen(restauranteId: restauranteId),
+                            ),
+                          );
+                        }),
+
                         _acao("Configurações", Icons.settings_rounded, () {
                           Navigator.push(
                             context,
