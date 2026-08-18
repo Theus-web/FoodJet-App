@@ -194,5 +194,21 @@
       "online": false
     }
   ],
-  "pagamentos": []
+  "pagamentos": [],
+  "promocoes": [
+    {
+      "id": "d087cbc7-fdc6-488c-a447-2d7aaf349061",
+      "restauranteId": "rest_1786542500158",
+      "produtoId": null,
+      "titulo": "Descontão do Dia!!!",
+      "descricao": "Leve oniguiri oegue menos..",
+      "precoOriginal": 0,
+      "precoPromocional": 0,
+      "desconto": 10,
+      "inicio": null,
+      "fim": null,
+      "ativa": true,
+      "criadoEm": "2026-08-18T02:57:23.377Z"
+    }
+  ]
 }

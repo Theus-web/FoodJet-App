@@ -3,7 +3,7 @@ const express = require("express");
 const router = express.Router();
 
 const controller =
-require("../controllers/promotion_controller");
+require("../controllers/promotionController");
 
 
 

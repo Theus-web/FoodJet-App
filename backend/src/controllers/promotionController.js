@@ -1,5 +1,5 @@
 const { v4: uuid } = require("uuid");
-const db = require("../database");
+const { db } = require("../config/database");
 
 
 // ======================================================

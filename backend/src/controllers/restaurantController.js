@@ -143,7 +143,16 @@ exports.list = async (req,res)=>{
                     restaurante.promocao &&
                     restaurante.promocao.ativa === true
                 ){
-
+                
+                    const promocao =
+    promocoes.find(
+        p =>
+        String(p.restauranteId)
+        ===
+        String(restaurante.id)
+        &&
+        p.ativa === true
+    );
 
                     const validade =
                         new Date(
@@ -188,6 +197,8 @@ exports.list = async (req,res)=>{
                 return {
 
                     ...restaurante,
+
+                    promocao,
 
                     destaque,
 
@@ -654,4 +665,195 @@ exports.delete = async (req, res) => {
     }
 
 };
+
+// ==================================================
+// ONLINE / OFFLINE
+// PUT /api/restaurants/:id/status
+// ==================================================
+
+exports.updateStatus = async (req, res) => {
+
+    try {
+
+        const { id } = req.params;
+
+        if (!id || String(id).trim() === "") {
+
+            return res.status(400).json({
+                sucesso: false,
+                erro: "ID do restaurante é obrigatório"
+            });
+
+        }
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "🔄 ALTERANDO STATUS DO RESTAURANTE"
+        );
+
+        console.log(
+            "ID:",
+            id
+        );
+
+        console.log(
+            "DADOS:",
+            req.body
+        );
+
+        console.log(
+            "========================================"
+        );
+
+        const dados = {};
+
+        // ------------------------------------------
+        // ONLINE
+        // ------------------------------------------
+
+        if (req.body.online !== undefined) {
+
+            dados.online =
+                req.body.online === true ||
+                req.body.online === "true";
+
+        }
+
+        // ------------------------------------------
+        // ABERTO
+        // ------------------------------------------
+
+        if (req.body.aberto !== undefined) {
+
+            dados.aberto =
+                req.body.aberto === true ||
+                req.body.aberto === "true";
+
+        }
+
+        // ------------------------------------------
+        // STATUS
+        // ------------------------------------------
+
+        if (req.body.status !== undefined) {
+
+            dados.status =
+                req.body.status;
+
+        }
+
+        // ------------------------------------------
+        // SE NÃO RECEBEU NADA
+        // ------------------------------------------
+
+        if (Object.keys(dados).length === 0) {
+
+            return res.status(400).json({
+
+                sucesso: false,
+
+                erro:
+                    "Nenhum status foi informado"
+
+            });
+
+        }
+
+        const restaurante =
+            await Restaurant.atualizar(
+                id,
+                dados
+            );
+
+        if (!restaurante) {
+
+            return res.status(404).json({
+
+                sucesso: false,
+
+                erro:
+                    "Restaurante não encontrado"
+
+            });
+
+        }
+
+        // ------------------------------------------
+        // AVISAR CLIENTES PELO WEBSOCKET
+        // ------------------------------------------
+
+        if (global.io) {
+
+            global.io.emit(
+                "restaurante_atualizado",
+                restaurante
+            );
+
+            console.log(
+                "📡 STATUS ENVIADO AOS CLIENTES"
+            );
+
+        }
+
+        return res.json({
+
+            sucesso: true,
+
+            mensagem:
+                "Status do restaurante atualizado com sucesso",
+
+            restaurante
+
+        });
+
+    } catch (error) {
+
+        console.error(
+            "========================================"
+        );
+
+        console.error(
+            "❌ ERRO AO ALTERAR STATUS"
+        );
+
+        console.error(error);
+
+        console.error(
+            "========================================"
+        );
+
+        return res.status(500).json({
+
+            sucesso: false,
+
+            erro:
+                "Erro ao alterar status do restaurante",
+
+            detalhe:
+                error.message
+
+        });
+
+    }
+
+};
+
+let promocoes = [];
+
+try {
+
+    const Promotion = require("../models/promotion");
+
+    promocoes = await Promotion.listar();
+
+} catch(e){
+
+    console.log(
+        "Sem promoções carregadas"
+    );
+
+}
 

@@ -43,7 +43,9 @@ const dadosPadrao = {
 
     entregadores: [],
 
-    pagamentos: []
+    pagamentos: [],
+
+    promocoes: [],
 
 };
 
@@ -89,6 +91,10 @@ function garantirEstrutura() {
     if (!Array.isArray(db.data.pagamentos)) {
         db.data.pagamentos = [];
     }
+
+    if (!Array.isArray(db.data.promocoes)) {
+    db.data.promocoes = [];
+}
 
 }
 

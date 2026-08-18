@@ -8,8 +8,9 @@ const { Server } = require("socket.io");
 const { conectar } = require("./config/database");
 
 const promotionRoutes =
-require("./routes/promotion_routes");
-
+    require("./routes/promotion");
+    
+console.log("🔥 ROTAS DE PROMOÇÃO CARREGADAS");
 
 app.use(
  "/api/promocoes",
