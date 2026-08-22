@@ -7,9 +7,15 @@ const { Server } = require("socket.io");
 
 const { conectar } = require("./config/database");
 
-const promotionRoutes =
-    require("./routes/promotion");
+const promotionRoutes =  require("./routes/promotion");
     
+const paymentRoutes = require("./routes/paymentRoutes");
+
+app.use(
+  "/api/pagamentos",
+  paymentRoutes
+);
+
 console.log("🔥 ROTAS DE PROMOÇÃO CARREGADAS");
 
 app.use(

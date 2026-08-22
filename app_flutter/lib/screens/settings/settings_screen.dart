@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 
-import '../../config/theme_controller.dart';
 import '../../services/auth_service.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -25,8 +24,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // SERVIÇO DE AUTENTICAÇÃO
   // ==================================================
 
-  final AuthService authService =
-      AuthService();
+  final AuthService authService = AuthService();
 
   // ==================================================
   // DADOS PESSOAIS
@@ -41,37 +39,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
 
     nome =
-        widget.usuario['nome']?.toString() ??
-            'Usuário';
+        widget.usuario['nome']?.toString() ?? 'Usuário';
 
     final telefoneUsuario =
-        widget.usuario['telefone']
-                ?.toString() ??
-            '';
+        widget.usuario['telefone']?.toString() ?? '';
 
-    telefone =
-        telefoneUsuario.isEmpty
-            ? 'Telefone não informado'
-            : telefoneUsuario;
+    telefone = telefoneUsuario.isEmpty
+        ? 'Telefone não informado'
+        : telefoneUsuario;
 
     email =
         widget.usuario['email']?.toString() ??
-            'E-mail não informado';
+        'E-mail não informado';
   }
 
   // ==================================================
   // ATUALIZAR NOME
   // ==================================================
 
-  Future<void> _salvarNome(
-    String novoNome,
-  ) async {
+  Future<void> _salvarNome(String novoNome) async {
     try {
-      final token =
-          await authService.obterToken();
+      final token = await authService.obterToken();
 
-      if (token == null ||
-          token.isEmpty) {
+      if (token == null || token.isEmpty) {
         _mensagem(
           'Sua sessão expirou. Faça login novamente.',
         );
@@ -86,33 +76,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (!mounted) return;
 
-      final statusCode =
-          resultado['statusCode'];
+      final statusCode = resultado['statusCode'];
 
       if (statusCode == 200) {
         setState(() {
           nome = novoNome;
         });
 
-        widget.usuario['nome'] =
-            novoNome;
+        widget.usuario['nome'] = novoNome;
 
         _mensagem(
           'Nome atualizado e salvo com sucesso.',
         );
       } else {
         _mensagem(
-          resultado['erro']
-                  ?.toString() ??
-              resultado['mensagem']
-                  ?.toString() ??
+          resultado['erro']?.toString() ??
+              resultado['mensagem']?.toString() ??
               'Não foi possível atualizar o nome.',
         );
       }
     } catch (e) {
       if (!mounted) return;
 
-      print(
+      debugPrint(
         'ERRO AO ATUALIZAR NOME: $e',
       );
 
@@ -130,11 +116,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String novoTelefone,
   ) async {
     try {
-      final token =
-          await authService.obterToken();
+      final token = await authService.obterToken();
 
-      if (token == null ||
-          token.isEmpty) {
+      if (token == null || token.isEmpty) {
         _mensagem(
           'Sua sessão expirou. Faça login novamente.',
         );
@@ -149,33 +133,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (!mounted) return;
 
-      final statusCode =
-          resultado['statusCode'];
+      final statusCode = resultado['statusCode'];
 
       if (statusCode == 200) {
         setState(() {
           telefone = novoTelefone;
         });
 
-        widget.usuario['telefone'] =
-            novoTelefone;
+        widget.usuario['telefone'] = novoTelefone;
 
         _mensagem(
           'Telefone atualizado e salvo com sucesso.',
         );
       } else {
         _mensagem(
-          resultado['erro']
-                  ?.toString() ??
-              resultado['mensagem']
-                  ?.toString() ??
+          resultado['erro']?.toString() ??
+              resultado['mensagem']?.toString() ??
               'Não foi possível atualizar o telefone.',
         );
       }
     } catch (e) {
       if (!mounted) return;
 
-      print(
+      debugPrint(
         'ERRO AO ATUALIZAR TELEFONE: $e',
       );
 
@@ -193,11 +173,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     String novoEmail,
   ) async {
     try {
-      final token =
-          await authService.obterToken();
+      final token = await authService.obterToken();
 
-      if (token == null ||
-          token.isEmpty) {
+      if (token == null || token.isEmpty) {
         _mensagem(
           'Sua sessão expirou. Faça login novamente.',
         );
@@ -212,33 +190,29 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (!mounted) return;
 
-      final statusCode =
-          resultado['statusCode'];
+      final statusCode = resultado['statusCode'];
 
       if (statusCode == 200) {
         setState(() {
           email = novoEmail;
         });
 
-        widget.usuario['email'] =
-            novoEmail;
+        widget.usuario['email'] = novoEmail;
 
         _mensagem(
           'E-mail atualizado e salvo com sucesso.',
         );
       } else {
         _mensagem(
-          resultado['erro']
-                  ?.toString() ??
-              resultado['mensagem']
-                  ?.toString() ??
+          resultado['erro']?.toString() ??
+              resultado['mensagem']?.toString() ??
               'Não foi possível atualizar o e-mail.',
         );
       }
     } catch (e) {
       if (!mounted) return;
 
-      print(
+      debugPrint(
         'ERRO AO ATUALIZAR EMAIL: $e',
       );
 
@@ -257,11 +231,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String novaSenha,
   }) async {
     try {
-      final token =
-          await authService.obterToken();
+      final token = await authService.obterToken();
 
-      if (token == null ||
-          token.isEmpty) {
+      if (token == null || token.isEmpty) {
         _mensagem(
           'Sua sessão expirou. Faça login novamente.',
         );
@@ -277,8 +249,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (!mounted) return;
 
-      final statusCode =
-          resultado['statusCode'];
+      final statusCode = resultado['statusCode'];
 
       if (statusCode == 200) {
         _mensagem(
@@ -286,17 +257,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       } else {
         _mensagem(
-          resultado['erro']
-                  ?.toString() ??
-              resultado['mensagem']
-                  ?.toString() ??
+          resultado['erro']?.toString() ??
+              resultado['mensagem']?.toString() ??
               'Não foi possível alterar a senha.',
         );
       }
     } catch (e) {
       if (!mounted) return;
 
-      print(
+      debugPrint(
         'ERRO AO ALTERAR SENHA: $e',
       );
 
@@ -312,152 +281,106 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool modoEscuro =
-        themeController.modoEscuro;
+    // ==================================================
+    // FOODJET SEMPRE NO TEMA CLARO
+    // ==================================================
 
-    final Color fundo =
-        modoEscuro
-            ? const Color(0xFF121212)
-            : const Color(0xFFF5F5F5);
-
-    final Color card =
-        modoEscuro
-            ? const Color(0xFF1E1E1E)
-            : Colors.white;
-
-    final Color texto =
-        modoEscuro
-            ? Colors.white
-            : Colors.black87;
-
-    final Color textoSecundario =
-        modoEscuro
-            ? Colors.white70
-            : Colors.grey.shade600;
+    const Color fundo = Color(0xFFF5F5F5);
+    const Color card = Colors.white;
+    const Color texto = Colors.black87;
+    const Color textoSecundario = Colors.black54;
+    const Color divisor = Colors.black12;
 
     return Scaffold(
       backgroundColor: fundo,
+
+      // ==================================================
+      // APP BAR
+      // ==================================================
 
       appBar: AppBar(
         backgroundColor: laranja,
         foregroundColor: Colors.white,
         elevation: 0,
-
         title: const Text(
           'Configurações',
           style: TextStyle(
-            fontWeight:
-                FontWeight.bold,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
 
+      // ==================================================
+      // CONTEÚDO
+      // ==================================================
+
       body: ListView(
-        padding:
-            const EdgeInsets.all(20),
-
+        padding: const EdgeInsets.all(20),
         children: [
-
           // ==================================================
           // DADOS PESSOAIS
           // ==================================================
 
-          Text(
+          const Text(
             'Dados pessoais',
-
             style: TextStyle(
               fontSize: 20,
-              fontWeight:
-                  FontWeight.bold,
+              fontWeight: FontWeight.bold,
               color: texto,
             ),
           ),
 
-          const SizedBox(
-            height: 15,
-          ),
+          const SizedBox(height: 15),
 
           Container(
-            decoration:
-                BoxDecoration(
+            decoration: BoxDecoration(
               color: card,
-              borderRadius:
-                  BorderRadius.circular(
-                15,
-              ),
+              borderRadius: BorderRadius.circular(15),
             ),
-
             child: Column(
               children: [
-
                 // ==================================================
                 // NOME
                 // ==================================================
 
                 ListTile(
-                  leading:
-                      _iconeDados(
+                  leading: _iconeDados(
                     Icons.person_outline,
                   ),
-
-                  title: Text(
+                  title: const Text(
                     'Nome',
-
-                    style:
-                        TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color:
-                          textoSecundario,
+                      color: textoSecundario,
                     ),
                   ),
-
-                  subtitle:
-                      Text(
+                  subtitle: Text(
                     nome,
-
-                    style:
-                        TextStyle(
+                    style: const TextStyle(
                       fontSize: 16,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                       color: texto,
                     ),
                   ),
-
-                  trailing:
-                      Icon(
-                    Icons
-                        .edit_outlined,
-                    color:
-                        textoSecundario,
+                  trailing: const Icon(
+                    Icons.edit_outlined,
+                    color: textoSecundario,
                     size: 20,
                   ),
-
                   onTap: () {
                     _mostrarEditarDado(
-                      titulo:
-                          'Alterar nome',
-                      label:
-                          'Nome completo',
-                      valorAtual:
-                          nome,
-                      icone:
-                          Icons
-                              .person_outline,
-                      aoSalvar:
-                          _salvarNome,
+                      titulo: 'Alterar nome',
+                      label: 'Nome completo',
+                      valorAtual: nome,
+                      icone: Icons.person_outline,
+                      aoSalvar: _salvarNome,
                     );
                   },
                 ),
 
-                Divider(
+                const Divider(
                   height: 1,
-                  color:
-                      modoEscuro
-                          ? Colors
-                              .white12
-                          : Colors
-                              .black12,
+                  color: divisor,
                 ),
 
                 // ==================================================
@@ -465,73 +388,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 // ==================================================
 
                 ListTile(
-                  leading:
-                      _iconeDados(
-                    Icons
-                        .phone_outlined,
+                  leading: _iconeDados(
+                    Icons.phone_outlined,
                   ),
-
-                  title: Text(
+                  title: const Text(
                     'Telefone',
-
-                    style:
-                        TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color:
-                          textoSecundario,
+                      color: textoSecundario,
                     ),
                   ),
-
-                  subtitle:
-                      Text(
+                  subtitle: Text(
                     telefone,
-
-                    style:
-                        TextStyle(
+                    style: const TextStyle(
                       fontSize: 16,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                       color: texto,
                     ),
                   ),
-
-                  trailing:
-                      Icon(
-                    Icons
-                        .edit_outlined,
-                    color:
-                        textoSecundario,
+                  trailing: const Icon(
+                    Icons.edit_outlined,
+                    color: textoSecundario,
                     size: 20,
                   ),
-
                   onTap: () {
                     _mostrarEditarDado(
-                      titulo:
-                          'Alterar telefone',
-                      label:
-                          'Número de telefone',
-                      valorAtual:
-                          telefone,
-                      icone:
-                          Icons
-                              .phone_outlined,
-                      teclado:
-                          TextInputType
-                              .phone,
-                      aoSalvar:
-                          _salvarTelefone,
+                      titulo: 'Alterar telefone',
+                      label: 'Número de telefone',
+                      valorAtual: telefone,
+                      icone: Icons.phone_outlined,
+                      teclado: TextInputType.phone,
+                      aoSalvar: _salvarTelefone,
                     );
                   },
                 ),
 
-                Divider(
+                const Divider(
                   height: 1,
-                  color:
-                      modoEscuro
-                          ? Colors
-                              .white12
-                          : Colors
-                              .black12,
+                  color: divisor,
                 ),
 
                 // ==================================================
@@ -539,61 +433,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 // ==================================================
 
                 ListTile(
-                  leading:
-                      _iconeDados(
-                    Icons
-                        .email_outlined,
+                  leading: _iconeDados(
+                    Icons.email_outlined,
                   ),
-
-                  title: Text(
+                  title: const Text(
                     'E-mail',
-
-                    style:
-                        TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color:
-                          textoSecundario,
+                      color: textoSecundario,
                     ),
                   ),
-
-                  subtitle:
-                      Text(
+                  subtitle: Text(
                     email,
-
-                    style:
-                        TextStyle(
+                    style: const TextStyle(
                       fontSize: 16,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                       color: texto,
                     ),
                   ),
-
-                  trailing:
-                      Icon(
-                    Icons
-                        .edit_outlined,
-                    color:
-                        textoSecundario,
+                  trailing: const Icon(
+                    Icons.edit_outlined,
+                    color: textoSecundario,
                     size: 20,
                   ),
-
                   onTap: () {
                     _mostrarEditarDado(
-                      titulo:
-                          'Alterar e-mail',
-                      label:
-                          'E-mail',
-                      valorAtual:
-                          email,
-                      icone:
-                          Icons
-                              .email_outlined,
-                      teclado:
-                          TextInputType
-                              .emailAddress,
-                      aoSalvar:
-                          _salvarEmail,
+                      titulo: 'Alterar e-mail',
+                      label: 'E-mail',
+                      valorAtual: email,
+                      icone: Icons.email_outlined,
+                      teclado: TextInputType.emailAddress,
+                      aoSalvar: _salvarEmail,
                     );
                   },
                 ),
@@ -601,53 +471,39 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
 
-          const SizedBox(
-            height: 30,
-          ),
+          const SizedBox(height: 30),
 
           // ==================================================
           // PREFERÊNCIAS
           // ==================================================
 
-          Text(
+          const Text(
             'Preferências',
-
             style: TextStyle(
               fontSize: 20,
-              fontWeight:
-                  FontWeight.bold,
+              fontWeight: FontWeight.bold,
               color: texto,
             ),
           ),
 
-          const SizedBox(
-            height: 15,
-          ),
+          const SizedBox(height: 15),
 
           Container(
-            decoration:
-                BoxDecoration(
+            decoration: BoxDecoration(
               color: card,
-              borderRadius:
-                  BorderRadius.circular(
-                15,
-              ),
+              borderRadius: BorderRadius.circular(15),
             ),
-
             child: Column(
               children: [
-
+                // ==================================================
                 // NOTIFICAÇÕES
+                // ==================================================
 
                 SwitchListTile(
-                  value:
-                      notificacoes,
-
-                  onChanged:
-                      (valor) {
+                  value: notificacoes,
+                  onChanged: (valor) {
                     setState(() {
-                      notificacoes =
-                          valor;
+                      notificacoes = valor;
                     });
 
                     _mensagem(
@@ -656,307 +512,155 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           : 'Notificações desativadas.',
                     );
                   },
-
-                  secondary:
-                      _iconeDados(
-                    Icons
-                        .notifications_outlined,
+                  secondary: _iconeDados(
+                    Icons.notifications_outlined,
                   ),
-
-                  title: Text(
+                  title: const Text(
                     'Notificações',
-
-                    style:
-                        TextStyle(
-                      fontWeight:
-                          FontWeight.bold,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
                       color: texto,
                     ),
                   ),
-
-                  subtitle:
-                      Text(
+                  subtitle: const Text(
                     'Receber notificações de pedidos e ofertas',
-
-                    style:
-                        TextStyle(
-                      color:
-                          textoSecundario,
+                    style: TextStyle(
+                      color: textoSecundario,
                     ),
                   ),
-
-                  activeColor:
-                      laranja,
-                ),
-
-                Divider(
-                  height: 1,
-                  color:
-                      modoEscuro
-                          ? Colors
-                              .white12
-                          : Colors
-                              .black12,
-                ),
-
-                // MODO ESCURO
-
-                SwitchListTile(
-                  value:
-                      modoEscuro,
-
-                  onChanged:
-                      (valor) {
-                    themeController
-                        .alternarModo(
-                      valor,
-                    );
-
-                    _mensagem(
-                      valor
-                          ? 'Modo escuro ativado.'
-                          : 'Modo claro ativado.',
-                    );
-                  },
-
-                  secondary:
-                      _iconeDados(
-                    modoEscuro
-                        ? Icons
-                            .dark_mode
-                        : Icons
-                            .light_mode_outlined,
-                  ),
-
-                  title: Text(
-                    'Modo escuro',
-
-                    style:
-                        TextStyle(
-                      fontWeight:
-                          FontWeight.bold,
-                      color: texto,
-                    ),
-                  ),
-
-                  subtitle:
-                      Text(
-                    'Alterar aparência do aplicativo',
-
-                    style:
-                        TextStyle(
-                      color:
-                          textoSecundario,
-                    ),
-                  ),
-
-                  activeColor:
-                      laranja,
+                  activeColor: laranja,
                 ),
               ],
             ),
           ),
 
-          const SizedBox(
-            height: 30,
-          ),
+          const SizedBox(height: 30),
 
           // ==================================================
           // CONTA
           // ==================================================
 
-          Text(
+          const Text(
             'Conta',
-
             style: TextStyle(
               fontSize: 20,
-              fontWeight:
-                  FontWeight.bold,
+              fontWeight: FontWeight.bold,
               color: texto,
             ),
           ),
 
-          const SizedBox(
-            height: 15,
-          ),
+          const SizedBox(height: 15),
 
           Container(
-            decoration:
-                BoxDecoration(
+            decoration: BoxDecoration(
               color: card,
-              borderRadius:
-                  BorderRadius.circular(
-                15,
-              ),
+              borderRadius: BorderRadius.circular(15),
             ),
-
             child: Column(
               children: [
-
+                // ==================================================
                 // ALTERAR SENHA
+                // ==================================================
 
                 ListTile(
-                  leading:
-                      const Icon(
-                    Icons
-                        .lock_outline,
-                    color:
-                        laranja,
+                  leading: const Icon(
+                    Icons.lock_outline,
+                    color: laranja,
                   ),
-
-                  title: Text(
+                  title: const Text(
                     'Alterar senha',
-
-                    style:
-                        TextStyle(
-                      fontWeight:
-                          FontWeight.bold,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
                       color: texto,
                     ),
                   ),
-
-                  subtitle:
-                      Text(
+                  subtitle: const Text(
                     'Altere a senha da sua conta',
-
-                    style:
-                        TextStyle(
-                      color:
-                          textoSecundario,
+                    style: TextStyle(
+                      color: textoSecundario,
                     ),
                   ),
-
-                  trailing:
-                      Icon(
-                    Icons
-                        .arrow_forward_ios,
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios,
                     size: 16,
-                    color:
-                        textoSecundario,
+                    color: textoSecundario,
                   ),
-
-                  onTap:
-                      _mostrarAlterarSenha,
+                  onTap: _mostrarAlterarSenha,
                 ),
 
-                Divider(
+                const Divider(
                   height: 1,
-                  color:
-                      modoEscuro
-                          ? Colors
-                              .white12
-                          : Colors
-                              .black12,
+                  color: divisor,
                 ),
 
+                // ==================================================
                 // AJUDA
+                // ==================================================
 
                 ListTile(
-                  leading:
-                      const Icon(
-                    Icons
-                        .help_outline,
-                    color:
-                        laranja,
+                  leading: const Icon(
+                    Icons.help_outline,
+                    color: laranja,
                   ),
-
-                  title: Text(
+                  title: const Text(
                     'Ajuda e suporte',
-
-                    style:
-                        TextStyle(
-                      fontWeight:
-                          FontWeight.bold,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
                       color: texto,
                     ),
                   ),
-
-                  subtitle:
-                      Text(
+                  subtitle: const Text(
                     'Precisa de ajuda com o FoodJet?',
-
-                    style:
-                        TextStyle(
-                      color:
-                          textoSecundario,
+                    style: TextStyle(
+                      color: textoSecundario,
                     ),
                   ),
-
-                  trailing:
-                      Icon(
-                    Icons
-                        .arrow_forward_ios,
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios,
                     size: 16,
-                    color:
-                        textoSecundario,
+                    color: textoSecundario,
                   ),
-
-                  onTap:
-                      _mostrarAjudaSuporte,
+                  onTap: _mostrarAjudaSuporte,
                 ),
 
-                Divider(
+                const Divider(
                   height: 1,
-                  color:
-                      modoEscuro
-                          ? Colors
-                              .white12
-                          : Colors
-                              .black12,
+                  color: divisor,
                 ),
 
+                // ==================================================
                 // SOBRE
+                // ==================================================
 
                 ListTile(
-                  leading:
-                      const Icon(
-                    Icons
-                        .info_outline,
-                    color:
-                        laranja,
+                  leading: const Icon(
+                    Icons.info_outline,
+                    color: laranja,
                   ),
-
-                  title: Text(
+                  title: const Text(
                     'Sobre o FoodJet',
-
-                    style:
-                        TextStyle(
-                      fontWeight:
-                          FontWeight.bold,
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
                       color: texto,
                     ),
                   ),
-
-                  subtitle:
-                      Text(
+                  subtitle: const Text(
                     'Versão 1.0.0',
-
-                    style:
-                        TextStyle(
-                      color:
-                          textoSecundario,
+                    style: TextStyle(
+                      color: textoSecundario,
                     ),
                   ),
-
-                  trailing:
-                      Icon(
-                    Icons
-                        .arrow_forward_ios,
+                  trailing: const Icon(
+                    Icons.arrow_forward_ios,
                     size: 16,
-                    color:
-                        textoSecundario,
+                    color: textoSecundario,
                   ),
-
                   onTap: () {
                     showAboutDialog(
-                      context:
-                          context,
-                      applicationName:
-                          'FoodJet',
-                      applicationVersion:
-                          '1.0.0',
-                      applicationLegalese:
-                          '© 2026 FoodJet',
+                      context: context,
+                      applicationName: 'FoodJet',
+                      applicationVersion: '1.0.0',
+                      applicationLegalese: '© 2026 FoodJet',
                     );
                   },
                 ),
@@ -964,48 +668,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
             ),
           ),
 
-          const SizedBox(
-            height: 30,
-          ),
+          const SizedBox(height: 30),
 
           // ==================================================
           // RODAPÉ
           // ==================================================
 
-          Center(
+          const Center(
             child: Text(
               'FoodJet • Delivery rápido e inteligente',
-
-              textAlign:
-                  TextAlign.center,
-
+              textAlign: TextAlign.center,
               style: TextStyle(
-                color:
-                    textoSecundario,
+                color: textoSecundario,
                 fontSize: 13,
               ),
             ),
           ),
 
-          const SizedBox(
-            height: 10,
-          ),
+          const SizedBox(height: 10),
 
-          Center(
+          const Center(
             child: Text(
               'Versão 1.0.0',
-
               style: TextStyle(
-                color:
-                    textoSecundario,
+                color: textoSecundario,
                 fontSize: 12,
               ),
             ),
           ),
 
-          const SizedBox(
-            height: 30,
-          ),
+          const SizedBox(height: 30),
         ],
       ),
     );
@@ -1021,17 +713,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Container(
       width: 45,
       height: 45,
-
-      decoration:
-          BoxDecoration(
-        color:
-            Colors.orange.shade50,
-        borderRadius:
-            BorderRadius.circular(
-          12,
-        ),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
       ),
-
       child: Icon(
         icone,
         color: laranja,
@@ -1048,265 +733,154 @@ class _SettingsScreenState extends State<SettingsScreen> {
     required String label,
     required String valorAtual,
     required IconData icone,
-    required Future<void> Function(
-      String,
-    ) aoSalvar,
-    TextInputType teclado =
-        TextInputType.text,
+    required Future<void> Function(String) aoSalvar,
+    TextInputType teclado = TextInputType.text,
   }) {
-    final controller =
-        TextEditingController(
+    final controller = TextEditingController(
       text: valorAtual,
     );
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor:
-          Colors.transparent,
-
+      backgroundColor: Colors.transparent,
       builder: (context) {
         return Padding(
-          padding:
-              EdgeInsets.only(
-            bottom:
-                MediaQuery.of(
-                  context,
-                ).viewInsets.bottom,
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context)
+                .viewInsets
+                .bottom,
           ),
-
           child: Container(
-            padding:
-                const EdgeInsets.all(
-              24,
-            ),
-
-            decoration:
-                const BoxDecoration(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
               color: Colors.white,
-
-              borderRadius:
-                  BorderRadius.vertical(
-                top:
-                    Radius.circular(
-                  25,
-                ),
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(25),
               ),
             ),
-
             child: Column(
-              mainAxisSize:
-                  MainAxisSize.min,
-
+              mainAxisSize: MainAxisSize.min,
               crossAxisAlignment:
-                  CrossAxisAlignment
-                      .start,
-
+                  CrossAxisAlignment.start,
               children: [
-
                 Center(
-                  child:
-                      Container(
+                  child: Container(
                     width: 45,
                     height: 5,
-
-                    decoration:
-                        BoxDecoration(
-                      color: Colors
-                          .grey
-                          .shade300,
-
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade300,
                       borderRadius:
-                          BorderRadius
-                              .circular(
-                        10,
-                      ),
+                          BorderRadius.circular(10),
                     ),
                   ),
                 ),
 
-                const SizedBox(
-                  height: 25,
-                ),
+                const SizedBox(height: 25),
 
                 Row(
                   children: [
-
                     const Icon(
-                      Icons
-                          .edit_outlined,
-                      color:
-                          laranja,
+                      Icons.edit_outlined,
+                      color: laranja,
                     ),
-
-                    const SizedBox(
-                      width: 10,
-                    ),
-
+                    const SizedBox(width: 10),
                     Expanded(
                       child: Text(
                         titulo,
-
-                        style:
-                            const TextStyle(
+                        style: const TextStyle(
                           fontSize: 22,
-                          fontWeight:
-                              FontWeight
-                                  .bold,
-                          color:
-                              Colors.black,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
                         ),
                       ),
                     ),
                   ],
                 ),
 
-                const SizedBox(
-                  height: 25,
-                ),
+                const SizedBox(height: 25),
 
                 TextField(
-                  controller:
-                      controller,
-
-                  keyboardType:
-                      teclado,
-
-                  style:
-                      const TextStyle(
-                    color:
-                        Colors.black,
+                  controller: controller,
+                  keyboardType: teclado,
+                  style: const TextStyle(
+                    color: Colors.black,
                   ),
-
-                  decoration:
-                      InputDecoration(
+                  decoration: InputDecoration(
                     filled: true,
-
-                    fillColor:
-                        Colors.white,
-
-                    labelText:
-                        label,
-
-                    labelStyle:
-                        const TextStyle(
-                      color:
-                          Colors.black54,
+                    fillColor: Colors.white,
+                    labelText: label,
+                    labelStyle: const TextStyle(
+                      color: Colors.black54,
                     ),
-
-                    prefixIcon:
-                        Icon(
+                    prefixIcon: Icon(
                       icone,
-                      color:
-                          laranja,
+                      color: laranja,
                     ),
-
                     enabledBorder:
                         OutlineInputBorder(
                       borderRadius:
-                          BorderRadius
-                              .circular(
-                        12,
-                      ),
-
+                          BorderRadius.circular(12),
                       borderSide:
                           const BorderSide(
-                        color:
-                            Colors.grey,
+                        color: Colors.grey,
                       ),
                     ),
-
                     focusedBorder:
                         OutlineInputBorder(
                       borderRadius:
-                          BorderRadius
-                              .circular(
-                        12,
-                      ),
-
+                          BorderRadius.circular(12),
                       borderSide:
                           const BorderSide(
-                        color:
-                            laranja,
+                        color: laranja,
                         width: 2,
                       ),
                     ),
                   ),
                 ),
 
-                const SizedBox(
-                  height: 20,
-                ),
+                const SizedBox(height: 20),
 
                 SizedBox(
-                  width:
-                      double.infinity,
-
-                  child:
-                      ElevatedButton(
-                    onPressed:
-                        () async {
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () async {
                       final valor =
-                          controller
-                              .text
-                              .trim();
+                          controller.text.trim();
 
-                      if (valor
-                          .isEmpty) {
+                      if (valor.isEmpty) {
                         _mensagem(
                           'Preencha o campo.',
                         );
                         return;
                       }
 
-                      await aoSalvar(
-                        valor,
-                      );
+                      await aoSalvar(valor);
 
-                      if (!context
-                          .mounted) {
+                      if (!context.mounted) {
                         return;
                       }
 
-                      Navigator.pop(
-                        context,
-                      );
+                      Navigator.pop(context);
                     },
-
                     style:
-                        ElevatedButton
-                            .styleFrom(
-                      backgroundColor:
-                          laranja,
-
-                      foregroundColor:
-                          Colors.white,
-
+                        ElevatedButton.styleFrom(
+                      backgroundColor: laranja,
+                      foregroundColor: Colors.white,
                       padding:
-                          const EdgeInsets
-                              .symmetric(
+                          const EdgeInsets.symmetric(
                         vertical: 15,
                       ),
-
                       shape:
                           RoundedRectangleBorder(
                         borderRadius:
-                            BorderRadius
-                                .circular(
-                          14,
-                        ),
+                            BorderRadius.circular(14),
                       ),
                     ),
-
-                    child:
-                        const Text(
+                    child: const Text(
                       'Salvar alterações',
-
-                      style:
-                          TextStyle(
-                        fontWeight:
-                            FontWeight
-                                .bold,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ),
@@ -1333,211 +907,130 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final confirmarSenhaController =
         TextEditingController();
 
-    bool mostrarSenhaAtual =
-        false;
-
-    bool mostrarNovaSenha =
-        false;
-
-    bool mostrarConfirmarSenha =
-        false;
+    bool mostrarSenhaAtual = false;
+    bool mostrarNovaSenha = false;
+    bool mostrarConfirmarSenha = false;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor:
-          Colors.white,
-
-      shape:
-          const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(
-          top:
-              Radius.circular(
-            25,
-          ),
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(25),
         ),
       ),
-
       builder: (context) {
         return StatefulBuilder(
-          builder:
-              (
+          builder: (
             context,
             setModalState,
           ) {
             return Padding(
-              padding:
-                  EdgeInsets.only(
+              padding: EdgeInsets.only(
                 left: 24,
                 right: 24,
                 top: 24,
                 bottom:
-                    MediaQuery.of(
-                      context,
-                    ).viewInsets.bottom +
-                    24,
+                    MediaQuery.of(context)
+                            .viewInsets
+                            .bottom +
+                        24,
               ),
-
-              child:
-                  SingleChildScrollView(
-                child:
-                    Column(
-                  mainAxisSize:
-                      MainAxisSize.min,
-
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment:
-                      CrossAxisAlignment
-                          .start,
-
+                      CrossAxisAlignment.start,
                   children: [
-
                     const Center(
-                      child:
-                          Icon(
-                        Icons
-                            .lock_reset,
+                      child: Icon(
+                        Icons.lock_reset,
                         size: 45,
-                        color:
-                            laranja,
+                        color: laranja,
                       ),
                     ),
 
-                    const SizedBox(
-                      height: 10,
-                    ),
+                    const SizedBox(height: 10),
 
                     const Center(
-                      child:
-                          Text(
+                      child: Text(
                         'Alterar senha',
-
-                        style:
-                            TextStyle(
+                        style: TextStyle(
                           fontSize: 22,
-                          fontWeight:
-                              FontWeight
-                                  .bold,
-                          color:
-                              Colors.black,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black,
                         ),
                       ),
                     ),
 
-                    const SizedBox(
-                      height: 8,
-                    ),
+                    const SizedBox(height: 8),
 
                     const Center(
-                      child:
-                          Text(
+                      child: Text(
                         'Digite seus dados para alterar sua senha',
-
-                        textAlign:
-                            TextAlign
-                                .center,
-
-                        style:
-                            TextStyle(
-                          color:
-                              Colors.grey,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.grey,
                         ),
                       ),
                     ),
 
-                    const SizedBox(
-                      height: 25,
-                    ),
+                    const SizedBox(height: 25),
 
                     _campoSenha(
                       controller:
                           senhaAtualController,
-                      label:
-                          'Senha atual',
-                      mostrar:
-                          mostrarSenhaAtual,
-
-                      aoAlternar:
-                          () {
-                        setModalState(
-                          () {
-                            mostrarSenhaAtual =
-                                !mostrarSenhaAtual;
-                          },
-                        );
+                      label: 'Senha atual',
+                      mostrar: mostrarSenhaAtual,
+                      aoAlternar: () {
+                        setModalState(() {
+                          mostrarSenhaAtual =
+                              !mostrarSenhaAtual;
+                        });
                       },
-
-                      icone:
-                          Icons
-                              .lock_outline,
+                      icone: Icons.lock_outline,
                     ),
 
-                    const SizedBox(
-                      height: 15,
-                    ),
+                    const SizedBox(height: 15),
 
                     _campoSenha(
                       controller:
                           novaSenhaController,
-                      label:
-                          'Nova senha',
-                      mostrar:
-                          mostrarNovaSenha,
-
-                      aoAlternar:
-                          () {
-                        setModalState(
-                          () {
-                            mostrarNovaSenha =
-                                !mostrarNovaSenha;
-                          },
-                        );
+                      label: 'Nova senha',
+                      mostrar: mostrarNovaSenha,
+                      aoAlternar: () {
+                        setModalState(() {
+                          mostrarNovaSenha =
+                              !mostrarNovaSenha;
+                        });
                       },
-
-                      icone:
-                          Icons
-                              .lock_reset,
+                      icone: Icons.lock_reset,
                     ),
 
-                    const SizedBox(
-                      height: 15,
-                    ),
+                    const SizedBox(height: 15),
 
                     _campoSenha(
                       controller:
                           confirmarSenhaController,
-                      label:
-                          'Confirmar nova senha',
-                      mostrar:
-                          mostrarConfirmarSenha,
-
-                      aoAlternar:
-                          () {
-                        setModalState(
-                          () {
-                            mostrarConfirmarSenha =
-                                !mostrarConfirmarSenha;
-                          },
-                        );
+                      label: 'Confirmar nova senha',
+                      mostrar: mostrarConfirmarSenha,
+                      aoAlternar: () {
+                        setModalState(() {
+                          mostrarConfirmarSenha =
+                              !mostrarConfirmarSenha;
+                        });
                       },
-
                       icone:
-                          Icons
-                              .verified_user_outlined,
+                          Icons.verified_user_outlined,
                     ),
 
-                    const SizedBox(
-                      height: 20,
-                    ),
+                    const SizedBox(height: 20),
 
                     SizedBox(
-                      width:
-                          double.infinity,
-
-                      child:
-                          ElevatedButton(
-                        onPressed:
-                            () async {
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: () async {
                           final senhaAtual =
                               senhaAtualController
                                   .text
@@ -1553,92 +1046,62 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   .text
                                   .trim();
 
-                          if (senhaAtual
-                                  .isEmpty ||
-                              novaSenha
-                                  .isEmpty ||
-                              confirmar
-                                  .isEmpty) {
+                          if (senhaAtual.isEmpty ||
+                              novaSenha.isEmpty ||
+                              confirmar.isEmpty) {
                             _mensagem(
                               'Preencha todos os campos.',
                             );
                             return;
                           }
 
-                          if (novaSenha
-                                  .length <
-                              6) {
+                          if (novaSenha.length < 6) {
                             _mensagem(
                               'A nova senha deve ter pelo menos 6 caracteres.',
                             );
                             return;
                           }
 
-                          if (novaSenha !=
-                              confirmar) {
+                          if (novaSenha != confirmar) {
                             _mensagem(
                               'As senhas não conferem.',
                             );
                             return;
                           }
 
-                          // Fechar teclado
-                          FocusScope
-                              .of(
+                          FocusScope.of(
                             context,
                           ).unfocus();
 
                           await _salvarNovaSenha(
-                            senhaAtual:
-                                senhaAtual,
-                            novaSenha:
-                                novaSenha,
+                            senhaAtual: senhaAtual,
+                            novaSenha: novaSenha,
                           );
 
-                          if (!context
-                              .mounted) {
+                          if (!context.mounted) {
                             return;
                           }
 
-                          Navigator.pop(
-                            context,
-                          );
+                          Navigator.pop(context);
                         },
-
                         style:
-                            ElevatedButton
-                                .styleFrom(
-                          backgroundColor:
-                              laranja,
-
-                          foregroundColor:
-                              Colors.white,
-
+                            ElevatedButton.styleFrom(
+                          backgroundColor: laranja,
+                          foregroundColor: Colors.white,
                           padding:
-                              const EdgeInsets
-                                  .symmetric(
+                              const EdgeInsets.symmetric(
                             vertical: 15,
                           ),
-
                           shape:
                               RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius
-                                    .circular(
-                              14,
-                            ),
+                                BorderRadius.circular(14),
                           ),
                         ),
-
-                        child:
-                            const Text(
+                        child: const Text(
                           'Alterar senha',
-
-                          style:
-                              TextStyle(
-                            fontWeight:
-                                FontWeight
-                                    .bold,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
@@ -1658,93 +1121,48 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ==================================================
 
   Widget _campoSenha({
-    required TextEditingController
-        controller,
+    required TextEditingController controller,
     required String label,
     required bool mostrar,
-    required VoidCallback
-        aoAlternar,
+    required VoidCallback aoAlternar,
     required IconData icone,
   }) {
     return TextField(
-      controller:
-          controller,
-
-      obscureText:
-          !mostrar,
-
-      style:
-          const TextStyle(
-        color:
-            Colors.black,
+      controller: controller,
+      obscureText: !mostrar,
+      style: const TextStyle(
+        color: Colors.black,
       ),
-
-      decoration:
-          InputDecoration(
+      decoration: InputDecoration(
         filled: true,
-
-        fillColor:
-            Colors.white,
-
-        labelText:
-            label,
-
-        labelStyle:
-            const TextStyle(
-          color:
-              Colors.black54,
+        fillColor: Colors.white,
+        labelText: label,
+        labelStyle: const TextStyle(
+          color: Colors.black54,
         ),
-
-        prefixIcon:
-            Icon(
+        prefixIcon: Icon(
           icone,
-          color:
-              laranja,
+          color: laranja,
         ),
-
-        suffixIcon:
-            IconButton(
-          icon:
-              Icon(
+        suffixIcon: IconButton(
+          icon: Icon(
             mostrar
-                ? Icons
-                    .visibility_off
-                : Icons
-                    .visibility,
-
-            color:
-                Colors.grey,
+                ? Icons.visibility_off
+                : Icons.visibility,
+            color: Colors.grey,
           ),
-
-          onPressed:
-              aoAlternar,
+          onPressed: aoAlternar,
         ),
-
-        enabledBorder:
-            OutlineInputBorder(
-          borderRadius:
-              BorderRadius.circular(
-            12,
-          ),
-
-          borderSide:
-              const BorderSide(
-            color:
-                Colors.grey,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(
+            color: Colors.grey,
           ),
         ),
-
-        focusedBorder:
-            OutlineInputBorder(
-          borderRadius:
-              BorderRadius.circular(
-            12,
-          ),
-
-          borderSide:
-              const BorderSide(
-            color:
-                laranja,
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(
+            color: laranja,
             width: 2,
           ),
         ),
@@ -1760,76 +1178,45 @@ class _SettingsScreenState extends State<SettingsScreen> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor:
-          Colors.white,
-
-      shape:
-          const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(
-          top:
-              Radius.circular(
-            25,
-          ),
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(
+          top: Radius.circular(25),
         ),
       ),
-
       builder: (context) {
         return Padding(
-          padding:
-              const EdgeInsets.all(
-            24,
-          ),
-
+          padding: const EdgeInsets.all(24),
           child: Column(
-            mainAxisSize:
-                MainAxisSize.min,
-
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment:
-                CrossAxisAlignment
-                    .start,
-
+                CrossAxisAlignment.start,
             children: [
-
               const Text(
                 'Ajuda e suporte',
-
-                style:
-                    TextStyle(
+                style: TextStyle(
                   fontSize: 22,
-                  fontWeight:
-                      FontWeight.bold,
-                  color:
-                      Colors.black,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black,
                 ),
               ),
 
-              const SizedBox(
-                height: 10,
-              ),
+              const SizedBox(height: 10),
 
               const Text(
                 'Como podemos ajudar?',
-
-                style:
-                    TextStyle(
-                  color:
-                      Colors.grey,
+                style: TextStyle(
+                  color: Colors.grey,
                 ),
               ),
 
-              const SizedBox(
-                height: 20,
-              ),
+              const SizedBox(height: 20),
 
               _itemAjuda(
-                Icons
-                    .receipt_long_outlined,
+                Icons.receipt_long_outlined,
                 'Problemas com meu pedido',
                 () {
-                  Navigator.pop(
-                    context,
-                  );
+                  Navigator.pop(context);
 
                   _mensagem(
                     'Em breve você poderá falar sobre seu pedido.',
@@ -1838,13 +1225,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
 
               _itemAjuda(
-                Icons
-                    .payment_outlined,
+                Icons.payment_outlined,
                 'Problemas com pagamento',
                 () {
-                  Navigator.pop(
-                    context,
-                  );
+                  Navigator.pop(context);
 
                   _mensagem(
                     'Suporte de pagamento selecionado.',
@@ -1853,13 +1237,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
               ),
 
               _itemAjuda(
-                Icons
-                    .account_circle_outlined,
+                Icons.account_circle_outlined,
                 'Problemas com minha conta',
                 () {
-                  Navigator.pop(
-                    context,
-                  );
+                  Navigator.pop(context);
 
                   _mensagem(
                     'Suporte da conta selecionado.',
@@ -1871,9 +1252,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 Icons.chat_outlined,
                 'Falar com o suporte',
                 () {
-                  Navigator.pop(
-                    context,
-                  );
+                  Navigator.pop(context);
 
                   _mensagem(
                     'Em breve o atendimento do FoodJet estará disponível.',
@@ -1881,9 +1260,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 },
               ),
 
-              const SizedBox(
-                height: 15,
-              ),
+              const SizedBox(height: 15),
             ],
           ),
         );
@@ -1901,53 +1278,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
     VoidCallback aoClicar,
   ) {
     return ListTile(
-      onTap:
-          aoClicar,
-
-      leading:
-          Container(
+      onTap: aoClicar,
+      leading: Container(
         width: 45,
         height: 45,
-
-        decoration:
-            BoxDecoration(
-          color:
-              Colors.orange.shade50,
-
-          borderRadius:
-              BorderRadius.circular(
-            12,
-          ),
+        decoration: BoxDecoration(
+          color: Colors.orange.shade50,
+          borderRadius: BorderRadius.circular(12),
         ),
-
-        child:
-            Icon(
+        child: Icon(
           icone,
-          color:
-              laranja,
+          color: laranja,
         ),
       ),
-
-      title:
-          Text(
+      title: Text(
         titulo,
-
-        style:
-            const TextStyle(
-          fontWeight:
-              FontWeight.bold,
-          color:
-              Colors.black,
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Colors.black,
         ),
       ),
-
-      trailing:
-          const Icon(
-        Icons
-            .arrow_forward_ios,
+      trailing: const Icon(
+        Icons.arrow_forward_ios,
         size: 16,
-        color:
-            Colors.grey,
+        color: Colors.grey,
       ),
     );
   }
@@ -1959,22 +1313,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _mensagem(
     String mensagem,
   ) {
-    ScaffoldMessenger.of(
-      context,
-    ).hideCurrentSnackBar();
-
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(
-      SnackBar(
-        content:
-            Text(mensagem),
-
-        duration:
-            const Duration(
-          seconds: 3,
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(mensagem),
+          duration: const Duration(
+            seconds: 3,
+          ),
         ),
-      ),
-    );
+      );
   }
 }

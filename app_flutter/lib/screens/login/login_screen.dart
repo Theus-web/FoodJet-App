@@ -66,14 +66,13 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final resultado =
-          await authService.login(
-        email,
-        senha,
+      final resultado = await authService.login(
+        emailController.text.trim(),
+        senhaController.text,
       );
 
-      print('RESULTADO LOGIN: $resultado');
-      print(
+      debugPrint('RESULTADO LOGIN: $resultado');
+      debugPrint(
         'USUARIO LOGIN: ${resultado['usuario']}',
       );
 
@@ -110,7 +109,7 @@ class _LoginScreenState extends State<LoginScreen> {
         erro: true,
       );
 
-      print(
+      debugPrint(
         'ERRO LOGIN: $e',
       );
     } finally {
@@ -192,20 +191,40 @@ class _LoginScreenState extends State<LoginScreen> {
               // ==================================================
 
               Container(
-                width: 100,
-                height: 100,
-                decoration:
-                    BoxDecoration(
+                width: 120,
+                height: 120,
+                decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius:
-                      BorderRadius.circular(
-                    30,
-                  ),
+                  borderRadius: BorderRadius.circular(28),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.12),
+                      blurRadius: 15,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
                 ),
-                child: const Icon(
-                  Icons.delivery_dining,
-                  size: 65,
-                  color: laranja,
+                child: const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.delivery_dining_rounded,
+                        size: 58,
+                        color: laranja,
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'FoodJet',
+                        style: TextStyle(
+                          color: laranja,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.8,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
@@ -218,8 +237,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 38,
-                  fontWeight:
-                      FontWeight.bold,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
 
@@ -228,7 +246,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
 
               const Text(
-                'Delivery rápido e inteligente',
+                'Delivery rápido e inteligente 🚀',
                 style: TextStyle(
                   color: Colors.white70,
                   fontSize: 16,
@@ -244,34 +262,54 @@ class _LoginScreenState extends State<LoginScreen> {
               // ==================================================
 
               TextField(
-                controller:
-                    emailController,
+                controller: emailController,
                 keyboardType:
                     TextInputType.emailAddress,
-                style:
-                    const TextStyle(
+                textInputAction:
+                    TextInputAction.next,
+                style: const TextStyle(
                   color: Colors.black,
+                  fontSize: 16,
                 ),
-                decoration:
-                    InputDecoration(
+                decoration: InputDecoration(
                   filled: true,
-                  fillColor:
-                      Colors.white,
-                  hintText:
-                      'E-mail',
-                  prefixIcon:
-                      const Icon(
-                    Icons.email_outlined,
-                    color: Colors.black,
+                  fillColor: Colors.white,
+                  hintText: 'E-mail',
+                  hintStyle: const TextStyle(
+                    color: Colors.black54,
                   ),
-                  border:
+                  prefixIcon: const Icon(
+                    Icons.email_outlined,
+                    color: Colors.black87,
+                  ),
+                  contentPadding:
+                      const EdgeInsets.symmetric(
+                    vertical: 18,
+                    horizontal: 16,
+                  ),
+                  enabledBorder:
                       OutlineInputBorder(
                     borderRadius:
                         BorderRadius.circular(
-                      15,
+                      16,
                     ),
                     borderSide:
-                        BorderSide.none,
+                        const BorderSide(
+                      color: Colors.white,
+                      width: 1.5,
+                    ),
+                  ),
+                  focusedBorder:
+                      OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                      16,
+                    ),
+                    borderSide:
+                        const BorderSide(
+                      color: Color(0xFFFFE1D1),
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -285,32 +323,29 @@ class _LoginScreenState extends State<LoginScreen> {
               // ==================================================
 
               TextField(
-                controller:
-                    senhaController,
-                obscureText:
-                    !mostrarSenha,
-                style:
-                    const TextStyle(
+                controller: senhaController,
+                obscureText: !mostrarSenha,
+                textInputAction:
+                    TextInputAction.done,
+                style: const TextStyle(
                   color: Colors.black,
+                  fontSize: 16,
                 ),
-                decoration:
-                    InputDecoration(
+                decoration: InputDecoration(
                   filled: true,
-                  fillColor:
-                      Colors.white,
-                  hintText:
-                      'Senha',
-                  prefixIcon:
-                      const Icon(
-                    Icons.lock_outline,
-                    color: Colors.black,
+                  fillColor: Colors.white,
+                  hintText: 'Senha',
+                  hintStyle: const TextStyle(
+                    color: Colors.black54,
                   ),
-                  suffixIcon:
-                      IconButton(
+                  prefixIcon: const Icon(
+                    Icons.lock_outline,
+                    color: Colors.black87,
+                  ),
+                  suffixIcon: IconButton(
                     icon: Icon(
                       mostrarSenha
-                          ? Icons
-                              .visibility_off
+                          ? Icons.visibility_off
                           : Icons.visibility,
                       color: Colors.grey,
                     ),
@@ -321,14 +356,34 @@ class _LoginScreenState extends State<LoginScreen> {
                       });
                     },
                   ),
-                  border:
+                  contentPadding:
+                      const EdgeInsets.symmetric(
+                    vertical: 18,
+                    horizontal: 16,
+                  ),
+                  enabledBorder:
                       OutlineInputBorder(
                     borderRadius:
                         BorderRadius.circular(
-                      15,
+                      16,
                     ),
                     borderSide:
-                        BorderSide.none,
+                        const BorderSide(
+                      color: Colors.white,
+                      width: 1.5,
+                    ),
+                  ),
+                  focusedBorder:
+                      OutlineInputBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                      16,
+                    ),
+                    borderSide:
+                        const BorderSide(
+                      color: Color(0xFFFFE1D1),
+                      width: 2,
+                    ),
                   ),
                 ),
               ),

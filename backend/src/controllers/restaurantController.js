@@ -1,12 +1,10 @@
 const Restaurant = require("../models/restaurant");
 
-
 // ==================================================
 // CRIAR RESTAURANTE
 // ==================================================
 
 exports.create = async (req, res) => {
-
     try {
 
         const restaurante = {
@@ -28,44 +26,35 @@ exports.create = async (req, res) => {
             endereco:
                 req.body.endereco || "",
 
-
             taxaEntrega:
                 Number(req.body.taxaEntrega) || 0,
-
 
             tempoEntrega:
                 req.body.tempoEntrega || "",
 
-
             status:
                 "ABERTO",
-
 
             online:
                 true,
 
-
             aberto:
                 true,
 
-
             aceitarAutomatico:
                 req.body.aceitarAutomatico !== false,
-
 
             criadoEm:
                 new Date().toISOString()
         };
 
-
         await Restaurant.criar(
             restaurante
         );
 
-
         return res.status(201).json({
 
-            sucesso:true,
+            sucesso: true,
 
             mensagem:
                 "Restaurante cadastrado com sucesso",
@@ -73,19 +62,16 @@ exports.create = async (req, res) => {
             restaurante
         });
 
-
-    } catch(error) {
-
+    } catch (error) {
 
         console.error(
             "ERRO CREATE RESTAURANTE:",
             error
         );
 
-
         return res.status(500).json({
 
-            sucesso:false,
+            sucesso: false,
 
             erro:
                 "Erro ao cadastrar restaurante",
@@ -93,106 +79,188 @@ exports.create = async (req, res) => {
             detalhe:
                 error.message
         });
-
     }
-
 };
-
 
 
 // ==================================================
 // LISTAR RESTAURANTES
 // ==================================================
 
-exports.list = async (req,res)=>{
+exports.list = async (req, res) => {
 
     try {
 
+        // ==================================================
+        // BUSCAR RESTAURANTES
+        // ==================================================
 
         let lista =
             await Restaurant.listar();
 
-
-
-        if(!Array.isArray(lista)){
-
-            lista=[];
-
+        if (!Array.isArray(lista)) {
+            lista = [];
         }
 
 
+        // ==================================================
+        // CARREGAR PROMOÇÕES
+        // ==================================================
+
+        let promocoes = [];
+
+        try {
+
+            const Promotion =
+                require("../models/promotion");
+
+            promocoes =
+                await Promotion.listar();
+
+            if (!Array.isArray(promocoes)) {
+                promocoes = [];
+            }
+
+        } catch (error) {
+
+            console.log(
+                "ℹ️ Sem promoções carregadas:",
+                error.message
+            );
+
+            promocoes = [];
+        }
+
+
+        // ==================================================
+        // DATA ATUAL
+        // ==================================================
 
         const agora =
             new Date();
 
 
+        // ==================================================
+        // PROCESSAR RESTAURANTES
+        // ==================================================
 
         lista =
-            lista.map((restaurante)=>{
+            lista.map((restaurante) => {
+
+                let prioridade = 0;
+
+                let destaque = false;
+
+                let tipoDestaque = null;
+
+                // IMPORTANTE:
+                // A variável precisa existir fora do if
+                let promocao = null;
 
 
-                let prioridade=0;
+                // ==================================================
+                // BUSCAR PROMOÇÃO DO RESTAURANTE
+                // ==================================================
 
-                let destaque=false;
-
-                let tipoDestaque=null;
-
-
-
-                if(
-                    restaurante.promocao &&
-                    restaurante.promocao.ativa === true
-                ){
-                
-                    const promocao =
-    promocoes.find(
-        p =>
-        String(p.restauranteId)
-        ===
-        String(restaurante.id)
-        &&
-        p.ativa === true
-    );
-
-                    const validade =
-                        new Date(
-                            restaurante.promocao.expiraEm
-                        );
+                const promocaoEncontrada =
+                    promocoes.find(
+                        (p) =>
+                            String(p.restauranteId) ===
+                                String(restaurante.id) &&
+                            p.ativa === true
+                    );
 
 
+                // ==================================================
+                // VERIFICAR PROMOÇÃO
+                // ==================================================
 
-                    if(validade > agora){
+                if (promocaoEncontrada) {
 
-
-                        destaque=true;
-
-
-                        tipoDestaque =
-                            restaurante.promocao.tipo;
+                    let valida = true;
 
 
+                    // ==================================================
+                    // VERIFICAR EXPIRAÇÃO
+                    // ==================================================
 
-                        if(tipoDestaque==="TOP1"){
+                    if (promocaoEncontrada.expiraEm) {
 
-                            prioridade=3;
+                        const validade =
+                            new Date(
+                                promocaoEncontrada.expiraEm
+                            );
 
+                        if (
+                            Number.isNaN(
+                                validade.getTime()
+                            )
+                        ) {
+
+                            valida = false;
+
+                        } else if (
+                            validade <= agora
+                        ) {
+
+                            valida = false;
                         }
-                        else if(tipoDestaque==="DESTAQUE"){
-
-                            prioridade=2;
-
-                        }
-                        else if(tipoDestaque==="IMPULSO"){
-
-                            prioridade=1;
-
-                        }
-
                     }
 
+
+                    // ==================================================
+                    // PROMOÇÃO VÁLIDA
+                    // ==================================================
+
+                    if (valida) {
+
+                        promocao =
+                            promocaoEncontrada;
+
+                        destaque = true;
+
+
+                        // ==================================================
+                        // TIPO DE DESTAQUE
+                        // ==================================================
+
+                        tipoDestaque =
+                            promocaoEncontrada.tipo;
+
+
+                        // ==================================================
+                        // PRIORIDADE
+                        // ==================================================
+
+                        if (
+                            tipoDestaque === "TOP1"
+                        ) {
+
+                            prioridade = 3;
+
+                        }
+
+                        else if (
+                            tipoDestaque === "DESTAQUE"
+                        ) {
+
+                            prioridade = 2;
+
+                        }
+
+                        else if (
+                            tipoDestaque === "IMPULSO"
+                        ) {
+
+                            prioridade = 1;
+                        }
+                    }
                 }
 
 
+                // ==================================================
+                // RETORNO
+                // ==================================================
 
                 return {
 
@@ -208,35 +276,37 @@ exports.list = async (req,res)=>{
 
                     selo:
                         destaque
-                        ? "Patrocinado FoodJet"
-                        : null
-
+                            ? "Patrocinado FoodJet"
+                            : null
                 };
-
 
             });
 
 
+        // ==================================================
+        // ORDENAR POR PRIORIDADE
+        // ==================================================
 
         lista.sort(
-            (a,b)=>
-                b.prioridade-a.prioridade
+            (a, b) =>
+                b.prioridade -
+                a.prioridade
         );
 
 
+        // ==================================================
+        // RETORNAR
+        // ==================================================
 
         return res.json(lista);
 
 
-
-    }catch(error){
-
+    } catch (error) {
 
         console.error(
             "ERRO LISTAR RESTAURANTES:",
             error
         );
-
 
         return res.status(500).json({
 
@@ -245,13 +315,10 @@ exports.list = async (req,res)=>{
 
             detalhe:
                 error.message
-
         });
-
-
     }
-
 };
+
 
 // ==================================================
 // BUSCAR RESTAURANTE POR ID
@@ -262,7 +329,8 @@ exports.getById = async (req, res) => {
 
     try {
 
-        const { id } = req.params;
+        const { id } =
+            req.params;
 
 
         if (
@@ -276,9 +344,7 @@ exports.getById = async (req, res) => {
 
                 erro:
                     "ID do restaurante é obrigatório"
-
             });
-
         }
 
 
@@ -294,13 +360,13 @@ exports.getById = async (req, res) => {
 
                 erro:
                     "Restaurante não encontrado"
-
             });
-
         }
 
 
-        return res.json(restaurante);
+        return res.json(
+            restaurante
+        );
 
 
     } catch (error) {
@@ -320,13 +386,9 @@ exports.getById = async (req, res) => {
 
             detalhe:
                 error.message
-
         });
-
     }
-
 };
-
 
 
 // ==================================================
@@ -338,7 +400,8 @@ exports.update = async (req, res) => {
 
     try {
 
-        const { id } = req.params;
+        const { id } =
+            req.params;
 
 
         if (
@@ -352,9 +415,7 @@ exports.update = async (req, res) => {
 
                 erro:
                     "ID do restaurante é obrigatório"
-
             });
-
         }
 
 
@@ -396,9 +457,7 @@ exports.update = async (req, res) => {
 
                 erro:
                     "Restaurante não encontrado"
-
             });
-
         }
 
 
@@ -413,11 +472,9 @@ exports.update = async (req, res) => {
                 restaurante
             );
 
-
             console.log(
                 "📡 RESTAURANTE ATUALIZADO ENVIADO AOS CLIENTES"
             );
-
         }
 
 
@@ -429,7 +486,6 @@ exports.update = async (req, res) => {
                 "Restaurante atualizado com sucesso",
 
             restaurante
-
         });
 
 
@@ -450,13 +506,9 @@ exports.update = async (req, res) => {
 
             detalhe:
                 error.message
-
         });
-
     }
-
 };
-
 
 
 // ==================================================
@@ -468,7 +520,8 @@ exports.delete = async (req, res) => {
 
     try {
 
-        const { id } = req.params;
+        const { id } =
+            req.params;
 
 
         console.log(
@@ -500,9 +553,7 @@ exports.delete = async (req, res) => {
 
                 erro:
                     "ID do restaurante é obrigatório"
-
             });
-
         }
 
 
@@ -522,9 +573,7 @@ exports.delete = async (req, res) => {
 
                 erro:
                     "Restaurante não encontrado"
-
             });
-
         }
 
 
@@ -547,9 +596,7 @@ exports.delete = async (req, res) => {
 
                 erro:
                     "Não foi possível excluir a conta do restaurante"
-
             });
-
         }
 
 
@@ -602,18 +649,14 @@ exports.delete = async (req, res) => {
             global.io.emit(
                 "restaurante_excluido",
                 {
-
                     restauranteId:
                         String(id)
-
                 }
             );
-
 
             console.log(
                 "📡 EXCLUSÃO ENVIADA AOS CLIENTES"
             );
-
         }
 
 
@@ -629,7 +672,6 @@ exports.delete = async (req, res) => {
 
             removidos:
                 resultado.removidos
-
         });
 
 
@@ -659,12 +701,10 @@ exports.delete = async (req, res) => {
 
             detalhe:
                 error.message
-
         });
-
     }
-
 };
+
 
 // ==================================================
 // ONLINE / OFFLINE
@@ -675,16 +715,24 @@ exports.updateStatus = async (req, res) => {
 
     try {
 
-        const { id } = req.params;
+        const { id } =
+            req.params;
 
-        if (!id || String(id).trim() === "") {
+
+        if (
+            !id ||
+            String(id).trim() === ""
+        ) {
 
             return res.status(400).json({
-                sucesso: false,
-                erro: "ID do restaurante é obrigatório"
-            });
 
+                sucesso: false,
+
+                erro:
+                    "ID do restaurante é obrigatório"
+            });
         }
+
 
         console.log(
             "========================================"
@@ -708,48 +756,58 @@ exports.updateStatus = async (req, res) => {
             "========================================"
         );
 
+
         const dados = {};
+
 
         // ------------------------------------------
         // ONLINE
         // ------------------------------------------
 
-        if (req.body.online !== undefined) {
+        if (
+            req.body.online !== undefined
+        ) {
 
             dados.online =
                 req.body.online === true ||
                 req.body.online === "true";
-
         }
+
 
         // ------------------------------------------
         // ABERTO
         // ------------------------------------------
 
-        if (req.body.aberto !== undefined) {
+        if (
+            req.body.aberto !== undefined
+        ) {
 
             dados.aberto =
                 req.body.aberto === true ||
                 req.body.aberto === "true";
-
         }
+
 
         // ------------------------------------------
         // STATUS
         // ------------------------------------------
 
-        if (req.body.status !== undefined) {
+        if (
+            req.body.status !== undefined
+        ) {
 
             dados.status =
                 req.body.status;
-
         }
+
 
         // ------------------------------------------
         // SE NÃO RECEBEU NADA
         // ------------------------------------------
 
-        if (Object.keys(dados).length === 0) {
+        if (
+            Object.keys(dados).length === 0
+        ) {
 
             return res.status(400).json({
 
@@ -757,16 +815,16 @@ exports.updateStatus = async (req, res) => {
 
                 erro:
                     "Nenhum status foi informado"
-
             });
-
         }
+
 
         const restaurante =
             await Restaurant.atualizar(
                 id,
                 dados
             );
+
 
         if (!restaurante) {
 
@@ -776,10 +834,9 @@ exports.updateStatus = async (req, res) => {
 
                 erro:
                     "Restaurante não encontrado"
-
             });
-
         }
+
 
         // ------------------------------------------
         // AVISAR CLIENTES PELO WEBSOCKET
@@ -795,8 +852,8 @@ exports.updateStatus = async (req, res) => {
             console.log(
                 "📡 STATUS ENVIADO AOS CLIENTES"
             );
-
         }
+
 
         return res.json({
 
@@ -806,8 +863,8 @@ exports.updateStatus = async (req, res) => {
                 "Status do restaurante atualizado com sucesso",
 
             restaurante
-
         });
+
 
     } catch (error) {
 
@@ -825,6 +882,7 @@ exports.updateStatus = async (req, res) => {
             "========================================"
         );
 
+
         return res.status(500).json({
 
             sucesso: false,
@@ -834,26 +892,62 @@ exports.updateStatus = async (req, res) => {
 
             detalhe:
                 error.message
-
         });
-
     }
-
 };
+
+
+// ============================================================
+// PROMOÇÕES
+// ============================================================
 
 let promocoes = [];
 
-try {
 
-    const Promotion = require("../models/promotion");
+/**
+ * Carrega as promoções sem usar await no escopo global.
+ *
+ * O backend FoodJet utiliza CommonJS (require/module.exports),
+ * portanto o await precisa estar dentro de uma função async.
+ */
 
-    promocoes = await Promotion.listar();
+async function carregarPromocoes() {
 
-} catch(e){
+    try {
 
-    console.log(
-        "Sem promoções carregadas"
-    );
+        const Promotion =
+            require("../models/promotion");
 
+
+        promocoes =
+            await Promotion.listar();
+
+
+        if (!Array.isArray(promocoes)) {
+
+            promocoes = [];
+        }
+
+
+        console.log(
+            `✅ ${promocoes.length} promoções carregadas`
+        );
+
+
+        return promocoes;
+
+
+    } catch (error) {
+
+        console.log(
+            "ℹ️ Sem promoções carregadas:",
+            error.message
+        );
+
+
+        promocoes = [];
+
+
+        return promocoes;
+    }
 }
-

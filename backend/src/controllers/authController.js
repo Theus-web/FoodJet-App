@@ -10,20 +10,16 @@ const Email = require("../services/emailService");
 // ============================================================
 
 exports.register = async (req, res) => {
-
     try {
-
         const {
             nome,
             email,
             telefone,
             cnpj,
             categoria,
-
             responsavel,
             cpf,
             senha,
-
             cep,
             rua,
             numero,
@@ -31,7 +27,6 @@ exports.register = async (req, res) => {
             bairro,
             cidade,
             estado,
-
             banco,
             agencia,
             conta,
@@ -44,8 +39,7 @@ exports.register = async (req, res) => {
 
         if (!nome || !email || !senha || !telefone) {
             return res.status(400).json({
-                erro:
-                    "Nome, email, senha e telefone são obrigatórios"
+                erro: "Nome, email, senha e telefone são obrigatórios"
             });
         }
 
@@ -57,8 +51,7 @@ exports.register = async (req, res) => {
 
         if (!responsavel || !cpf) {
             return res.status(400).json({
-                erro:
-                    "Responsável e CPF são obrigatórios"
+                erro: "Responsável e CPF são obrigatórios"
             });
         }
 
@@ -71,20 +64,19 @@ exports.register = async (req, res) => {
             !estado
         ) {
             return res.status(400).json({
-                erro:
-                    "O endereço completo é obrigatório"
+                erro: "O endereço completo é obrigatório"
             });
         }
 
-        if (
-            !banco ||
-            !agencia ||
-            !conta ||
-            !pix
-        ) {
+        if (!banco || !agencia || !conta || !pix) {
             return res.status(400).json({
-                erro:
-                    "Os dados de recebimento são obrigatórios"
+                erro: "Os dados de recebimento são obrigatórios"
+            });
+        }
+
+        if (String(senha).length < 6) {
+            return res.status(400).json({
+                erro: "A senha deve ter pelo menos 6 caracteres"
             });
         }
 
@@ -92,28 +84,23 @@ exports.register = async (req, res) => {
         // NORMALIZAÇÃO
         // ====================================================
 
-        const emailNormalizado =
-            String(email)
-                .trim()
-                .toLowerCase();
+        const emailNormalizado = String(email)
+            .trim()
+            .toLowerCase();
 
-        const cnpjNormalizado =
-            String(cnpj)
-                .replace(/\D/g, "");
+        const cnpjNormalizado = String(cnpj)
+            .replace(/\D/g, "");
 
         // ====================================================
         // VERIFICAR EMAIL
         // ====================================================
 
         const usuarioExistente =
-            await User.buscarPorEmail(
-                emailNormalizado
-            );
+            await User.buscarPorEmail(emailNormalizado);
 
         if (usuarioExistente) {
             return res.status(409).json({
-                erro:
-                    "Este email já está cadastrado"
+                erro: "Este email já está cadastrado"
             });
         }
 
@@ -121,21 +108,17 @@ exports.register = async (req, res) => {
         // VERIFICAR CNPJ
         // ====================================================
 
-        const restaurantes =
-            await Restaurant.listar();
+        const restaurantes = await Restaurant.listar();
 
-        const cnpjExistente =
-            restaurantes.find(
-                restaurante =>
-                    String(restaurante.cnpj)
-                        .replace(/\D/g, "") ===
-                    cnpjNormalizado
-            );
+        const cnpjExistente = restaurantes.find(
+            (restaurante) =>
+                String(restaurante.cnpj || "")
+                    .replace(/\D/g, "") === cnpjNormalizado
+        );
 
         if (cnpjExistente) {
             return res.status(409).json({
-                erro:
-                    "Este CNPJ já está cadastrado"
+                erro: "Este CNPJ já está cadastrado"
             });
         }
 
@@ -145,92 +128,64 @@ exports.register = async (req, res) => {
 
         const agora = Date.now();
 
-        const restauranteId =
-            `rest_${agora}`;
-
-        const usuarioId =
-            `user_${agora}`;
+        const restauranteId = `rest_${agora}`;
+        const usuarioId = `user_${agora}`;
 
         // ====================================================
         // HASH DA SENHA
         // ====================================================
 
-        const senhaHash =
-            await bcrypt.hash(
-                senha,
-                10
-            );
+        const senhaHash = await bcrypt.hash(senha, 10);
 
         // ====================================================
         // RESTAURANTE
         // ====================================================
 
         const restaurante = {
-
             id: restauranteId,
 
-            nome:
-                String(nome).trim(),
+            nome: String(nome).trim(),
 
-            cnpj:
-                String(cnpj).trim(),
+            cnpj: String(cnpj).trim(),
 
-            categoria:
-                categoria
-                    ? String(categoria).trim()
-                    : "Restaurante",
+            categoria: categoria
+                ? String(categoria).trim()
+                : "Restaurante",
 
-            email:
-                emailNormalizado,
+            email: emailNormalizado,
 
-            telefone:
-                String(telefone).trim(),
+            telefone: String(telefone).trim(),
 
-            responsavel:
-                String(responsavel).trim(),
+            responsavel: String(responsavel).trim(),
 
-            cpf:
-                String(cpf).trim(),
+            cpf: String(cpf).trim(),
 
             endereco: {
+                cep: String(cep).trim(),
 
-                cep:
-                    String(cep).trim(),
+                rua: String(rua).trim(),
 
-                rua:
-                    String(rua).trim(),
+                numero: String(numero).trim(),
 
-                numero:
-                    String(numero).trim(),
+                complemento: complemento
+                    ? String(complemento).trim()
+                    : "",
 
-                complemento:
-                    complemento
-                        ? String(complemento).trim()
-                        : "",
+                bairro: String(bairro).trim(),
 
-                bairro:
-                    String(bairro).trim(),
+                cidade: String(cidade).trim(),
 
-                cidade:
-                    String(cidade).trim(),
-
-                estado:
-                    String(estado).trim()
+                estado: String(estado).trim()
             },
 
             pagamento: {
+                banco: String(banco).trim(),
 
-                banco:
-                    String(banco).trim(),
+                agencia: String(agencia).trim(),
 
-                agencia:
-                    String(agencia).trim(),
+                conta: String(conta).trim(),
 
-                conta:
-                    String(conta).trim(),
-
-                pix:
-                    String(pix).trim()
+                pix: String(pix).trim()
             },
 
             status: "FECHADO",
@@ -239,133 +194,97 @@ exports.register = async (req, res) => {
 
             aberto: false,
 
-            criadoEm:
-                new Date().toISOString(),
+            criadoEm: new Date().toISOString(),
 
-            atualizadoEm:
-                new Date().toISOString()
+            atualizadoEm: new Date().toISOString()
         };
 
         // ====================================================
         // SALVAR RESTAURANTE
         // ====================================================
 
-        await Restaurant.criar(
-            restaurante
-        );
+        await Restaurant.criar(restaurante);
 
         // ====================================================
-        // USUÁRIO
+        // USUÁRIO DO RESTAURANTE
         // ====================================================
 
         const usuario = {
-
             id: usuarioId,
 
-            nome:
-                String(responsavel).trim(),
+            nome: String(responsavel).trim(),
 
-            email:
-                emailNormalizado,
+            email: emailNormalizado,
 
-            telefone:
-                String(telefone).trim(),
+            telefone: String(telefone).trim(),
 
-            cpf:
-                String(cpf).trim(),
+            cpf: String(cpf).trim(),
 
-            senha:
-                senhaHash,
+            senha: senhaHash,
 
-            tipo:
-                "RESTAURANTE",
+            tipo: "RESTAURANTE",
 
-            restauranteId:
-                restauranteId,
+            restauranteId: restauranteId,
 
-            criadoEm:
-                new Date().toISOString(),
+            criadoEm: new Date().toISOString(),
 
-            atualizadoEm:
-                new Date().toISOString()
+            atualizadoEm: new Date().toISOString()
         };
 
         // ====================================================
         // SALVAR USUÁRIO
         // ====================================================
 
-        await User.criar(
-            usuario
-        );
+        await User.criar(usuario);
 
         // ====================================================
         // RESPOSTA
         // ====================================================
 
         return res.status(201).json({
-
             sucesso: true,
 
-            mensagem:
-                "Restaurante criado com sucesso",
+            mensagem: "Restaurante criado com sucesso",
 
             usuario: {
+                id: usuario.id,
 
-                id:
-                    usuario.id,
+                nome: usuario.nome,
 
-                nome:
-                    usuario.nome,
+                email: usuario.email,
 
-                email:
-                    usuario.email,
+                telefone: usuario.telefone,
 
-                telefone:
-                    usuario.telefone,
+                tipo: usuario.tipo,
 
-                tipo:
-                    usuario.tipo,
-
-                restauranteId:
-                    usuario.restauranteId
+                restauranteId: usuario.restauranteId
             },
 
             restaurante: {
+                id: restaurante.id,
 
-                id:
-                    restaurante.id,
+                nome: restaurante.nome,
 
-                nome:
-                    restaurante.nome,
+                cnpj: restaurante.cnpj,
 
-                cnpj:
-                    restaurante.cnpj,
+                categoria: restaurante.categoria,
 
-                categoria:
-                    restaurante.categoria,
+                status: restaurante.status,
 
-                status:
-                    restaurante.status,
-
-                online:
-                    restaurante.online
+                online: restaurante.online
             }
         });
 
     } catch (error) {
-
         console.error(
             "ERRO NO CADASTRO:",
             error
         );
 
         return res.status(500).json({
+            erro: "Erro interno ao cadastrar restaurante",
 
-            erro:
-                "Erro interno ao cadastrar restaurante",
-
-            detalhe:
-                error.message
+            detalhe: error.message
         });
     }
 };
@@ -375,9 +294,7 @@ exports.register = async (req, res) => {
 // ============================================================
 
 exports.login = async (req, res) => {
-
     try {
-
         const {
             email,
             senha
@@ -388,118 +305,29 @@ exports.login = async (req, res) => {
         // ====================================================
 
         if (!email || !senha) {
-
             return res.status(400).json({
-                erro:
-                    "Email e senha são obrigatórios"
+                erro: "Email e senha são obrigatórios"
             });
         }
-
-        // ============================================================
-// EXCLUIR CONTA DO CLIENTE
-// ============================================================
-
-exports.excluirConta = async (req, res) => {
-
-    try {
-
-        const usuarioId = req.usuario?.id;
-
-        if (!usuarioId) {
-            return res.status(401).json({
-                erro: "Usuário não autenticado"
-            });
-        }
-
-        const usuario = await User.buscarPorId(usuarioId);
-
-        if (!usuario) {
-            return res.status(404).json({
-                erro: "Usuário não encontrado"
-            });
-        }
-
-        // ====================================================
-        // GARANTIR QUE É CLIENTE
-        // ====================================================
-
-        const tipoUsuario =
-            String(usuario.tipo || "")
-                .trim()
-                .toUpperCase();
-
-        if (tipoUsuario !== "CLIENTE") {
-            return res.status(403).json({
-                erro:
-                    "Esta conta não é uma conta de cliente."
-            });
-        }
-
-        // ====================================================
-        // EXCLUIR CONTA
-        // ====================================================
-
-        const excluido =
-            await User.excluir(usuarioId);
-
-        if (!excluido) {
-            return res.status(500).json({
-                erro:
-                    "Não foi possível excluir a conta."
-            });
-        }
-
-        return res.status(200).json({
-
-            sucesso: true,
-
-            mensagem:
-                "Conta excluída com sucesso."
-
-        });
-
-    } catch (error) {
-
-        console.error(
-            "ERRO AO EXCLUIR CONTA DO CLIENTE:",
-            error
-        );
-
-        return res.status(500).json({
-
-            erro:
-                "Erro interno ao excluir conta.",
-
-            detalhe:
-                error.message
-
-        });
-    }
-};
 
         // ====================================================
         // NORMALIZAR EMAIL
         // ====================================================
 
-        const emailNormalizado =
-            String(email)
-                .trim()
-                .toLowerCase();
+        const emailNormalizado = String(email)
+            .trim()
+            .toLowerCase();
 
         // ====================================================
         // BUSCAR USUÁRIO
         // ====================================================
 
         const usuario =
-            await User.buscarPorEmail(
-                emailNormalizado
-            );
+            await User.buscarPorEmail(emailNormalizado);
 
         if (!usuario) {
-
             return res.status(401).json({
-                erro:
-                    "Email ou senha incorretos"
+                erro: "Email ou senha incorretos"
             });
         }
 
@@ -507,17 +335,14 @@ exports.excluirConta = async (req, res) => {
         // VALIDAR SENHA
         // ====================================================
 
-        const senhaValida =
-            await bcrypt.compare(
-                senha,
-                usuario.senha
-            );
+        const senhaValida = await bcrypt.compare(
+            senha,
+            usuario.senha
+        );
 
         if (!senhaValida) {
-
             return res.status(401).json({
-                erro:
-                    "Email ou senha incorretos"
+                erro: "Email ou senha incorretos"
             });
         }
 
@@ -527,14 +352,15 @@ exports.excluirConta = async (req, res) => {
 
         let restaurante = null;
 
-        if (
-            usuario.tipo === "RESTAURANTE"
-        ) {
+        const tipoUsuario = String(
+            usuario.tipo || ""
+        )
+            .trim()
+            .toUpperCase();
 
+        if (tipoUsuario === "RESTAURANTE") {
             if (!usuario.restauranteId) {
-
                 return res.status(403).json({
-
                     erro:
                         "Esta conta de restaurante não possui restaurante vinculado."
                 });
@@ -546,9 +372,7 @@ exports.excluirConta = async (req, res) => {
                 );
 
             if (!restaurante) {
-
                 return res.status(403).json({
-
                     erro:
                         "O restaurante vinculado a esta conta não existe mais. Cadastre o restaurante novamente."
                 });
@@ -559,115 +383,85 @@ exports.excluirConta = async (req, res) => {
         // CRIAR TOKEN
         // ====================================================
 
-        const token =
-            Token.criarToken({
+        const token = Token.criarToken({
+            id: usuario.id,
 
-                id:
-                    usuario.id,
+            nome: usuario.nome,
 
-                nome:
-                    usuario.nome,
+            email: usuario.email,
 
-                email:
-                    usuario.email,
+            tipo: usuario.tipo,
 
-                tipo:
-                    usuario.tipo,
-
-                restauranteId:
-                    usuario.restauranteId
-            });
+            restauranteId: usuario.restauranteId
+        });
 
         // ====================================================
         // RESPOSTA
         // ====================================================
 
         return res.status(200).json({
-
             sucesso: true,
 
-            mensagem:
-                "Login realizado com sucesso",
+            mensagem: "Login realizado com sucesso",
 
             token,
 
             usuario: {
+                id: usuario.id,
 
-                id:
-                    usuario.id,
+                nome: usuario.nome,
 
-                nome:
-                    usuario.nome,
+                email: usuario.email,
 
-                email:
-                    usuario.email,
+                telefone: usuario.telefone,
 
-                telefone:
-                    usuario.telefone,
+                cpf: usuario.cpf,
 
-                cpf:
-                    usuario.cpf,
+                tipo: usuario.tipo,
 
-                tipo:
-                    usuario.tipo,
-
-                restauranteId:
-                    usuario.restauranteId
+                restauranteId: usuario.restauranteId
             },
 
-            restaurante:
-                restaurante
-                    ? {
-                        id:
-                            restaurante.id,
+            restaurante: restaurante
+                ? {
+                    id: restaurante.id,
 
-                        nome:
-                            restaurante.nome,
+                    nome: restaurante.nome,
 
-                        categoria:
-                            restaurante.categoria,
+                    categoria: restaurante.categoria,
 
-                        status:
-                            restaurante.status,
+                    status: restaurante.status,
 
-                        online:
-                            restaurante.online,
+                    online: restaurante.online,
 
-                        aberto:
-                            restaurante.aberto
-                    }
-                    : null
+                    aberto: restaurante.aberto
+                }
+                : null
         });
 
     } catch (error) {
-
         console.error(
             "ERRO NO LOGIN:",
             error
         );
 
         return res.status(500).json({
+            erro: "Erro interno no login",
 
-            erro:
-                "Erro interno no login",
-
-            detalhe:
-                error.message
+            detalhe: error.message
         });
     }
 };
 
 // ============================================================
-// VALIDAR CÓDIGO
+// VALIDAR CÓDIGO DE RECUPERAÇÃO
 // ============================================================
 
 exports.validarCodigoRecuperacao = async (
     req,
     res
 ) => {
-
     try {
-
         const {
             email,
             codigo
@@ -675,8 +469,7 @@ exports.validarCodigoRecuperacao = async (
 
         if (!email || !codigo) {
             return res.status(400).json({
-                erro:
-                    "Email e código são obrigatórios"
+                erro: "Email e código são obrigatórios"
             });
         }
 
@@ -688,32 +481,26 @@ exports.validarCodigoRecuperacao = async (
 
         if (!usuario) {
             return res.status(400).json({
-                erro:
-                    "Código inválido ou expirado"
+                erro: "Código inválido ou expirado"
             });
         }
 
         return res.status(200).json({
-
             sucesso: true,
 
-            mensagem:
-                "Código validado com sucesso",
+            mensagem: "Código validado com sucesso",
 
-            usuarioId:
-                usuario.id
+            usuarioId: usuario.id
         });
 
     } catch (error) {
-
         console.error(
             "ERRO AO VALIDAR CÓDIGO:",
             error
         );
 
         return res.status(500).json({
-            erro:
-                "Erro interno ao validar código"
+            erro: "Erro interno ao validar código"
         });
     }
 };
@@ -726,20 +513,14 @@ exports.redefinirSenha = async (
     req,
     res
 ) => {
-
     try {
-
         const {
             email,
             codigo,
             novaSenha
         } = req.body;
 
-        if (
-            !email ||
-            !codigo ||
-            !novaSenha
-        ) {
+        if (!email || !codigo || !novaSenha) {
             return res.status(400).json({
                 erro:
                     "Email, código e nova senha são obrigatórios"
@@ -761,8 +542,7 @@ exports.redefinirSenha = async (
 
         if (!usuario) {
             return res.status(400).json({
-                erro:
-                    "Código inválido ou expirado"
+                erro: "Código inválido ou expirado"
             });
         }
 
@@ -782,15 +562,12 @@ exports.redefinirSenha = async (
         );
 
         return res.status(200).json({
-
             sucesso: true,
 
-            mensagem:
-                "Senha redefinida com sucesso"
+            mensagem: "Senha redefinida com sucesso"
         });
 
     } catch (error) {
-
         console.error(
             "ERRO AO REDEFINIR SENHA:",
             error
@@ -804,25 +581,20 @@ exports.redefinirSenha = async (
 };
 
 // ============================================================
-// ALTERAR SENHA
+// ALTERAR SENHA LOGADO
 // ============================================================
 
 exports.alterarSenha = async (
     req,
     res
 ) => {
-
     try {
-
         const {
             senhaAtual,
             novaSenha
         } = req.body;
 
-        if (
-            !senhaAtual ||
-            !novaSenha
-        ) {
+        if (!senhaAtual || !novaSenha) {
             return res.status(400).json({
                 erro:
                     "Senha atual e nova senha são obrigatórias"
@@ -841,8 +613,7 @@ exports.alterarSenha = async (
 
         if (!usuarioId) {
             return res.status(401).json({
-                erro:
-                    "Usuário não autenticado"
+                erro: "Usuário não autenticado"
             });
         }
 
@@ -853,8 +624,7 @@ exports.alterarSenha = async (
 
         if (!usuario) {
             return res.status(404).json({
-                erro:
-                    "Usuário não encontrado"
+                erro: "Usuário não encontrado"
             });
         }
 
@@ -866,8 +636,7 @@ exports.alterarSenha = async (
 
         if (!senhaValida) {
             return res.status(400).json({
-                erro:
-                    "Senha atual incorreta"
+                erro: "Senha atual incorreta"
             });
         }
 
@@ -883,15 +652,12 @@ exports.alterarSenha = async (
         );
 
         return res.status(200).json({
-
             sucesso: true,
 
-            mensagem:
-                "Senha alterada com sucesso"
+            mensagem: "Senha alterada com sucesso"
         });
 
     } catch (error) {
-
         console.error(
             "ERRO AO ALTERAR SENHA:",
             error
@@ -912,16 +678,13 @@ exports.perfil = async (
     req,
     res
 ) => {
-
     try {
-
         const usuarioId =
             req.usuario?.id;
 
         if (!usuarioId) {
             return res.status(401).json({
-                erro:
-                    "Usuário não autenticado"
+                erro: "Usuário não autenticado"
             });
         }
 
@@ -932,8 +695,7 @@ exports.perfil = async (
 
         if (!usuario) {
             return res.status(404).json({
-                erro:
-                    "Usuário não encontrado"
+                erro: "Usuário não encontrado"
             });
         }
 
@@ -942,44 +704,34 @@ exports.perfil = async (
         // ====================================================
 
         const usuarioSeguro = {
-            id:
-                usuario.id,
+            id: usuario.id,
 
-            nome:
-                usuario.nome,
+            nome: usuario.nome,
 
-            email:
-                usuario.email,
+            email: usuario.email,
 
-            telefone:
-                usuario.telefone,
+            telefone: usuario.telefone,
 
-            cpf:
-                usuario.cpf,
+            cpf: usuario.cpf,
 
-            tipo:
-                usuario.tipo,
+            tipo: usuario.tipo,
 
-            restauranteId:
-                usuario.restauranteId,
+            restauranteId: usuario.restauranteId,
 
-            endereco:
-                usuario.endereco || null,
+            endereco: usuario.endereco || null,
 
-            criadoEm:
-                usuario.criadoEm,
+            criadoEm: usuario.criadoEm,
 
-            atualizadoEm:
-                usuario.atualizadoEm
+            atualizadoEm: usuario.atualizadoEm
         };
 
         return res.status(200).json({
             sucesso: true,
+
             usuario: usuarioSeguro
         });
 
     } catch (error) {
-
         console.error(
             "ERRO AO BUSCAR PERFIL:",
             error
@@ -1000,16 +752,13 @@ exports.atualizarPerfil = async (
     req,
     res
 ) => {
-
     try {
-
         const usuarioId =
             req.usuario?.id;
 
         if (!usuarioId) {
             return res.status(401).json({
-                erro:
-                    "Usuário não autenticado"
+                erro: "Usuário não autenticado"
             });
         }
 
@@ -1025,7 +774,6 @@ exports.atualizarPerfil = async (
         // ====================================================
 
         if (email) {
-
             const emailNormalizado =
                 String(email)
                     .trim()
@@ -1039,7 +787,7 @@ exports.atualizarPerfil = async (
             if (
                 usuarioExistente &&
                 String(usuarioExistente.id) !==
-                String(usuarioId)
+                    String(usuarioId)
             ) {
                 return res.status(409).json({
                     erro:
@@ -1061,20 +809,17 @@ exports.atualizarPerfil = async (
 
         if (!usuarioAtualizado) {
             return res.status(404).json({
-                erro:
-                    "Usuário não encontrado"
+                erro: "Usuário não encontrado"
             });
         }
 
         return res.status(200).json({
-
             sucesso: true,
 
             mensagem:
                 "Perfil atualizado com sucesso",
 
             usuario: {
-
                 id:
                     usuarioAtualizado.id,
 
@@ -1099,7 +844,6 @@ exports.atualizarPerfil = async (
         });
 
     } catch (error) {
-
         console.error(
             "ERRO AO ATUALIZAR PERFIL:",
             error
@@ -1120,41 +864,30 @@ exports.atualizarEndereco = async (
     req,
     res
 ) => {
-
     try {
-
         const usuarioId =
             req.usuario?.id;
 
         if (!usuarioId) {
             return res.status(401).json({
-                erro:
-                    "Usuário não autenticado"
+                erro: "Usuário não autenticado"
             });
         }
 
         const endereco = {
+            cep: req.body.cep,
 
-            cep:
-                req.body.cep,
+            rua: req.body.rua,
 
-            rua:
-                req.body.rua,
+            numero: req.body.numero,
 
-            numero:
-                req.body.numero,
+            bairro: req.body.bairro,
 
-            bairro:
-                req.body.bairro,
+            complemento: req.body.complemento,
 
-            complemento:
-                req.body.complemento,
+            cidade: req.body.cidade,
 
-            cidade:
-                req.body.cidade,
-
-            estado:
-                req.body.estado
+            estado: req.body.estado
         };
 
         const usuarioAtualizado =
@@ -1165,13 +898,11 @@ exports.atualizarEndereco = async (
 
         if (!usuarioAtualizado) {
             return res.status(404).json({
-                erro:
-                    "Usuário não encontrado"
+                erro: "Usuário não encontrado"
             });
         }
 
         return res.status(200).json({
-
             sucesso: true,
 
             mensagem:
@@ -1182,7 +913,6 @@ exports.atualizarEndereco = async (
         });
 
     } catch (error) {
-
         console.error(
             "ERRO AO ATUALIZAR ENDEREÇO:",
             error
@@ -1195,58 +925,52 @@ exports.atualizarEndereco = async (
     }
 };
 
-const crypto = require("crypto");
-
-
 // ============================================================
 // SOLICITAR RECUPERAÇÃO DE SENHA
 // ============================================================
 
-exports.solicitarRecuperacao = async (req, res) => {
-
+exports.solicitarRecuperacao = async (
+    req,
+    res
+) => {
     try {
-
         console.log("");
-        console.log("==========================================");
-        console.log("🔐 ROTA DE RECUPERAÇÃO CHAMADA");
-        console.log("==========================================");
-
-        // ======================================================
-        // EMAIL
-        // ======================================================
+        console.log(
+            "=========================================="
+        );
+        console.log(
+            "🔐 ROTA DE RECUPERAÇÃO CHAMADA"
+        );
+        console.log(
+            "=========================================="
+        );
 
         const email =
             String(req.body.email || "")
                 .trim()
                 .toLowerCase();
 
-        console.log("📧 Email recebido:", email);
-
-        // ======================================================
-        // VALIDAR EMAIL
-        // ======================================================
+        console.log(
+            "📧 Email recebido:",
+            email
+        );
 
         if (!email) {
-
-            console.log("❌ Email não informado");
-
             return res.status(400).json({
                 erro: "Informe seu email"
             });
-
         }
 
-        // ======================================================
-        // BUSCAR USUÁRIO
-        // ======================================================
-
-        console.log("🔎 Procurando usuário...");
+        console.log(
+            "🔎 Procurando usuário..."
+        );
 
         const usuario =
-            await User.buscarPorEmail(email);
+            await User.buscarPorEmail(
+                email
+            );
 
         if (!usuario) {
-
             console.log(
                 "❌ Usuário não encontrado:",
                 email
@@ -1255,7 +979,6 @@ exports.solicitarRecuperacao = async (req, res) => {
             return res.status(404).json({
                 erro: "Email não encontrado"
             });
-
         }
 
         console.log(
@@ -1263,9 +986,9 @@ exports.solicitarRecuperacao = async (req, res) => {
             usuario.id
         );
 
-        // ======================================================
+        // ====================================================
         // GERAR CÓDIGO
-        // ======================================================
+        // ====================================================
 
         const codigo =
             Math.floor(
@@ -1278,27 +1001,27 @@ exports.solicitarRecuperacao = async (req, res) => {
             codigo
         );
 
-        // ======================================================
-// EXPIRAÇÃO DO CÓDIGO
-// ======================================================
+        // ====================================================
+        // EXPIRAÇÃO - 10 MINUTOS
+        // ====================================================
 
-// Código válido por 10 minutos
-const expiracao =
-    Date.now() + (10 * 60 * 1000);
+        const expiracao =
+            Date.now() +
+            (10 * 60 * 1000);
 
-await User.salvarCodigoRecuperacao(
-    usuario.id,
-    codigo,
-    expiracao
-);
+        await User.salvarCodigoRecuperacao(
+            usuario.id,
+            codigo,
+            expiracao
+        );
 
         console.log(
             "💾 Código salvo no usuário"
         );
 
-        // ======================================================
+        // ====================================================
         // ENVIAR EMAIL
-        // ======================================================
+        // ====================================================
 
         console.log(
             "📨 Iniciando envio do email..."
@@ -1317,29 +1040,20 @@ await User.salvarCodigoRecuperacao(
             "=========================================="
         );
 
-        // ======================================================
-        // RESPOSTA
-        // ======================================================
-
         return res.status(200).json({
-
             sucesso: true,
 
             mensagem:
                 "Código de recuperação enviado para seu email"
-
         });
 
     } catch (error) {
-
         console.error("");
         console.error(
             "❌❌❌ ERRO AO ENVIAR EMAIL ❌❌❌"
         );
 
-        console.error(
-            error
-        );
+        console.error(error);
 
         console.error(
             "Mensagem:",
@@ -1351,108 +1065,146 @@ await User.salvarCodigoRecuperacao(
         );
 
         return res.status(500).json({
-
             erro:
                 "Não foi possível enviar o email de recuperação",
 
             detalhe:
                 error.message
-
         });
-
     }
-
 };
 
 // ============================================================
-// EXCLUIR CONTA CLIENTE
+// EXCLUIR CONTA DO CLIENTE
 // ============================================================
 
-exports.excluirConta = async (req, res) => {
-
+exports.excluirConta = async (
+    req,
+    res
+) => {
     try {
+        console.log("");
+        console.log(
+            "=========================================="
+        );
+        console.log(
+            "🗑️ FOODJET - EXCLUSÃO DE CONTA"
+        );
+        console.log(
+            "=========================================="
+        );
 
-        const usuarioId = req.usuario?.id;
+        // ====================================================
+        // USUÁRIO AUTENTICADO
+        // ====================================================
 
+        const usuarioId =
+            req.usuario?.id;
+
+        console.log(
+            "🆔 ID recebido:",
+            usuarioId
+        );
 
         if (!usuarioId) {
-
             return res.status(401).json({
                 erro:
                     "Usuário não autenticado"
             });
-
         }
 
+        // ====================================================
+        // BUSCAR USUÁRIO
+        // ====================================================
 
         const usuario =
-            await User.buscarPorId(usuarioId);
-
-
+            await User.buscarPorId(
+                usuarioId
+            );
 
         if (!usuario) {
-
             return res.status(404).json({
                 erro:
                     "Usuário não encontrado"
             });
-
         }
 
+        console.log(
+            "👤 Usuário encontrado:",
+            usuario.email
+        );
 
+        // ====================================================
+        // VERIFICAR TIPO
+        // ====================================================
 
-        const tipo =
-            String(usuario.tipo)
-            .toUpperCase();
+        const tipoUsuario =
+            String(usuario.tipo || "")
+                .trim()
+                .toUpperCase();
 
+        console.log(
+            "👤 Tipo:",
+            tipoUsuario
+        );
 
-
-        if (tipo !== "CLIENTE") {
-
+        if (tipoUsuario !== "CLIENTE") {
             return res.status(403).json({
                 erro:
-                    "Somente clientes podem excluir a conta"
+                    "Somente clientes podem excluir a conta."
             });
-
         }
 
+        // ====================================================
+        // EXCLUIR USUÁRIO
+        // ====================================================
 
+        const excluido =
+            await User.excluir(
+                usuarioId
+            );
 
-        await User.excluir(usuarioId);
+        if (!excluido) {
+            return res.status(500).json({
+                erro:
+                    "Não foi possível excluir a conta."
+            });
+        }
 
+        console.log(
+            "✅ CONTA EXCLUÍDA:",
+            usuario.email
+        );
 
+        console.log(
+            "=========================================="
+        );
 
         return res.status(200).json({
-
-            sucesso:true,
+            sucesso: true,
 
             mensagem:
                 "Conta excluída com sucesso"
-
         });
 
-
-
-    } catch(error){
-
-
+    } catch (error) {
+        console.error("");
         console.error(
-            "ERRO EXCLUIR CONTA:",
-            error
+            "❌ ERRO AO EXCLUIR CONTA"
         );
 
+        console.error(error);
+
+        console.error(
+            "=========================================="
+        );
 
         return res.status(500).json({
-
             erro:
-                "Erro ao excluir conta",
+                "Erro interno ao excluir conta",
 
             detalhe:
                 error.message
-
         });
-
-
     }
-
 };

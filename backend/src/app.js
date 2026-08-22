@@ -13,6 +13,7 @@ const supportRoutes = require("./routes/support");
 const complaintRoutes = require("./routes/complaint");
 const promotionRoutes = require("./routes/promotion");
 const couponRoutes = require("./routes/coupon");
+const favoriteRoutes = require("./routes/favorite");
 
 const app = express();
 
@@ -37,8 +38,11 @@ app.use(
     })
 );
 
+// IMPORTANTE:
+// express.json() precisa vir ANTES das rotas.
 app.use(express.json());
 
+// Arquivos enviados
 app.use(
     "/uploads",
     express.static(
@@ -83,7 +87,6 @@ app.use(
     adminRoutes
 );
 
-
 app.use(
     "/api/dashboard",
     dashboardRoutes
@@ -91,7 +94,6 @@ app.use(
 
 // ======================================================
 // SUPORTE
-// Cliente ↔ Restaurante
 // ======================================================
 
 app.use(
@@ -99,16 +101,13 @@ app.use(
     supportRoutes
 );
 
-
-
-
 app.use(
     "/api/complaints",
     complaintRoutes
 );
 
 // ======================================================
-// CUPONS
+// CUPONS / PROMOÇÕES
 // ======================================================
 
 app.use(
@@ -122,17 +121,25 @@ app.use(
 );
 
 // ======================================================
-// LOGS
+// FAVORITOS
 // ======================================================
+
+app.use(
+    "/api/favoritos",
+    favoriteRoutes
+);
+
+console.log(
+    "❤️ ROTA /api/favoritos REGISTRADA"
+);
 
 console.log(
     "🏆 ROTA /api/coupons REGISTRADA"
 );
 
 console.log(
-    "🏆 ROTA /api/ranking REGISTRADA"
+    "🏆 ROTA /api/promotions REGISTRADA"
 );
-
 
 console.log(
     "✅ ROTA /api/auth REGISTRADA"
@@ -185,7 +192,7 @@ app.get(
 );
 
 // ======================================================
-// EXPORTAR APP
+// EXPORTAR
 // ======================================================
 
 module.exports = app;

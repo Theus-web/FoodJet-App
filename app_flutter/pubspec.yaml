@@ -11,6 +11,8 @@ dependencies:
   flutter:
     sdk: flutter
 
+  lottie: ^3.3.1
+
   # Ícones padrão iOS
   cupertino_icons: ^1.0.8
 
@@ -45,4 +47,6 @@ flutter:
   uses-material-design: true
 
   assets:
-    - assets/images/
+    - assets/animations/foodjet_splash.json
+    
+   

@@ -1,704 +1,359 @@
 import 'dart:convert';
-
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../config/api.dart';
-
 class AuthService {
-  static const String baseUrl = '${Api.baseUrl}/auth';
+  static String get baseUrl {
+    // Flutter Web - Edge/Chrome
+    if (kIsWeb) {
+      return 'http://localhost:3000/api';
+    }
 
-  static const String _tokenKey = 'foodjet_token';
+    // Android Emulator
+    return 'http://10.0.2.2:3000/api';
+  }
 
-  // ==================================================
+  // ==========================================================
   // LOGIN
-  // ==================================================
+  // ==========================================================
 
-  Future<Map<String, dynamic>> login(
-    String email,
-    String senha,
-  ) async {
-    final emailNormalizado = email.trim().toLowerCase();
+  Future<Map<String, dynamic>> login(String email, String senha) async {
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/login'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'email': email,
+        'senha': senha,
+      }),
+    );
 
-    if (emailNormalizado.isEmpty) {
-      throw Exception('Digite seu email.');
-    }
+    final data = _decodeResponse(response);
 
-    if (senha.isEmpty) {
-      throw Exception('Digite sua senha.');
-    }
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300) {
+      final token = data['token']?.toString();
 
-    try {
-      final resposta = await http
-          .post(
-            Uri.parse('$baseUrl/login'),
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'email': emailNormalizado,
-              'senha': senha,
-            }),
-          )
-          .timeout(
-            const Duration(seconds: 15),
-          );
-
-      final resultado = _processarResposta(resposta);
-
-      final token = resultado['token']?.toString();
-
-      if (resposta.statusCode != 200) {
-        throw Exception(
-          resultado['erro']?.toString() ??
-              resultado['message']?.toString() ??
-              'Email ou senha incorretos.',
-        );
+      if (token != null && token.isNotEmpty) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('token', token);
       }
 
-      if (token != null && token.isNotEmpty && token != 'null') {
-        await salvarToken(token);
-
-        print(
-          '✅ TOKEN SALVO COM SUCESSO',
-        );
-      } else {
-        print(
-          '⚠️ LOGIN NÃO RETORNOU TOKEN',
-        );
-      }
-
-      return resultado;
-    } on http.ClientException {
-      throw Exception(
-        'Não foi possível conectar ao servidor.',
-      );
-    } on FormatException {
-      throw Exception(
-        'Resposta inválida do servidor.',
-      );
+      return data;
     }
+
+    throw Exception(
+      data['erro']?.toString() ??
+          data['mensagem']?.toString() ??
+          'Erro ao realizar login.',
+    );
   }
 
-  // ==================================================
-  // SALVAR TOKEN
-  // ==================================================
+  // ==========================================================
+  // TOKEN
+  // ==========================================================
 
-  Future<void> salvarToken(
-    String token,
-  ) async {
+  Future<String?> getToken() async {
     final prefs = await SharedPreferences.getInstance();
-
-    await prefs.setString(
-      _tokenKey,
-      token,
-    );
-
-    print(
-      '🔐 TOKEN ARMAZENADO',
-    );
+    return prefs.getString('token');
   }
-
-  // ==================================================
-  // OBTER TOKEN
-  // ==================================================
 
   Future<String?> obterToken() async {
+    return getToken();
+  }
+
+  // ==========================================================
+  // SESSÃO
+  // ==========================================================
+
+  Future<Map<String, dynamic>?> obterSessao() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final token = prefs.getString(_tokenKey);
+    final token = prefs.getString('token');
 
     if (token == null || token.isEmpty) {
-      print(
-        '⚠️ NENHUM TOKEN ENCONTRADO',
-      );
-
       return null;
     }
 
-    print(
-      '🔐 TOKEN ENCONTRADO',
-    );
+    final usuarioJson = prefs.getString('usuario');
 
-    return token;
-  }
-
-  // ==================================================
-  // REMOVER TOKEN
-  // ==================================================
-
-  Future<void> removerToken() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    await prefs.remove(
-      _tokenKey,
-    );
-
-    print(
-      '🚪 TOKEN REMOVIDO',
-    );
-  }
-
-  // ==================================================
-  // LOGOUT
-  // ==================================================
-
-  Future<void> logout() async {
-    await removerToken();
-  }
-
-  // ==================================================
-  // CADASTRO
-  // ==================================================
-
-  Future<Map<String, dynamic>> register({
-    required String nome,
-    required String email,
-    required String senha,
-  }) async {
-    final emailNormalizado = email.trim().toLowerCase();
-
-    if (nome.trim().isEmpty) {
-      throw Exception(
-        'Digite seu nome.',
-      );
-    }
-
-    if (emailNormalizado.isEmpty) {
-      throw Exception(
-        'Digite seu email.',
-      );
-    }
-
-    if (senha.length < 6) {
-      throw Exception(
-        'A senha deve ter pelo menos 6 caracteres.',
-      );
+    if (usuarioJson == null || usuarioJson.isEmpty) {
+      return {
+        'token': token,
+      };
     }
 
     try {
-      final resposta = await http
-          .post(
-            Uri.parse('$baseUrl/register'),
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'nome': nome.trim(),
-              'email': emailNormalizado,
-              'senha': senha,
-              'tipo': 'CLIENTE',
-            }),
-          )
-          .timeout(
-            const Duration(seconds: 15),
-          );
+      final usuario = jsonDecode(usuarioJson);
 
-      final resultado = _processarResposta(resposta);
-
-      if (resposta.statusCode != 200 && resposta.statusCode != 201) {
-        throw Exception(
-          resultado['erro']?.toString() ??
-              resultado['message']?.toString() ??
-              'Não foi possível realizar o cadastro.',
-        );
+      if (usuario is Map<String, dynamic>) {
+        return {
+          ...usuario,
+          'token': token,
+        };
       }
+    } catch (_) {}
 
-      return resultado;
-    } catch (e) {
-      if (e is Exception) {
-        rethrow;
-      }
-
-      throw Exception(
-        'Não foi possível realizar o cadastro.',
-      );
-    }
+    return {
+      'token': token,
+    };
   }
 
-  // ==================================================
-  // SOLICITAR RECUPERAÇÃO DE SENHA
-  // ==================================================
-
-  Future<Map<String, dynamic>> forgotPassword(
-    String email,
-  ) async {
-    final emailNormalizado = email.trim().toLowerCase();
-
-    if (emailNormalizado.isEmpty) {
-      throw Exception(
-        'Digite seu email.',
-      );
-    }
-
-    print('');
-    print(
-      '========================================',
-    );
-    print(
-      '🔐 SOLICITANDO RECUPERAÇÃO',
-    );
-    print(
-      '📧 Email: $emailNormalizado',
-    );
-    print(
-      '========================================',
-    );
-
-    try {
-      final resposta = await http
-          .post(
-            Uri.parse(
-              '$baseUrl/solicitar-recuperacao',
-            ),
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'email': emailNormalizado,
-            }),
-          )
-          .timeout(
-            const Duration(seconds: 20),
-          );
-
-      print(
-        '📡 Status: ${resposta.statusCode}',
-      );
-
-      print(
-        '📡 Resposta: ${resposta.body}',
-      );
-
-      final resultado = _processarResposta(resposta);
-
-      if (resposta.statusCode != 200) {
-        throw Exception(
-          resultado['erro']?.toString() ??
-              resultado['message']?.toString() ??
-              'Não foi possível enviar o código.',
-        );
-      }
-
-      return resultado;
-    } catch (e) {
-      if (e is Exception) {
-        rethrow;
-      }
-
-      throw Exception(
-        'Não foi possível conectar ao servidor.',
-      );
-    }
-  }
-
-  // ==================================================
-  // COMPATIBILIDADE
-  // ==================================================
+  // ==========================================================
+  // RECUPERAR SENHA
+  // ==========================================================
 
   Future<Map<String, dynamic>> recuperarSenha(
-    String email,
-  ) async {
-    return forgotPassword(email);
-  }
+  String email,
+) async {
+  final url = '$baseUrl/auth/recuperar-senha';
 
-  // ==================================================
+  print('========================================');
+  print('FOODJET - RECUPERAÇÃO DE SENHA');
+  print('URL: $url');
+  print('EMAIL: $email');
+  print('========================================');
+
+  try {
+    final response = await http.post(
+      Uri.parse(url),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'email': email.trim().toLowerCase(),
+      }),
+    );
+
+    print('STATUS HTTP: ${response.statusCode}');
+    print('RESPOSTA: ${response.body}');
+
+    final data = _decodeResponse(response);
+
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300) {
+      return data;
+    }
+
+    throw Exception(
+      data['erro']?.toString() ??
+          data['mensagem']?.toString() ??
+          'Não foi possível solicitar a recuperação da senha.',
+    );
+  } catch (e) {
+    print('========================================');
+    print('ERRO RECUPERAÇÃO DE SENHA');
+    print(e);
+    print('========================================');
+
+    rethrow;
+  }
+}
+
+  // ==========================================================
   // VALIDAR CÓDIGO DE RECUPERAÇÃO
-  // ==================================================
+  // ==========================================================
 
   Future<Map<String, dynamic>> validarCodigoRecuperacao({
     required String email,
     required String codigo,
   }) async {
-    final emailNormalizado = email.trim().toLowerCase();
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/validar-codigo-recuperacao'),
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: jsonEncode({
+        'email': email,
+        'codigo': codigo,
+      }),
+    );
 
-    final codigoNormalizado = codigo.trim();
+    final data = _decodeResponse(response);
 
-    if (emailNormalizado.isEmpty) {
-      throw Exception(
-        'Email não informado.',
-      );
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300) {
+      return data;
     }
 
-    if (codigoNormalizado.isEmpty) {
-      throw Exception(
-        'Digite o código recebido por email.',
-      );
-    }
-
-    if (codigoNormalizado.length != 6) {
-      throw Exception(
-        'Digite o código de 6 números.',
-      );
-    }
-
-    print('');
-    print(
-      '========================================',
+    throw Exception(
+      data['erro']?.toString() ??
+          data['mensagem']?.toString() ??
+          'Código inválido ou expirado.',
     );
-    print(
-      '🔐 VALIDANDO CÓDIGO',
-    );
-    print(
-      '📧 Email: $emailNormalizado',
-    );
-    print(
-      '🔢 Código: $codigoNormalizado',
-    );
-    print(
-      '========================================',
-    );
-
-    try {
-      final resposta = await http
-          .post(
-            Uri.parse(
-              '$baseUrl/validar-codigo',
-            ),
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'email': emailNormalizado,
-              'codigo': codigoNormalizado,
-            }),
-          )
-          .timeout(
-            const Duration(seconds: 15),
-          );
-
-      print(
-        '📡 Status: ${resposta.statusCode}',
-      );
-
-      print(
-        '📡 Resposta: ${resposta.body}',
-      );
-
-      final resultado = _processarResposta(resposta);
-
-      if (resposta.statusCode != 200) {
-        throw Exception(
-          resultado['erro']?.toString() ??
-              resultado['message']?.toString() ??
-              'Código inválido ou expirado.',
-        );
-      }
-
-      print(
-        '✅ CÓDIGO VALIDADO',
-      );
-
-      return resultado;
-    } catch (e) {
-      if (e is Exception) {
-        rethrow;
-      }
-
-      throw Exception(
-        'Não foi possível validar o código.',
-      );
-    }
   }
 
-  // ==================================================
+  // ==========================================================
   // REDEFINIR SENHA
-  // ==================================================
+  // ==========================================================
 
   Future<Map<String, dynamic>> redefinirSenha({
     required String email,
     required String codigo,
     required String novaSenha,
   }) async {
-    final emailNormalizado = email.trim().toLowerCase();
-
-    final codigoNormalizado = codigo.trim();
-
-    if (emailNormalizado.isEmpty) {
-      throw Exception(
-        'Email não informado.',
-      );
-    }
-
-    if (codigoNormalizado.length != 6) {
-      throw Exception(
-        'Digite o código de 6 números.',
-      );
-    }
-
-    if (novaSenha.length < 6) {
-      throw Exception(
-        'A nova senha deve ter pelo menos 6 caracteres.',
-      );
-    }
-
-    print('');
-    print(
-      '========================================',
-    );
-    print(
-      '🔑 REDEFININDO SENHA',
-    );
-    print(
-      '📧 Email: $emailNormalizado',
-    );
-    print(
-      '🔢 Código: $codigoNormalizado',
-    );
-    print(
-      '========================================',
-    );
-
-    try {
-      final resposta = await http
-          .post(
-            Uri.parse(
-              '$baseUrl/redefinir-senha',
-            ),
-            headers: {
-              'Content-Type': 'application/json',
-            },
-            body: jsonEncode({
-              'email': emailNormalizado,
-              'codigo': codigoNormalizado,
-              'novaSenha': novaSenha,
-            }),
-          )
-          .timeout(
-            const Duration(seconds: 15),
-          );
-
-      print(
-        '📡 Status: ${resposta.statusCode}',
-      );
-
-      print(
-        '📡 Resposta: ${resposta.body}',
-      );
-
-      final resultado = _processarResposta(resposta);
-
-      if (resposta.statusCode != 200) {
-        throw Exception(
-          resultado['erro']?.toString() ??
-              resultado['message']?.toString() ??
-              'Não foi possível redefinir a senha.',
-        );
-      }
-
-      print(
-        '✅ SENHA REDEFINIDA COM SUCESSO',
-      );
-
-      return resultado;
-    } catch (e) {
-      if (e is Exception) {
-        rethrow;
-      }
-
-      throw Exception(
-        'Não foi possível redefinir a senha.',
-      );
-    }
-  }
-
-  // ==================================================
-  // ATUALIZAR PERFIL
-  // ==================================================
-
-  Future<Map<String, dynamic>> atualizarPerfil({
-    required String token,
-    String? nome,
-    String? email,
-    String? telefone,
-    String? cpf,
-  }) async {
-    final Map<String, dynamic> dados = {};
-
-    if (nome != null) {
-      dados['nome'] = nome.trim();
-    }
-
-    if (email != null) {
-      dados['email'] = email.trim().toLowerCase();
-    }
-
-    if (telefone != null) {
-      dados['telefone'] = telefone.trim();
-    }
-
-    if (cpf != null) {
-      dados['cpf'] = cpf.trim();
-    }
-
-    final resposta = await http
-        .put(
-          Uri.parse(
-            '$baseUrl/perfil',
-          ),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-          body: jsonEncode(dados),
-        )
-        .timeout(
-          const Duration(seconds: 15),
-        );
-
-    return _processarRespostaComErro(
-      resposta,
-      mensagemPadrao: 'Não foi possível atualizar o perfil.',
-    );
-  }
-
-  // ==================================================
-  // BUSCAR PERFIL
-  // ==================================================
-
-  Future<Map<String, dynamic>> buscarPerfil({
-    required String token,
-  }) async {
-    final resposta = await http.get(
-      Uri.parse(
-        '$baseUrl/perfil',
-      ),
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/redefinir-senha'),
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
       },
-    ).timeout(
-      const Duration(seconds: 15),
+      body: jsonEncode({
+        'email': email,
+        'codigo': codigo,
+        'novaSenha': novaSenha,
+      }),
     );
 
-    return _processarRespostaComErro(
-      resposta,
-      mensagemPadrao: 'Não foi possível buscar o perfil.',
+    final data = _decodeResponse(response);
+
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300) {
+      return data;
+    }
+
+    throw Exception(
+      data['erro']?.toString() ??
+          data['mensagem']?.toString() ??
+          'Não foi possível redefinir a senha.',
     );
   }
 
-  // ==================================================
+  // ==========================================================
   // ALTERAR SENHA LOGADO
-  // ==================================================
+  // ==========================================================
 
   Future<Map<String, dynamic>> alterarSenha({
     required String token,
     required String senhaAtual,
     required String novaSenha,
   }) async {
-    if (senhaAtual.isEmpty) {
-      throw Exception(
-        'Digite sua senha atual.',
-      );
+    final response = await http.put(
+      Uri.parse('$baseUrl/auth/alterar-senha'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode({
+        'senhaAtual': senhaAtual,
+        'novaSenha': novaSenha,
+      }),
+    );
+
+    final data = _decodeResponse(response);
+
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300) {
+      return data;
     }
 
-    if (novaSenha.length < 6) {
-      throw Exception(
-        'A nova senha deve ter pelo menos 6 caracteres.',
-      );
-    }
-
-    final resposta = await http
-        .put(
-          Uri.parse(
-            '$baseUrl/alterar-senha',
-          ),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-          body: jsonEncode({
-            'senhaAtual': senhaAtual,
-            'novaSenha': novaSenha,
-          }),
-        )
-        .timeout(
-          const Duration(seconds: 15),
-        );
-
-    return _processarRespostaComErro(
-      resposta,
-      mensagemPadrao: 'Não foi possível alterar a senha.',
+    throw Exception(
+      data['erro']?.toString() ??
+          data['mensagem']?.toString() ??
+          'Não foi possível alterar a senha.',
     );
   }
 
-  // ==================================================
-  // ATUALIZAR ENDEREÇO
-  // ==================================================
+  // ==========================================================
+  // ATUALIZAR PERFIL
+  // ==========================================================
 
-  Future<Map<String, dynamic>> atualizarEndereco({
+  Future<Map<String, dynamic>> atualizarPerfil({
     required String token,
-    required Map<String, dynamic> endereco,
+    String? nome,
+    String? email,
+    String? telefone,
+    String? foto,
   }) async {
-    final resposta = await http
-        .put(
-          Uri.parse(
-            '$baseUrl/endereco',
-          ),
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-          body: jsonEncode(endereco),
-        )
-        .timeout(
-          const Duration(seconds: 15),
-        );
+    final Map<String, dynamic> body = {};
 
-    return _processarRespostaComErro(
-      resposta,
-      mensagemPadrao: 'Não foi possível atualizar o endereço.',
+    if (nome != null) {
+      body['nome'] = nome;
+    }
+
+    if (email != null) {
+      body['email'] = email;
+    }
+
+    if (telefone != null) {
+      body['telefone'] = telefone;
+    }
+
+    if (foto != null) {
+      body['foto'] = foto;
+    }
+
+    final response = await http.put(
+      Uri.parse('$baseUrl/auth/perfil'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer $token',
+      },
+      body: jsonEncode(body),
     );
-  }
 
-  // ==================================================
-  // PROCESSAR RESPOSTA
-  // ==================================================
+    final data = _decodeResponse(response);
 
-  Map<String, dynamic> _processarResposta(
-    http.Response resposta,
-  ) {
-    Map<String, dynamic> dados = {};
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300) {
+      final usuario = data['usuario'];
 
-    if (resposta.body.trim().isNotEmpty) {
-      try {
-        final resultado = jsonDecode(resposta.body);
+      if (usuario is Map<String, dynamic>) {
+        final prefs = await SharedPreferences.getInstance();
 
-        if (resultado is Map) {
-          dados = Map<String, dynamic>.from(
-            resultado,
-          );
-        }
-      } catch (_) {
-        throw Exception(
-          'Resposta inválida do servidor.',
+        await prefs.setString(
+          'usuario',
+          jsonEncode(usuario),
         );
       }
+
+      return data;
     }
 
-    dados['statusCode'] = resposta.statusCode;
-
-    return dados;
+    throw Exception(
+      data['erro']?.toString() ??
+          data['mensagem']?.toString() ??
+          'Não foi possível atualizar o perfil.',
+    );
   }
 
-  // ==================================================
-  // PROCESSAR RESPOSTA + ERRO
-  // ==================================================
+  // ==========================================================
+  // LOGOUT
+  // ==========================================================
 
-  Map<String, dynamic> _processarRespostaComErro(
-    http.Response resposta, {
-    required String mensagemPadrao,
-  }) {
-    final dados = _processarResposta(resposta);
+  Future<void> logout() async {
+    final prefs = await SharedPreferences.getInstance();
 
-    if (resposta.statusCode < 200 || resposta.statusCode >= 300) {
-      throw Exception(
-        dados['erro']?.toString() ??
-            dados['message']?.toString() ??
-            mensagemPadrao,
-      );
+    await prefs.remove('token');
+    await prefs.remove('usuario');
+  }
+
+  // ==========================================================
+  // DECODIFICAR RESPOSTA
+  // ==========================================================
+
+  Map<String, dynamic> _decodeResponse(
+    http.Response response,
+  ) {
+    if (response.body.isEmpty) {
+      return {};
     }
 
-    return dados;
+    try {
+      final decoded = jsonDecode(response.body);
+
+      if (decoded is Map<String, dynamic>) {
+        return decoded;
+      }
+
+      return {
+        'dados': decoded,
+      };
+    } catch (_) {
+      return {
+        'mensagem': response.body,
+      };
+    }
   }
 }

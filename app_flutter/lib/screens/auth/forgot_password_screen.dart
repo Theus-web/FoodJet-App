@@ -17,26 +17,15 @@ class _ForgotPasswordScreenState
     extends State<ForgotPasswordScreen> {
   final AuthService authService = AuthService();
 
-  final emailController =
-      TextEditingController();
-
-  final codigoController =
-      TextEditingController();
-
-  final novaSenhaController =
-      TextEditingController();
-
-  final confirmarSenhaController =
-      TextEditingController();
+  final emailController = TextEditingController();
+  final codigoController = TextEditingController();
+  final novaSenhaController = TextEditingController();
+  final confirmarSenhaController = TextEditingController();
 
   bool carregando = false;
-
   bool codigoEnviado = false;
-
   bool codigoValidado = false;
-
   bool esconderNovaSenha = true;
-
   bool esconderConfirmacao = true;
 
   @override
@@ -59,8 +48,7 @@ class _ForgotPasswordScreenState
   }) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -170,10 +158,10 @@ class _ForgotPasswordScreenState
 
     try {
       final resultado =
-          await authService.validarCodigoRecuperacao(
-        email: email,
-        codigo: codigo,
-      );
+    await authService.validarCodigoRecuperacao(
+  email: email,
+  codigo: codigo,
+);
 
       if (!mounted) return;
 
@@ -484,8 +472,9 @@ class _ForgotPasswordScreenState
             BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: Colors.black
-                .withOpacity(0.06),
+            color: Colors.black.withValues(
+              alpha: 0.06,
+            ),
             blurRadius: 20,
             offset: const Offset(0, 8),
           ),
@@ -521,10 +510,6 @@ class _ForgotPasswordScreenState
 
           const SizedBox(height: 25),
 
-          // ================================================
-          // ETAPAS
-          // ================================================
-
           Row(
             children: [
               etapa(
@@ -552,10 +537,6 @@ class _ForgotPasswordScreenState
 
           const SizedBox(height: 30),
 
-          // ================================================
-          // E-MAIL
-          // ================================================
-
           Text(
             'E-mail',
             style: TextStyle(
@@ -581,10 +562,6 @@ class _ForgotPasswordScreenState
             ),
           ),
 
-          // ================================================
-          // ENVIAR
-          // ================================================
-
           if (!codigoEnviado) ...[
             const SizedBox(height: 20),
 
@@ -594,10 +571,6 @@ class _ForgotPasswordScreenState
                   solicitarCodigo,
             ),
           ],
-
-          // ================================================
-          // CÓDIGO
-          // ================================================
 
           if (codigoEnviado &&
               !codigoValidado) ...[
@@ -673,10 +646,6 @@ class _ForgotPasswordScreenState
               ),
             ),
           ],
-
-          // ================================================
-          // NOVA SENHA
-          // ================================================
 
           if (codigoValidado) ...[
             const SizedBox(height: 22),
@@ -823,10 +792,6 @@ class _ForgotPasswordScreenState
           ),
           child: Column(
             children: [
-              // =================================================
-              // LOGO
-              // =================================================
-
               Container(
                 width: 64,
                 height: 64,

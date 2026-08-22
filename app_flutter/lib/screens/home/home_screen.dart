@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../config/api.dart';
 import '../restaurant/restaurant_screen.dart';
@@ -23,72 +24,795 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // ============================================================
+  // CORES
+  // ============================================================
+
   static const Color laranja = Color(0xFFF97316);
   static const Color fundo = Color(0xFFF5F5F5);
 
+  // ============================================================
+  // NAVEGAÇÃO
+  // ============================================================
+
   int indiceSelecionado = 0;
+
+  // ============================================================
+  // RESTAURANTES
+  // ============================================================
 
   bool carregando = true;
   String? erro;
 
   List<Map<String, dynamic>> restaurantes = <Map<String, dynamic>>[];
+
   List<Map<String, dynamic>> restaurantesFiltrados = <Map<String, dynamic>>[];
+
+  // ============================================================
+  // PROMOÇÕES
+  // ============================================================
+
   List<Map<String, dynamic>> promocoes = <Map<String, dynamic>>[];
 
   bool carregandoPromocoes = false;
 
+  // ============================================================
+  // BUSCA
+  // ============================================================
+
   final TextEditingController buscaController = TextEditingController();
 
+  bool mostrarSugestoesBusca = false;
+
+  // ============================================================
+  // HISTÓRICO
+  // ============================================================
+
+  List<Map<String, dynamic>> historicoRestaurantes = <Map<String, dynamic>>[];
+
+  static const String _chaveHistoricoRestaurantes =
+      'foodjet_historico_restaurantes';
+
+  static const int _limiteHistorico = 8;
+
+  // ============================================================
+  // TIMERS
+  // ============================================================
+
   Timer? _timer;
+  Timer? _bannerTimer;
+
+  // ============================================================
+  // CARROSSEL
+  // ============================================================
+
+  final PageController _bannerController = PageController();
+
+  int _bannerAtual = 0;
+
+  // ============================================================
+  // BANNERS
+  // ============================================================
+
+  final List<Map<String, dynamic>> banners = [
+    {
+      'titulo': 'Peça pelo FoodJet',
+      'subtitulo': 'Os melhores restaurantes na palma da sua mão.',
+      'imagem':
+          'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200',
+      'cor1': Color(0xFFF97316),
+      'cor2': Color(0xFFFFB347),
+    },
+    {
+      'titulo': 'Ofertas imperdíveis',
+      'subtitulo': 'Economize nos seus pedidos de hoje.',
+      'imagem':
+          'https://images.unsplash.com/photo-1600891964092-4316c288032e?w=1200',
+      'cor1': Color(0xFFEA580C),
+      'cor2': Color(0xFFFF8A4C),
+    },
+    {
+      'titulo': 'Seu hambúrguer favorito',
+      'subtitulo': 'Peça agora e receba onde estiver.',
+      'imagem':
+          'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200',
+      'cor1': Color(0xFFB91C1C),
+      'cor2': Color(0xFFF97316),
+    },
+    {
+      'titulo': 'Pizza quentinha',
+      'subtitulo': 'Escolha sua pizza e aproveite.',
+      'imagem':
+          'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=1200',
+      'cor1': Color(0xFFDC2626),
+      'cor2': Color(0xFFF97316),
+    },
+    {
+      'titulo': 'Comida japonesa',
+      'subtitulo': 'Sushi, temaki e muito mais.',
+      'imagem':
+          'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=1200',
+      'cor1': Color(0xFF7C3AED),
+      'cor2': Color(0xFFEC4899),
+    },
+    {
+      'titulo': 'Delivery rápido',
+      'subtitulo': 'Seu pedido chegando até você.',
+      'imagem':
+          'https://images.unsplash.com/photo-1526367790999-0150786686a2?w=1200',
+      'cor1': Color(0xFF2563EB),
+      'cor2': Color(0xFF06B6D4),
+    },
+    {
+      'titulo': 'Doces para você',
+      'subtitulo': 'Deixe seu dia ainda mais gostoso.',
+      'imagem':
+          'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=1200',
+      'cor1': Color(0xFFDB2777),
+      'cor2': Color(0xFFF472B6),
+    },
+    {
+      'titulo': 'Bebidas geladas',
+      'subtitulo': 'Refresque seu pedido.',
+      'imagem':
+          'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=1200',
+      'cor1': Color(0xFF0891B2),
+      'cor2': Color(0xFF22D3EE),
+    },
+    {
+      'titulo': 'FoodJet Premium',
+      'subtitulo': 'Descubra novos sabores todos os dias.',
+      'imagem':
+          'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200',
+      'cor1': Color(0xFFEA580C),
+      'cor2': Color(0xFFFBBF24),
+    },
+  ];
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
     super.initState();
 
+    buscaController.addListener(_quandoBuscar);
+
+    _carregarHistoricoRestaurantes();
+
     carregarRestaurantes();
     carregarPromocoes();
 
-    buscaController.addListener(_quandoBuscar);
+    _iniciarCarrossel();
 
     _timer = Timer.periodic(
-      const Duration(seconds: 30),
+      const Duration(seconds: 60),
       (_) {
-        if (mounted) {
-          _timer = Timer.periodic(
-            const Duration(seconds: 30),
-            (_) {
-              if (mounted) {
-                carregarRestaurantes(
-                  silencioso: true,
-                );
+        if (!mounted) return;
 
-                carregarPromocoes(
-                  silencioso: true,
-                );
-              }
-            },
-          );
-        }
+        carregarRestaurantes(
+          silencioso: true,
+        );
+
+        carregarPromocoes(
+          silencioso: true,
+        );
       },
     );
   }
 
+  // ============================================================
+  // HISTÓRICO
+  // ============================================================
+
+  Future<void> _carregarHistoricoRestaurantes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final dados = prefs.getStringList(
+        _chaveHistoricoRestaurantes,
+      );
+
+      if (dados == null || dados.isEmpty) {
+        return;
+      }
+
+      final resultado = <Map<String, dynamic>>[];
+
+      for (final item in dados) {
+        try {
+          final restaurante = jsonDecode(item);
+
+          if (restaurante is Map) {
+            resultado.add(
+              Map<String, dynamic>.from(
+                restaurante,
+              ),
+            );
+          }
+        } catch (_) {}
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        historicoRestaurantes = resultado;
+      });
+    } catch (e) {
+      debugPrint(
+        'ERRO AO CARREGAR HISTÓRICO: $e',
+      );
+    }
+  }
+
+  Future<void> _salvarHistoricoRestaurante(
+    Map<String, dynamic> restaurante,
+  ) async {
+    final id = idRestaurante(restaurante);
+
+    if (id.trim().isEmpty) {
+      return;
+    }
+
+    final novoRestaurante = Map<String, dynamic>.from(
+      restaurante,
+    );
+
+    final historico = List<Map<String, dynamic>>.from(
+      historicoRestaurantes,
+    );
+
+    historico.removeWhere(
+      (item) => idRestaurante(item) == id,
+    );
+
+    historico.insert(
+      0,
+      novoRestaurante,
+    );
+
+    if (historico.length > _limiteHistorico) {
+      historico.removeRange(
+        _limiteHistorico,
+        historico.length,
+      );
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      historicoRestaurantes = historico;
+    });
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final dados = historico
+          .map(
+            (item) => jsonEncode(item),
+          )
+          .toList();
+
+      await prefs.setStringList(
+        _chaveHistoricoRestaurantes,
+        dados,
+      );
+    } catch (e) {
+      debugPrint(
+        'ERRO AO SALVAR HISTÓRICO: $e',
+      );
+    }
+  }
+
+  Future<void> _limparHistoricoRestaurantes() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      await prefs.remove(
+        _chaveHistoricoRestaurantes,
+      );
+    } catch (_) {}
+
+    if (!mounted) return;
+
+    setState(() {
+      historicoRestaurantes.clear();
+    });
+  }
+
+  // ============================================================
+  // PAINEL DE BUSCA
+  // ============================================================
+
+  Widget _painelBuscaRestaurantes() {
+    final texto = buscaController.text.trim();
+
+    final sugestoes = _restaurantesSugeridos();
+
+    if (texto.isNotEmpty) {
+      if (sugestoes.isEmpty) {
+        return Container(
+          margin: const EdgeInsets.only(top: 8),
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(18),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black12,
+                blurRadius: 12,
+                offset: Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.search_off,
+                color: Colors.grey.shade500,
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Nenhum restaurante encontrado para "$texto".',
+                  style: TextStyle(
+                    color: Colors.grey.shade600,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      return Container(
+        margin: const EdgeInsets.only(top: 8),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: const [
+            BoxShadow(
+              color: Colors.black12,
+              blurRadius: 14,
+              offset: Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(
+                16,
+                14,
+                16,
+                8,
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.search,
+                    color: laranja,
+                    size: 20,
+                  ),
+                  const SizedBox(width: 8),
+                  const Expanded(
+                    child: Text(
+                      'Restaurantes encontrados',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${sugestoes.length}',
+                    style: const TextStyle(
+                      color: laranja,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            ...sugestoes.map(
+              (restaurante) => _itemSugestaoRestaurante(
+                restaurante,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (historicoRestaurantes.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(top: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 14,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(
+              16,
+              14,
+              10,
+              8,
+            ),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.history,
+                  color: laranja,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Restaurantes recentes',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+                TextButton(
+                  onPressed: _limparHistoricoRestaurantes,
+                  child: const Text(
+                    'Limpar',
+                    style: TextStyle(
+                      color: laranja,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          ...historicoRestaurantes.map(
+            (restaurante) => _itemSugestaoRestaurante(
+              restaurante,
+              historico: true,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // ITEM BUSCA
+  // ============================================================
+
+  Widget _itemSugestaoRestaurante(
+    Map<String, dynamic> restaurante, {
+    bool historico = false,
+  }) {
+    final aberto = restauranteAberto(restaurante);
+
+    return InkWell(
+      onTap: () {
+        _abrirRestauranteBusca(
+          restaurante,
+        );
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(
+          horizontal: 14,
+          vertical: 10,
+        ),
+        child: Row(
+          children: [
+            _imagemBuscaRestaurante(
+              restaurante,
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    nomeRestaurante(
+                      restaurante,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 15,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          categoriaRestaurante(
+                            restaurante,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                      if (historico)
+                        const Icon(
+                          Icons.history,
+                          size: 15,
+                          color: Colors.grey,
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              aberto ? Icons.check_circle : Icons.schedule,
+              size: 16,
+              color: aberto ? Colors.green : Colors.grey,
+            ),
+            const SizedBox(width: 8),
+            const Icon(
+              Icons.chevron_right,
+              color: Colors.grey,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _imagemBuscaRestaurante(
+    Map<String, dynamic> restaurante,
+  ) {
+    final imagem = restaurante['imagem'] ??
+        restaurante['logo'] ??
+        restaurante['foto'] ??
+        restaurante['imagemUrl'] ??
+        restaurante['logoUrl'];
+
+    if (imagem != null && imagem.toString().trim().isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.network(
+          imagem.toString(),
+          width: 48,
+          height: 48,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _iconeBuscaRestaurante(),
+        ),
+      );
+    }
+
+    return _iconeBuscaRestaurante();
+  }
+
+  Widget _iconeBuscaRestaurante() {
+    return Container(
+      width: 48,
+      height: 48,
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFEADB),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Icon(
+        Icons.restaurant,
+        color: laranja,
+        size: 25,
+      ),
+    );
+  }
+
+  List<Map<String, dynamic>> _restaurantesSugeridos() {
+    final texto = buscaController.text.trim().toLowerCase();
+
+    if (texto.isEmpty) {
+      return [];
+    }
+
+    final resultados = <Map<String, dynamic>>[];
+
+    for (final restaurante in restaurantes) {
+      final nome = nomeRestaurante(
+        restaurante,
+      ).toLowerCase();
+
+      final categoria = categoriaRestaurante(
+        restaurante,
+      ).toLowerCase();
+
+      final descricao =
+          restaurante['descricao']?.toString().toLowerCase() ?? '';
+
+      if (nome.startsWith(texto)) {
+        resultados.add(restaurante);
+        continue;
+      }
+
+      if (nome.contains(texto) ||
+          categoria.contains(texto) ||
+          descricao.contains(texto)) {
+        resultados.add(restaurante);
+      }
+    }
+
+    resultados.sort(
+      (a, b) {
+        final nomeA = nomeRestaurante(
+          a,
+        ).toLowerCase();
+
+        final nomeB = nomeRestaurante(
+          b,
+        ).toLowerCase();
+
+        final inicioA = nomeA.startsWith(texto);
+
+        final inicioB = nomeB.startsWith(texto);
+
+        if (inicioA && !inicioB) {
+          return -1;
+        }
+
+        if (!inicioA && inicioB) {
+          return 1;
+        }
+
+        return nomeA.compareTo(nomeB);
+      },
+    );
+
+    if (resultados.length > 6) {
+      return resultados.sublist(0, 6);
+    }
+
+    return resultados;
+  }
+
+  // ============================================================
+  // ABRIR RESTAURANTE DA BUSCA
+  // ============================================================
+
+  void _abrirRestauranteBusca(
+    Map<String, dynamic> restaurante,
+  ) {
+    final id = idRestaurante(restaurante);
+
+    if (id.trim().isEmpty) {
+      return;
+    }
+
+    _salvarHistoricoRestaurante(
+      restaurante,
+    );
+
+    buscaController.clear();
+
+    FocusScope.of(context).unfocus();
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => RestaurantScreen(
+          restauranteId: id,
+          nome: nomeRestaurante(
+            restaurante,
+          ),
+          descricao: restaurante['descricao']?.toString() ??
+              categoriaRestaurante(
+                restaurante,
+              ),
+          avaliacao: avaliacaoRestaurante(
+            restaurante,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
   @override
   void dispose() {
     _timer?.cancel();
-    buscaController.removeListener(_quandoBuscar);
+    _bannerTimer?.cancel();
+
+    buscaController.removeListener(
+      _quandoBuscar,
+    );
+
     buscaController.dispose();
+    _bannerController.dispose();
+
     super.dispose();
   }
 
   // ============================================================
-  // BUSCA DIGITADA
+  // CARROSSEL
+  // ============================================================
+
+  void _iniciarCarrossel() {
+    _bannerTimer?.cancel();
+
+    _bannerTimer = Timer.periodic(
+      const Duration(seconds: 15),
+      (_) {
+        if (!mounted || !_bannerController.hasClients || banners.isEmpty) {
+          return;
+        }
+
+        _proximoBanner(
+          automatico: true,
+        );
+      },
+    );
+  }
+
+  void _reiniciarCarrossel() {
+    _bannerTimer?.cancel();
+    _iniciarCarrossel();
+  }
+
+  void _proximoBanner({
+    bool automatico = false,
+  }) {
+    if (!mounted || !_bannerController.hasClients || banners.isEmpty) {
+      return;
+    }
+
+    int proximo = _bannerAtual + 1;
+
+    if (proximo >= banners.length) {
+      proximo = 0;
+    }
+
+    _bannerController.animateToPage(
+      proximo,
+      duration: Duration(
+        milliseconds: automatico ? 700 : 450,
+      ),
+      curve: Curves.easeInOutCubic,
+    );
+  }
+
+
+  // Clique no banner:
+  // passa para o próximo banner.
+  void _clicarBanner() {
+    _reiniciarCarrossel();
+
+    if (!mounted) return;
+
+    _proximoBanner();
+  }
+
+  // ============================================================
+  // BUSCA
   // ============================================================
 
   void _quandoBuscar() {
     if (!mounted) return;
 
-    final texto = buscaController.text;
+    final texto = buscaController.text.trim();
 
     final filtrados = _aplicarFiltro(
       restaurantes,
@@ -97,12 +821,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     setState(() {
       restaurantesFiltrados = filtrados;
+
+      mostrarSugestoesBusca = texto.isNotEmpty;
     });
   }
 
   // ============================================================
-// CARREGAR PROMOÇÕES
-// ============================================================
+  // PROMOÇÕES
+  // ============================================================
 
   Future<void> carregarPromocoes({
     bool silencioso = false,
@@ -118,12 +844,6 @@ class _HomeScreenState extends State<HomeScreen> {
         '${Api.baseUrl}/promocoes',
       );
 
-      debugPrint('========================================');
-      debugPrint('FOODJET CLIENTE');
-      debugPrint('BUSCANDO PROMOÇÕES');
-      debugPrint('URL: $url');
-      debugPrint('========================================');
-
       final resposta = await http.get(
         url,
         headers: const {
@@ -131,15 +851,9 @@ class _HomeScreenState extends State<HomeScreen> {
           'Accept': 'application/json',
         },
       ).timeout(
-        const Duration(seconds: 15),
-      );
-
-      debugPrint(
-        'HTTP PROMOÇÕES: ${resposta.statusCode}',
-      );
-
-      debugPrint(
-        'RESPOSTA PROMOÇÕES: ${resposta.body}',
+        const Duration(
+          seconds: 15,
+        ),
       );
 
       if (resposta.statusCode != 200) {
@@ -152,21 +866,23 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (body.isEmpty) {
         throw Exception(
-          'Resposta vazia da API de promoções.',
+          'Resposta vazia da API.',
         );
       }
 
       final dados = jsonDecode(body);
 
-      final List<Map<String, dynamic>> resultado = <Map<String, dynamic>>[];
+      final resultado = <Map<String, dynamic>>[];
 
-      if (dados is List) {
-        for (final item in dados) {
-          if (item is Map) {
-            resultado.add(
-              Map<String, dynamic>.from(item),
-            );
-          }
+      final lista = _extrairLista(dados);
+
+      for (final item in lista) {
+        if (item is Map) {
+          resultado.add(
+            Map<String, dynamic>.from(
+              item,
+            ),
+          );
         }
       }
 
@@ -176,13 +892,9 @@ class _HomeScreenState extends State<HomeScreen> {
         promocoes = resultado;
         carregandoPromocoes = false;
       });
-
-      debugPrint(
-        'PROMOÇÕES CARREGADAS: ${resultado.length}',
-      );
     } catch (e) {
       debugPrint(
-        'ERRO AO CARREGAR PROMOÇÕES: $e',
+        'ERRO PROMOÇÕES: $e',
       );
 
       if (!mounted) return;
@@ -194,7 +906,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // CARREGAR RESTAURANTES
+  // RESTAURANTES
   // ============================================================
 
   Future<void> carregarRestaurantes({
@@ -212,11 +924,9 @@ class _HomeScreenState extends State<HomeScreen> {
         '${Api.baseUrl}/restaurants',
       );
 
-      debugPrint('========================================');
-      debugPrint('FOODJET CLIENTE');
-      debugPrint('BUSCANDO RESTAURANTES');
-      debugPrint('URL: $url');
-      debugPrint('========================================');
+      debugPrint(
+        'FOODJET - BUSCANDO RESTAURANTES: $url',
+      );
 
       final resposta = await http.get(
         url,
@@ -225,20 +935,14 @@ class _HomeScreenState extends State<HomeScreen> {
           'Accept': 'application/json',
         },
       ).timeout(
-        const Duration(seconds: 15),
-      );
-
-      debugPrint(
-        'HTTP RESTAURANTES: ${resposta.statusCode}',
-      );
-
-      debugPrint(
-        'RESPOSTA: ${resposta.body}',
+        const Duration(
+          seconds: 15,
+        ),
       );
 
       if (resposta.statusCode != 200) {
         throw Exception(
-          'Servidor retornou HTTP ${resposta.statusCode}',
+          'HTTP ${resposta.statusCode}',
         );
       }
 
@@ -256,35 +960,33 @@ class _HomeScreenState extends State<HomeScreen> {
         dados = jsonDecode(body);
       } catch (_) {
         throw Exception(
-          'A API retornou conteúdo que não é JSON válido.',
+          'Resposta inválida.',
         );
       }
 
-      // ==========================================================
-      // NORMALIZAR RESPOSTA
-      // ==========================================================
+      final lista = _extrairLista(dados);
 
-      final List<dynamic> lista = _extrairLista(dados);
-
-      final List<Map<String, dynamic>> resultado = <Map<String, dynamic>>[];
+      final resultado = <Map<String, dynamic>>[];
 
       for (final item in lista) {
         if (item is Map) {
-          try {
-            final restaurante = Map<String, dynamic>.from(item);
+          final restaurante = Map<String, dynamic>.from(
+            item,
+          );
 
-            _normalizarRestaurante(restaurante);
+          _normalizarRestaurante(
+            restaurante,
+          );
 
-            resultado.add(restaurante);
-          } catch (e) {
-            debugPrint(
-              'Restaurante ignorado: $e',
-            );
-          }
+          resultado.add(
+            restaurante,
+          );
         }
       }
 
-      ordenarRestaurantes(resultado);
+      ordenarRestaurantes(
+        resultado,
+      );
 
       if (!mounted) return;
 
@@ -305,22 +1007,16 @@ class _HomeScreenState extends State<HomeScreen> {
         carregando = false;
         erro = null;
       });
-
-      debugPrint(
-        'RESTAURANTES CARREGADOS: ${resultado.length}',
-      );
     } catch (e) {
-      debugPrint('========================================');
-      debugPrint('ERRO AO CARREGAR RESTAURANTES');
-      debugPrint('$e');
-      debugPrint('========================================');
+      debugPrint(
+        'ERRO RESTAURANTES: $e',
+      );
 
       if (!mounted) return;
 
       if (restaurantes.isNotEmpty) {
         setState(() {
           carregando = false;
-          erro = null;
         });
 
         return;
@@ -334,49 +1030,58 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // EXTRAIR LISTA DA API
+  // EXTRAIR LISTA
   // ============================================================
 
-  List<dynamic> _extrairLista(dynamic dados) {
+  List<dynamic> _extrairLista(
+    dynamic dados,
+  ) {
     if (dados is List) {
-      return List<dynamic>.from(dados);
+      return List<dynamic>.from(
+        dados,
+      );
     }
 
     if (dados is! Map) {
       return <dynamic>[];
     }
 
-    final mapa = Map<String, dynamic>.from(dados);
+    final mapa = Map<String, dynamic>.from(
+      dados,
+    );
 
-    final possiveis = <dynamic>[
+    final possiveis = [
       mapa['restaurantes'],
       mapa['restaurants'],
       mapa['data'],
       mapa['resultado'],
       mapa['items'],
       mapa['results'],
+      mapa['promocoes'],
+      mapa['promotions'],
     ];
 
     for (final item in possiveis) {
       if (item is List) {
-        return List<dynamic>.from(item);
+        return List<dynamic>.from(
+          item,
+        );
       }
     }
 
-    // Caso a API envie somente um restaurante.
     if (mapa['id'] != null ||
         mapa['_id'] != null ||
         mapa['restauranteId'] != null ||
         mapa['nome'] != null ||
         mapa['nomeFantasia'] != null) {
-      return <dynamic>[mapa];
+      return [mapa];
     }
 
     return <dynamic>[];
   }
 
   // ============================================================
-  // NORMALIZAR RESTAURANTE
+  // NORMALIZAÇÃO
   // ============================================================
 
   void _normalizarRestaurante(
@@ -392,7 +1097,7 @@ class _HomeScreenState extends State<HomeScreen> {
         restaurante['nomeRestaurante'] ??
         'Restaurante';
 
-    restaurante['categoria'] = restaurante['categoria'] ?? 'Comida';
+    restaurante['categoria'] = restaurante['categoria'] ?? 'Restaurante';
 
     restaurante['descricao'] = restaurante['descricao'] ?? '';
 
@@ -410,14 +1115,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // ORDENAR RESTAURANTES
+  // ORDENAÇÃO
   // ============================================================
 
   void ordenarRestaurantes(
     List<Map<String, dynamic>> lista,
   ) {
-    if (lista.isEmpty) return;
-
     lista.sort(
       (a, b) {
         final destaqueA = restauranteDestaque(a) ? 1 : 0;
@@ -470,25 +1173,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final promocao = restaurante['promocao'];
 
-    if (promocao is Map) {
-      if (promocao['ativa'] == true) {
-        final expiraEm = promocao['expiraEm'];
+    if (promocao is Map && promocao['ativa'] == true) {
+      final expira = promocao['expiraEm'];
 
-        if (expiraEm == null) {
-          return true;
-        }
+      if (expira == null) {
+        return true;
+      }
 
-        try {
-          final validade = DateTime.parse(
-            expiraEm.toString(),
-          );
-
-          return validade.isAfter(
-            DateTime.now(),
-          );
-        } catch (_) {
-          return false;
-        }
+      try {
+        return DateTime.parse(
+          expira.toString(),
+        ).isAfter(
+          DateTime.now(),
+        );
+      } catch (_) {
+        return false;
       }
     }
 
@@ -496,7 +1195,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // RESTAURANTE ABERTO
+  // ABERTO
   // ============================================================
 
   bool restauranteAberto(
@@ -512,15 +1211,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return false;
     }
 
-    if (restaurante['aberto'] == true) {
-      return true;
-    }
-
-    if (restaurante['online'] == true) {
-      return true;
-    }
-
-    return false;
+    return restaurante['aberto'] == true || restaurante['online'] == true;
   }
 
   // ============================================================
@@ -531,10 +1222,6 @@ class _HomeScreenState extends State<HomeScreen> {
     List<Map<String, dynamic>> lista,
     String texto,
   ) {
-    if (lista.isEmpty) {
-      return <Map<String, dynamic>>[];
-    }
-
     final busca = texto.trim().toLowerCase();
 
     if (busca.isEmpty) {
@@ -543,25 +1230,164 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    final resultado = <Map<String, dynamic>>[];
+    return lista.where(
+      (restaurante) {
+        final nome = nomeRestaurante(
+          restaurante,
+        ).toLowerCase();
 
-    for (final restaurante in lista) {
-      final nome = restaurante['nome']?.toString().toLowerCase() ?? '';
+        final categoria = categoriaRestaurante(
+          restaurante,
+        ).toLowerCase();
 
-      final categoria =
-          restaurante['categoria']?.toString().toLowerCase() ?? '';
+        final descricao =
+            restaurante['descricao']?.toString().toLowerCase() ?? '';
 
-      final descricao =
-          restaurante['descricao']?.toString().toLowerCase() ?? '';
+        return nome.contains(busca) ||
+            categoria.contains(busca) ||
+            descricao.contains(busca);
+      },
+    ).toList();
+  }
 
-      if (nome.contains(busca) ||
-          categoria.contains(busca) ||
-          descricao.contains(busca)) {
-        resultado.add(restaurante);
-      }
+  // ============================================================
+  // FILTRO CATEGORIA
+  // ============================================================
+
+  void _filtrarPorCategoria(
+    String categoria,
+  ) {
+    final busca = categoria.trim().toLowerCase();
+
+    if (busca == 'todos') {
+      buscaController.clear();
+
+      if (!mounted) return;
+
+      setState(() {
+        restaurantesFiltrados = List<Map<String, dynamic>>.from(
+          restaurantes,
+        );
+      });
+
+      return;
     }
 
-    return resultado;
+    final resultado = restaurantes.where(
+      (restaurante) {
+        final categoriaRestaurante =
+            restaurante['categoria']?.toString().trim().toLowerCase() ?? '';
+
+        final nome = nomeRestaurante(
+          restaurante,
+        ).toLowerCase();
+
+        final descricao =
+            restaurante['descricao']?.toString().toLowerCase() ?? '';
+
+        // ======================================================
+        // NORMALIZAÇÃO DA CATEGORIA
+        // ======================================================
+
+        final categoriaNormalizada = _normalizarTexto(
+          categoriaRestaurante,
+        );
+
+        final buscaNormalizada = _normalizarTexto(
+          busca,
+        );
+
+        // ======================================================
+        // COMPARAÇÃO
+        // ======================================================
+
+        return categoriaNormalizada.contains(
+              buscaNormalizada,
+            ) ||
+            nome.contains(busca) ||
+            descricao.contains(busca);
+      },
+    ).toList();
+
+    buscaController.clear();
+
+    if (!mounted) return;
+
+    setState(() {
+      restaurantesFiltrados = List<Map<String, dynamic>>.from(
+        resultado,
+      );
+    });
+
+    if (resultado.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Nenhum restaurante encontrado em $categoria.',
+          ),
+        ),
+      );
+    }
+  }
+
+  // ============================================================
+  // NORMALIZAR TEXTO
+  // ============================================================
+
+  String _normalizarTexto(
+    String texto,
+  ) {
+    return texto
+        .trim()
+        .toLowerCase()
+        .replaceAll(
+          'á',
+          'a',
+        )
+        .replaceAll(
+          'à',
+          'a',
+        )
+        .replaceAll(
+          'ã',
+          'a',
+        )
+        .replaceAll(
+          'â',
+          'a',
+        )
+        .replaceAll(
+          'é',
+          'e',
+        )
+        .replaceAll(
+          'ê',
+          'e',
+        )
+        .replaceAll(
+          'í',
+          'i',
+        )
+        .replaceAll(
+          'ó',
+          'o',
+        )
+        .replaceAll(
+          'ô',
+          'o',
+        )
+        .replaceAll(
+          'õ',
+          'o',
+        )
+        .replaceAll(
+          'ú',
+          'u',
+        )
+        .replaceAll(
+          'ç',
+          'c',
+        );
   }
 
   // ============================================================
@@ -572,12 +1398,9 @@ class _HomeScreenState extends State<HomeScreen> {
     int indice,
   ) {
     if (indice == 0) {
-      if (!mounted) return;
-
       setState(() {
         indiceSelecionado = 0;
       });
-
       return;
     }
 
@@ -590,7 +1413,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       );
-
       return;
     }
 
@@ -601,7 +1423,6 @@ class _HomeScreenState extends State<HomeScreen> {
           builder: (_) => const FavoritesScreen(),
         ),
       );
-
       return;
     }
 
@@ -618,7 +1439,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // DADOS
+  // HELPERS
   // ============================================================
 
   String nomeRestaurante(
@@ -641,7 +1462,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final categoria = restaurante['categoria'];
 
     if (categoria == null || categoria.toString().trim().isEmpty) {
-      return 'Comida';
+      return 'Restaurante';
     }
 
     return categoria.toString();
@@ -652,9 +1473,7 @@ class _HomeScreenState extends State<HomeScreen> {
   ) {
     final valor = restaurante['avaliacao'] ?? restaurante['nota'] ?? 5.0;
 
-    final numero = _numero(valor);
-
-    return numero.toStringAsFixed(1);
+    return _numero(valor).toStringAsFixed(1);
   }
 
   String tempoEntrega(
@@ -672,13 +1491,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String taxaEntrega(
     Map<String, dynamic> restaurante,
   ) {
-    final taxa = restaurante['taxaEntrega'];
-
-    if (taxa == null) {
-      return 'Grátis';
-    }
-
-    final valor = _numero(taxa);
+    final valor = _numero(
+      restaurante['taxaEntrega'],
+    );
 
     if (valor <= 0) {
       return 'Grátis';
@@ -712,9 +1527,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: fundo,
 
+      // ========================================================
+      // APP BAR
+      // ========================================================
+
       appBar: AppBar(
         backgroundColor: laranja,
         elevation: 0,
+        automaticallyImplyLeading: false,
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -723,10 +1543,11 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.white70,
+                fontWeight: FontWeight.w500,
               ),
             ),
-            Row(
-              children: const [
+            const Row(
+              children: [
                 Icon(
                   Icons.location_on,
                   size: 16,
@@ -736,7 +1557,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 Text(
                   'Ipatinga - MG',
                   style: TextStyle(
-                    fontWeight: FontWeight.bold,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
@@ -748,11 +1570,18 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             onPressed: () {},
             icon: const Icon(
-              Icons.notifications_none,
+              Icons.notifications_none_rounded,
+              color: Colors.white,
+              size: 27,
             ),
           ),
+          const SizedBox(width: 4),
         ],
       ),
+
+      // ========================================================
+      // BODY
+      // ========================================================
 
       body: RefreshIndicator(
         color: laranja,
@@ -768,29 +1597,31 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ==================================================
-              // SAUDAÇÃO
-              // ==================================================
-
               Text(
                 'Olá, $nomeUsuario 🏆',
                 style: const TextStyle(
+                  color: Color(0xFF1F1F1F),
                   fontSize: 25,
-                  fontWeight: FontWeight.bold,
+                  fontWeight: FontWeight.w800,
                 ),
               ),
 
-              const SizedBox(height: 5),
+              const SizedBox(
+                height: 5,
+              ),
 
               const Text(
                 'O que você quer pedir hoje?',
                 style: TextStyle(
-                  color: Colors.grey,
+                  color: Color(0xFF555555),
                   fontSize: 16,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(
+                height: 20,
+              ),
 
               // ==================================================
               // BUSCA
@@ -803,103 +1634,85 @@ class _HomeScreenState extends State<HomeScreen> {
                   value,
                   child,
                 ) {
-                  return TextField(
-                    controller: buscaController,
-                    decoration: InputDecoration(
-                      hintText: 'Buscar restaurante ou prato',
-                      prefixIcon: const Icon(
-                        Icons.search,
-                      ),
-                      suffixIcon: value.text.isNotEmpty
-                          ? IconButton(
-                              onPressed: () {
-                                buscaController.clear();
-                              },
-                              icon: const Icon(
-                                Icons.close,
-                              ),
-                            )
-                          : null,
-                      filled: true,
-                      fillColor: Colors.white,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(
-                          16,
+                  return Column(
+                    children: [
+                      TextField(
+                        controller: buscaController,
+                        decoration: InputDecoration(
+                          hintText: 'Buscar restaurante ou prato',
+                          hintStyle: const TextStyle(
+                            color: Colors.black,
+                            fontSize: 14,
+                          ),
+                          prefixIcon: const Icon(
+                            Icons.search,
+                          ),
+                          suffixIcon: value.text.isNotEmpty
+                              ? IconButton(
+                                  onPressed: () {
+                                    buscaController.clear();
+                                  },
+                                  icon: const Icon(
+                                    Icons.close,
+                                  ),
+                                )
+                              : null,
+                          filled: true,
+                          fillColor: Colors.white,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(
+                              16,
+                            ),
+                            borderSide: BorderSide.none,
+                          ),
                         ),
-                        borderSide: BorderSide.none,
                       ),
-                    ),
+                      if (mostrarSugestoesBusca) _painelBuscaRestaurantes(),
+                    ],
                   );
                 },
               ),
 
-              const SizedBox(height: 20),
-
-              // ==================================================
-              // BANNER
-              // ==================================================
-
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(
-                  20,
-                ),
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [
-                      Color(0xFFF97316),
-                      Color(0xFFFF8C42),
-                    ],
-                  ),
-                  borderRadius: BorderRadius.circular(
-                    20,
-                  ),
-                ),
-                child: const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '🔥 FoodJet Destaques',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 20,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                    SizedBox(height: 8),
-                    Text(
-                      'Restaurantes parceiros com ofertas especiais para você',
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
+              const SizedBox(
+                height: 20,
               ),
 
-              const SizedBox(height: 25),
+              // ==================================================
+              // CARROSSEL
+              // ==================================================
 
-// ==================================================
-// PROMOÇÕES
-// ==================================================
+              _carrosselBanners(),
+
+              const SizedBox(
+                height: 25,
+              ),
+
+              // ==================================================
+              // PROMOÇÕES
+              // ==================================================
 
               _listaPromocoes(),
 
-              const SizedBox(height: 25),
+              const SizedBox(
+                height: 25,
+              ),
 
-// ==================================================
-// CATEGORIAS
-// ==================================================
+              // ==================================================
+              // CATEGORIAS
+              // ==================================================
 
               const Text(
                 'Categorias',
                 style: TextStyle(
+                  color: Colors.black,
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
               ),
 
-              const SizedBox(height: 15),
+              const SizedBox(
+                height: 15,
+              ),
 
               SizedBox(
                 height: 105,
@@ -974,7 +1787,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              const SizedBox(height: 25),
+              const SizedBox(
+                height: 25,
+              ),
 
               // ==================================================
               // RESTAURANTES
@@ -986,6 +1801,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Text(
                       'Restaurantes',
                       style: TextStyle(
+                        color: Colors.black,
                         fontSize: 20,
                         fontWeight: FontWeight.bold,
                       ),
@@ -995,19 +1811,23 @@ class _HomeScreenState extends State<HomeScreen> {
                     Text(
                       '${restaurantesFiltrados.length} encontrados',
                       style: const TextStyle(
-                        color: Colors.grey,
+                        color: Color.fromARGB(255, 3, 2, 2),
                         fontSize: 12,
                       ),
                     ),
                 ],
               ),
 
-              const SizedBox(height: 15),
+              const SizedBox(
+                height: 15,
+              ),
 
               if (carregando)
                 const Center(
                   child: Padding(
-                    padding: EdgeInsets.all(30),
+                    padding: EdgeInsets.all(
+                      30,
+                    ),
                     child: CircularProgressIndicator(
                       color: laranja,
                     ),
@@ -1020,15 +1840,17 @@ class _HomeScreenState extends State<HomeScreen> {
               else
                 _listaRestaurantes(),
 
-              const SizedBox(height: 20),
+              const SizedBox(
+                height: 30,
+              ),
             ],
           ),
         ),
       ),
 
-      // ==========================================================
+      // ========================================================
       // MENU
-      // ==========================================================
+      // ========================================================
 
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: indiceSelecionado,
@@ -1046,11 +1868,15 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Pedidos',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.favorite_border),
+            icon: Icon(
+              Icons.favorite_border,
+            ),
             label: 'Favoritos',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.person_outline),
+            icon: Icon(
+              Icons.person_outline,
+            ),
             label: 'Perfil',
           ),
         ],
@@ -1059,13 +1885,368 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-// CARD DE PROMOÇÕES
-// ============================================================
+  // CARROSSEL
+  // ============================================================
+
+  Widget _carrosselBanners() {
+    return Column(
+      children: [
+        SizedBox(
+          height: 185,
+          child: Stack(
+            children: [
+              PageView.builder(
+                controller: _bannerController,
+                itemCount: banners.length,
+                onPageChanged: (index) {
+                  if (!mounted) return;
+
+                  setState(() {
+                    _bannerAtual = index;
+                  });
+
+                  _reiniciarCarrossel();
+                },
+                itemBuilder: (
+                  context,
+                  index,
+                ) {
+                  return GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: _clicarBanner,
+                    child: _bannerCard(
+                      banners[index],
+                      index,
+                    ),
+                  );
+                },
+              ),
+
+            
+
+    
+              // ==================================================
+              // AVANÇAR
+              // ==================================================
+
+              Positioned(
+                right: 10,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: _botaoCarrossel(
+                    icone: Icons.chevron_right,
+                    onPressed: () {
+                      _proximoBanner();
+                      _reiniciarCarrossel();
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(
+          height: 10,
+        ),
+
+        // ========================================================
+        // INDICADORES
+        // ========================================================
+
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(
+            banners.length,
+            (index) {
+              final ativo = index == _bannerAtual;
+
+              return AnimatedContainer(
+                duration: const Duration(
+                  milliseconds: 250,
+                ),
+                width: ativo ? 22 : 7,
+                height: 7,
+                margin: const EdgeInsets.symmetric(
+                  horizontal: 3,
+                ),
+                decoration: BoxDecoration(
+                  color: ativo ? laranja : Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(
+                    10,
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  // ============================================================
+  // BOTÃO CARROSSEL
+  // ============================================================
+
+  Widget _botaoCarrossel({
+    required IconData icone,
+    required VoidCallback onPressed,
+  }) {
+    return Material(
+      color: Colors.black.withOpacity(
+        0.35,
+      ),
+      shape: const CircleBorder(),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onPressed,
+        child: SizedBox(
+          width: 38,
+          height: 38,
+          child: Icon(
+            icone,
+            color: Colors.white,
+            size: 28,
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // BANNER
+  // ============================================================
+
+  Widget _bannerCard(
+    Map<String, dynamic> banner,
+    int index,
+  ) {
+    final titulo = banner['titulo']?.toString() ?? 'FoodJet';
+
+    final subtitulo = banner['subtitulo']?.toString() ?? '';
+
+    final imagem = banner['imagem']?.toString() ?? '';
+
+    final cor1 = banner['cor1'] as Color? ?? laranja;
+
+    final cor2 = banner['cor2'] as Color? ??
+        const Color(
+          0xFFFFB347,
+        );
+
+    return Container(
+      margin: const EdgeInsets.symmetric(
+        horizontal: 2,
+      ),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(
+          22,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 12,
+            offset: Offset(0, 5),
+          ),
+        ],
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Image.network(
+            imagem,
+            fit: BoxFit.cover,
+            loadingBuilder: (
+              context,
+              child,
+              progress,
+            ) {
+              if (progress == null) {
+                return child;
+              }
+
+              return Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      cor1,
+                      cor2,
+                    ],
+                  ),
+                ),
+                child: const Center(
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                ),
+              );
+            },
+            errorBuilder: (
+              context,
+              error,
+              stackTrace,
+            ) {
+              return Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      cor1,
+                      cor2,
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+
+          // ======================================================
+          // SOMBRA
+          // ======================================================
+
+          Container(
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.centerLeft,
+                end: Alignment.centerRight,
+                colors: [
+                  Colors.black.withOpacity(
+                    0.72,
+                  ),
+                  Colors.black.withOpacity(
+                    0.25,
+                  ),
+                  Colors.transparent,
+                ],
+              ),
+            ),
+          ),
+
+          // ======================================================
+          // TEXTO
+          // ======================================================
+
+          Padding(
+            padding: const EdgeInsets.all(
+              18,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Spacer(),
+                Text(
+                  titulo,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(
+                  height: 4,
+                ),
+                SizedBox(
+                  width: 260,
+                  child: Text(
+                    subtitulo,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ),
+                const SizedBox(
+                  height: 10,
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 13,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: laranja,
+                    borderRadius: BorderRadius.circular(
+                      20,
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Pedir agora',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      SizedBox(
+                        width: 5,
+                      ),
+                      Icon(
+                        Icons.arrow_forward,
+                        color: Colors.white,
+                        size: 15,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // ======================================================
+          // CONTADOR
+          // ======================================================
+
+          Positioned(
+            top: 14,
+            right: 14,
+            child: Container(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 9,
+                vertical: 5,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(
+                  0.35,
+                ),
+                borderRadius: BorderRadius.circular(
+                  15,
+                ),
+              ),
+              child: Text(
+                '${index + 1}/${banners.length}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // PROMOÇÕES
+  // ============================================================
 
   Widget _listaPromocoes() {
     if (carregandoPromocoes) {
       return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 10),
+        padding: EdgeInsets.symmetric(
+          vertical: 10,
+        ),
         child: Center(
           child: CircularProgressIndicator(
             color: laranja,
@@ -1074,17 +2255,15 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    if (promocoes.isEmpty) {
-      return const SizedBox.shrink();
-    }
+    final ativas = promocoes.where(
+      (promocao) {
+        final ativa = promocao['ativa'];
 
-    final promocoesAtivas = promocoes.where((promocao) {
-      final ativa = promocao['ativa'];
+        return ativa == true || ativa?.toString().toLowerCase() == 'true';
+      },
+    ).toList();
 
-      return ativa == true || ativa.toString().toLowerCase() == 'true';
-    }).toList();
-
-    if (promocoesAtivas.isEmpty) {
+    if (ativas.isEmpty) {
       return const SizedBox.shrink();
     }
 
@@ -1094,24 +2273,25 @@ class _HomeScreenState extends State<HomeScreen> {
         const Text(
           '🔥 Promoções para você',
           style: TextStyle(
+            color: Colors.black,
             fontSize: 20,
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(
+          height: 14,
+        ),
         SizedBox(
           height: 165,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
-            itemCount: promocoesAtivas.length,
+            itemCount: ativas.length,
             itemBuilder: (
               context,
               index,
             ) {
-              final promocao = promocoesAtivas[index];
-
               return _cardPromocao(
-                promocao,
+                ativas[index],
               );
             },
           ),
@@ -1119,10 +2299,6 @@ class _HomeScreenState extends State<HomeScreen> {
       ],
     );
   }
-
-// ============================================================
-// CARD INDIVIDUAL DA PROMOÇÃO
-// ============================================================
 
   Widget _cardPromocao(
     Map<String, dynamic> promocao,
@@ -1136,16 +2312,26 @@ class _HomeScreenState extends State<HomeScreen> {
             ? promocao['descricao'].toString()
             : 'Aproveite esta oferta especial do FoodJet.';
 
-    final desconto = _numero(promocao['desconto']);
+    final desconto = _numero(
+      promocao['desconto'],
+    );
 
-    final precoOriginal = _numero(promocao['precoOriginal']);
+    final precoOriginal = _numero(
+      promocao['precoOriginal'],
+    );
 
-    final precoPromocional = _numero(promocao['precoPromocional']);
+    final precoPromocional = _numero(
+      promocao['precoPromocional'],
+    );
 
     return InkWell(
-      borderRadius: BorderRadius.circular(22),
+      borderRadius: BorderRadius.circular(
+        22,
+      ),
       onTap: () {
-        _abrirPromocao(promocao);
+        _abrirPromocao(
+          promocao,
+        );
       },
       child: Container(
         width: 310,
@@ -1160,16 +2346,25 @@ class _HomeScreenState extends State<HomeScreen> {
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              Color(0xFFF97316),
-              Color(0xFFFFB347),
+              Color(
+                0xFFF97316,
+              ),
+              Color(
+                0xFFFFB347,
+              ),
             ],
           ),
-          borderRadius: BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(
+            22,
+          ),
           boxShadow: const [
             BoxShadow(
               color: Colors.black12,
               blurRadius: 10,
-              offset: Offset(0, 5),
+              offset: Offset(
+                0,
+                5,
+              ),
             ),
           ],
         ),
@@ -1185,7 +2380,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.circular(
+                      20,
+                    ),
                   ),
                   child: Text(
                     desconto > 0
@@ -1266,10 +2463,14 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.all(8),
+                  padding: const EdgeInsets.all(
+                    8,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.white24,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(
+                      12,
+                    ),
                   ),
                   child: const Icon(
                     Icons.arrow_forward,
@@ -1285,63 +2486,27 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-// ============================================================
-// ABRIR PROMOÇÃO
-// ============================================================
+  // ============================================================
+  // ABRIR PROMOÇÃO
+  // ============================================================
 
   void _abrirPromocao(
     Map<String, dynamic> promocao,
   ) {
     final restauranteId = promocao['restauranteId']?.toString().trim() ?? '';
 
-    final produtoId = promocao['produtoId']?.toString().trim() ?? '';
-
-    debugPrint(
-      '========================================',
-    );
-
-    debugPrint(
-      'FOODJET - ABRINDO PROMOÇÃO',
-    );
-
-    debugPrint(
-      'RESTAURANTE ID: $restauranteId',
-    );
-
-    debugPrint(
-      'PRODUTO ID: $produtoId',
-    );
-
-    debugPrint(
-      '========================================',
-    );
-
     if (restauranteId.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
         const SnackBar(
           content: Text(
-            'Esta promoção não possui um restaurante válido.',
+            'Esta promoção não possui restaurante válido.',
           ),
         ),
       );
-
       return;
     }
-
-    /*
-   * IMPORTANTE:
-   *
-   * A sua promoção atual possui:
-   *
-   * restauranteId:
-   * rest_1786542500158
-   *
-   * produtoId:
-   * null
-   *
-   * Portanto, neste momento ela será direcionada
-   * para o restaurante.
-   */
 
     Navigator.push(
       context,
@@ -1357,208 +2522,80 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // LISTA DE RESTAURANTES
+  // LISTA RESTAURANTES
   // ============================================================
 
   Widget _listaRestaurantes() {
-    final widgets = <Widget>[];
-
-    for (final restaurante in restaurantesFiltrados) {
-      widgets.add(
-        restauranteCard(
-          restaurante,
-        ),
-      );
-    }
-
     return Column(
-      children: widgets,
+      children: restaurantesFiltrados
+          .map(
+            (restaurante) => restauranteCard(
+              restaurante,
+            ),
+          )
+          .toList(),
     );
   }
 
-// ============================================================
-// FILTRAR POR CATEGORIA
-// ============================================================
-
-void _filtrarPorCategoria(
-  String categoria,
-) {
-  final categoriaBusca =
-      categoria.trim().toLowerCase();
-
-  debugPrint(
-    '========================================',
-  );
-
-  debugPrint(
-    'FOODJET - FILTRO DE CATEGORIA',
-  );
-
-  debugPrint(
-    'CATEGORIA: $categoriaBusca',
-  );
-
-  debugPrint(
-    'RESTAURANTES: ${restaurantes.length}',
-  );
-
-  debugPrint(
-    '========================================',
-  );
-
   // ============================================================
-  // RESTAURANTES / TODOS
+  // CATEGORIA
   // ============================================================
-
-  if (categoriaBusca == 'todos' ||
-      categoriaBusca == 'restaurante' ||
-      categoriaBusca == 'restaurantes') {
-    setState(() {
-      restaurantesFiltrados =
-          List<Map<String, dynamic>>.from(
-        restaurantes,
-      );
-
-      buscaController.clear();
-    });
-
-    debugPrint(
-      'MOSTRANDO TODOS OS RESTAURANTES: ${restaurantes.length}',
-    );
-
-    return;
-  }
-
-  // ============================================================
-  // FILTRO POR CATEGORIA
-  // ============================================================
-
-  final resultado = restaurantes.where(
-    (restaurante) {
-      final categoriaRestaurante =
-          restaurante['categoria']
-                  ?.toString()
-                  .trim()
-                  .toLowerCase() ??
-              '';
-
-      final nome =
-          restaurante['nome']
-                  ?.toString()
-                  .trim()
-                  .toLowerCase() ??
-              '';
-
-      final descricao =
-          restaurante['descricao']
-                  ?.toString()
-                  .trim()
-                  .toLowerCase() ??
-              '';
-
-      return categoriaRestaurante.contains(
-            categoriaBusca,
-          ) ||
-          nome.contains(
-            categoriaBusca,
-          ) ||
-          descricao.contains(
-            categoriaBusca,
-          );
-    },
-  ).toList();
-
-  if (!mounted) return;
-
-  setState(() {
-    restaurantesFiltrados =
-        List<Map<String, dynamic>>.from(
-      resultado,
-    );
-
-    buscaController.clear();
-  });
-
-  debugPrint(
-    'RESULTADO: ${resultado.length}',
-  );
-
-  if (resultado.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Nenhum restaurante encontrado em $categoria.',
-        ),
-      ),
-    );
-  }
-}
-
-  
-
-
-
-
-
-// ============================================================
-// CATEGORIA
-// ============================================================
 
   Widget categoria(
-  IconData icone,
-  String nome,
-) {
-  return GestureDetector(
-    onTap: () {
-      _filtrarPorCategoria(nome);
-    },
-
-    child: Container(
-      width: 90,
-      margin: const EdgeInsets.only(
-        right: 12,
-      ),
-
-      child: Column(
-        children: [
-          Container(
-            width: 62,
-            height: 62,
-
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(35),
-
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 8,
+    IconData icone,
+    String nome,
+  ) {
+    return GestureDetector(
+      onTap: () {
+        _filtrarPorCategoria(
+          nome,
+        );
+      },
+      child: Container(
+        width: 90,
+        margin: const EdgeInsets.only(
+          right: 12,
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 62,
+              height: 62,
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(
+                  35,
                 ),
-              ],
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 8,
+                  ),
+                ],
+              ),
+              child: Icon(
+                icone,
+                color: laranja,
+                size: 30,
+              ),
             ),
-
-            child: Icon(
-              icone,
-              color: laranja,
-              size: 30,
+            const SizedBox(
+              height: 8,
             ),
-          ),
-
-          const SizedBox(height: 8),
-
-          Text(
-            nome,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+            Text(
+              nome,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 13,
+                color: Colors.black,
+                fontWeight: FontWeight.w500,
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
-    ),
-  );
-}
+    );
+  }
 
   // ============================================================
   // CARD RESTAURANTE
@@ -1592,7 +2629,10 @@ void _filtrarPorCategoria(
           BoxShadow(
             color: Colors.black12,
             blurRadius: 12,
-            offset: Offset(0, 4),
+            offset: Offset(
+              0,
+              4,
+            ),
           ),
         ],
       ),
@@ -1611,9 +2651,12 @@ void _filtrarPorCategoria(
                 ),
               ),
             );
-
             return;
           }
+
+          _salvarHistoricoRestaurante(
+            restaurante,
+          );
 
           Navigator.push(
             context,
@@ -1660,6 +2703,7 @@ void _filtrarPorCategoria(
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(
+                              color: Colors.black,
                               fontSize: 17,
                               fontWeight: FontWeight.bold,
                             ),
@@ -1698,7 +2742,7 @@ void _filtrarPorCategoria(
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color: const Color.fromARGB(255, 7, 1, 1),
                         fontSize: 13,
                       ),
                     ),
@@ -1720,6 +2764,7 @@ void _filtrarPorCategoria(
                             restaurante,
                           ),
                           style: const TextStyle(
+                            color: Colors.black,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -1758,11 +2803,15 @@ void _filtrarPorCategoria(
                         ),
                         Flexible(
                           child: Text(
-                            tempoEntrega(
-                              restaurante,
-                            ),
+                            tempoEntrega(restaurante),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.black,
+                              fontSize: 13,
+                              
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
                         const SizedBox(
@@ -1790,7 +2839,7 @@ void _filtrarPorCategoria(
   }
 
   // ============================================================
-  // IMAGEM
+  // IMAGEM RESTAURANTE
   // ============================================================
 
   Widget _imagemRestaurante(
@@ -1803,8 +2852,6 @@ void _filtrarPorCategoria(
         restaurante['logoUrl'];
 
     if (imagem != null && imagem.toString().trim().isNotEmpty) {
-      final url = imagem.toString().trim();
-
       return Container(
         width: 90,
         height: 90,
@@ -1815,23 +2862,12 @@ void _filtrarPorCategoria(
         ),
         clipBehavior: Clip.antiAlias,
         child: Image.network(
-          url,
+          imagem.toString(),
           fit: BoxFit.cover,
-          loadingBuilder: (
-            context,
-            child,
-            progress,
-          ) {
-            if (progress == null) {
-              return child;
-            }
-
-            return _iconeRestaurante();
-          },
           errorBuilder: (
             context,
             error,
-            stack,
+            stackTrace,
           ) {
             return _iconeRestaurante();
           },
@@ -1905,28 +2941,21 @@ void _filtrarPorCategoria(
           const SizedBox(
             height: 15,
           ),
-          if (busca.isEmpty)
-            OutlinedButton.icon(
-              onPressed: carregarRestaurantes,
-              icon: const Icon(
-                Icons.refresh,
-              ),
-              label: const Text(
-                'Atualizar',
-              ),
-            )
-          else
-            OutlinedButton.icon(
-              onPressed: () {
+          OutlinedButton.icon(
+            onPressed: () {
+              if (busca.isEmpty) {
+                carregarRestaurantes();
+              } else {
                 buscaController.clear();
-              },
-              icon: const Icon(
-                Icons.close,
-              ),
-              label: const Text(
-                'Limpar busca',
-              ),
+              }
+            },
+            icon: Icon(
+              busca.isEmpty ? Icons.refresh : Icons.close,
             ),
+            label: Text(
+              busca.isEmpty ? 'Atualizar' : 'Limpar busca',
+            ),
+          ),
         ],
       ),
     );
@@ -2003,7 +3032,10 @@ void _filtrarPorCategoria(
     }
 
     return double.tryParse(
-          valor.toString().replaceAll(',', '.'),
+          valor.toString().replaceAll(
+                ',',
+                '.',
+              ),
         ) ??
         0;
   }

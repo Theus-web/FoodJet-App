@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../config/api.dart';
+import '../../services/favorite_service.dart';
 import '../cart/cart_screen.dart';
 
 class RestaurantScreen extends StatefulWidget {
@@ -14,30 +15,35 @@ class RestaurantScreen extends StatefulWidget {
   final String descricao;
   final String avaliacao;
 
+  // IMAGEM DO RESTAURANTE
+  final String? imagem;
+
   const RestaurantScreen({
     super.key,
     required this.restauranteId,
     required this.nome,
     required this.descricao,
     required this.avaliacao,
+    this.imagem,
   });
 
   @override
-  State<RestaurantScreen> createState() =>
-      _RestaurantScreenState();
+  State<RestaurantScreen> createState() => _RestaurantScreenState();
 }
 
 class _RestaurantScreenState extends State<RestaurantScreen> {
   static const Color laranja = Color(0xFFF97316);
   static const Color laranjaEscuro = Color(0xFFEA580C);
   static const Color fundo = Color(0xFFF6F7F9);
-  static const Color fundoImagem = Color(0xFFFFE5D3);
+   
 
   final List<CartItem> carrinho = [];
 
   Timer? _timerStatus;
 
   bool favorito = false;
+  bool carregandoFavorito = true;
+
   bool carregandoProdutos = true;
   bool restauranteOnline = false;
   bool carregandoStatus = true;
@@ -48,23 +54,15 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   String categoriaSelecionada = 'Todos';
 
-  // ============================================================
-  // LOGO DO RESTAURANTE
-  // ============================================================
-
   String? logoRestaurante;
-
   String? logoBase64;
-
-  // ============================================================
-  // INICIALIZAÇÃO
-  // ============================================================
 
   @override
   void initState() {
     super.initState();
 
     _inicializar();
+    _carregarFavorito();
   }
 
   Future<void> _inicializar() async {
@@ -89,6 +87,149 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   void dispose() {
     _timerStatus?.cancel();
     super.dispose();
+  }
+
+  // ============================================================
+  // FAVORITOS
+  // ============================================================
+
+  Future<void> _carregarFavorito() async {
+    final restauranteId = widget.restauranteId.trim();
+
+    if (restauranteId.isEmpty) {
+      if (!mounted) return;
+
+      setState(() {
+        favorito = false;
+        carregandoFavorito = false;
+      });
+
+      return;
+    }
+
+    try {
+      debugPrint('========================================');
+      debugPrint('VERIFICANDO FAVORITO');
+      debugPrint('RESTAURANTE ID: $restauranteId');
+
+      final resultado = await FavoriteService.estaFavorito(
+        restauranteId,
+      );
+
+      debugPrint('FAVORITO ENCONTRADO: $resultado');
+      debugPrint('========================================');
+
+      if (!mounted) return;
+
+      setState(() {
+        favorito = resultado;
+        carregandoFavorito = false;
+      });
+    } catch (e) {
+      debugPrint(
+        'ERRO AO CARREGAR FAVORITO: $e',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        favorito = false;
+        carregandoFavorito = false;
+      });
+    }
+  }
+
+  Future<void> alternarFavorito() async {
+    final restauranteId = widget.restauranteId.trim();
+
+    if (restauranteId.isEmpty) {
+      _mensagem(
+        'Não foi possível identificar o restaurante.',
+        vermelho: true,
+      );
+      return;
+    }
+
+    if (carregandoFavorito) {
+      return;
+    }
+
+    final favoritoAnterior = favorito;
+
+    setState(() {
+      favorito = !favorito;
+      carregandoFavorito = true;
+    });
+
+    try {
+      final restaurante = <String, dynamic>{
+        'id': restauranteId,
+        'restauranteId': restauranteId,
+        '_id': restauranteId,
+        'restaurantId': restauranteId,
+
+        'nome': widget.nome,
+        'descricao': widget.descricao,
+        'avaliacao': widget.avaliacao,
+
+        'logo': logoRestaurante,
+        'logoBase64': logoBase64,
+        'imagem': logoRestaurante,
+        'imagemUrl': logoRestaurante,
+
+        'tipo': 'restaurante',
+        'categoria': 'restaurante',
+      };
+
+      debugPrint('========================================');
+      debugPrint('ALTERANDO FAVORITO');
+      debugPrint('ID: $restauranteId');
+      debugPrint('NOME: ${widget.nome}');
+      debugPrint('ANTES: $favoritoAnterior');
+      debugPrint('========================================');
+
+      final resultado = await FavoriteService.alternar(
+        restaurante,
+      );
+
+      debugPrint(
+        'NOVO ESTADO DO FAVORITO: $resultado',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        favorito = resultado;
+        carregandoFavorito = false;
+      });
+
+      if (resultado) {
+        _mensagem(
+          '${widget.nome} adicionado aos favoritos ❤️',
+        );
+      } else {
+        _mensagem(
+          '${widget.nome} removido dos favoritos',
+        );
+      }
+    } catch (e) {
+      debugPrint('========================================');
+      debugPrint('ERRO AO ALTERAR FAVORITO');
+      debugPrint('$e');
+      debugPrint('========================================');
+
+      if (!mounted) return;
+
+      setState(() {
+        favorito = favoritoAnterior;
+        carregandoFavorito = false;
+      });
+
+      _mensagem(
+        'Não foi possível atualizar os favoritos.',
+        vermelho: true,
+      );
+    }
   }
 
   // ============================================================
@@ -177,7 +318,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
-  // STATUS + DADOS DO RESTAURANTE
+  // STATUS RESTAURANTE + FOTO REAL
   // ============================================================
 
   Future<void> _verificarStatusRestaurante() async {
@@ -215,10 +356,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         'STATUS RESTAURANTE: ${resposta.statusCode}',
       );
 
-      debugPrint(
-        'RESPOSTA RESTAURANTE: ${resposta.body}',
-      );
-
       if (resposta.statusCode < 200 ||
           resposta.statusCode >= 300) {
         if (!mounted) return;
@@ -253,6 +390,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         restaurante = Map<String, dynamic>.from(
           dados['restaurant'] as Map,
         );
+      } else if (dados['data'] is Map) {
+        restaurante = Map<String, dynamic>.from(
+          dados['data'] as Map,
+        );
       } else {
         restaurante = Map<String, dynamic>.from(
           dados,
@@ -260,7 +401,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       }
 
       // ========================================================
-      // BUSCAR LOGO REAL DO RESTAURANTE
+      // BUSCAR FOTO REAL DO RESTAURANTE
       // ========================================================
 
       String? logo;
@@ -272,15 +413,28 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         restaurante['imagemUrl'],
         restaurante['foto'],
         restaurante['fotoUrl'],
+        restaurante['fotoRestaurante'],
+        restaurante['imagemRestaurante'],
+        restaurante['imagem_restaurante'],
+        restaurante['foto_restaurante'],
       ];
 
       for (final valor in possiveisLogos) {
         if (valor != null &&
             valor.toString().trim().isNotEmpty) {
           logo = valor.toString().trim();
+
+          debugPrint(
+            'FOTO DO RESTAURANTE ENCONTRADA: $logo',
+          );
+
           break;
         }
       }
+
+      // ========================================================
+      // BUSCAR BASE64
+      // ========================================================
 
       String? base64Logo;
 
@@ -288,21 +442,30 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         restaurante['logoBase64'],
         restaurante['imagemBase64'],
         restaurante['fotoBase64'],
+        restaurante['logo_base64'],
+        restaurante['imagem_base64'],
+        restaurante['foto_base64'],
       ];
 
       for (final valor in possiveisBase64) {
         if (valor != null &&
             valor.toString().trim().isNotEmpty) {
           base64Logo = valor.toString().trim();
+
+          debugPrint(
+            'BASE64 DA FOTO ENCONTRADO',
+          );
+
           break;
         }
       }
 
-      final status = restaurante['status']
-              ?.toString()
-              .trim()
-              .toUpperCase() ??
-          '';
+      final status =
+          restaurante['status']
+                  ?.toString()
+                  .trim()
+                  .toUpperCase() ??
+              '';
 
       final online = _converterBooleano(
         restaurante['online'],
@@ -370,10 +533,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           logoBase64 = base64Logo;
         }
       });
-
-      // ========================================================
-      // LIMPAR CARRINHO SOMENTE SE REALMENTE FICOU OFFLINE
-      // ========================================================
 
       if (estavaOnline &&
           !disponivel &&
@@ -443,10 +602,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         'PRODUTOS STATUS: ${resposta.statusCode}',
       );
 
-      debugPrint(
-        'PRODUTOS RESPOSTA: ${resposta.body}',
-      );
-
       if (resposta.statusCode < 200 ||
           resposta.statusCode >= 300) {
         throw Exception(
@@ -454,9 +609,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         );
       }
 
-      final resultado = jsonDecode(
-        resposta.body,
-      );
+      final resultado =
+          jsonDecode(resposta.body);
 
       List<dynamic> listaProdutos;
 
@@ -494,9 +648,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             produto['restaurantId'] ??
             produto['restaurante_id'];
 
-        if (idProduto == null) {
-          continue;
-        }
+        if (idProduto == null) continue;
 
         if (idProduto.toString().trim() !=
             restauranteId) {
@@ -509,9 +661,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           padrao: true,
         );
 
-        if (!disponivel) {
-          continue;
-        }
+        if (!disponivel) continue;
 
         produto['restauranteId'] =
             idProduto.toString();
@@ -531,10 +681,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           categoriaSelecionada = 'Todos';
         }
       });
-
-      debugPrint(
-        'PRODUTOS DO RESTAURANTE: ${produtos.length}',
-      );
     } catch (e) {
       debugPrint(
         'Erro ao buscar produtos: $e',
@@ -558,9 +704,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     final conjunto = <String>{};
 
     for (final produto in produtos) {
-      final categoria = produto['categoria']
-          ?.toString()
-          .trim();
+      final categoria =
+          produto['categoria']
+              ?.toString()
+              .trim();
 
       if (categoria != null &&
           categoria.isNotEmpty) {
@@ -571,11 +718,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     final lista = conjunto.toList();
 
     lista.sort(
-      (a, b) => a
-          .toLowerCase()
-          .compareTo(
-            b.toLowerCase(),
-          ),
+      (a, b) => a.toLowerCase().compareTo(
+        b.toLowerCase(),
+      ),
     );
 
     return [
@@ -602,22 +747,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                   .toLowerCase(),
         )
         .toList();
-  }
-
-  // ============================================================
-  // FAVORITO
-  // ============================================================
-
-  void alternarFavorito() {
-    setState(() {
-      favorito = !favorito;
-    });
-
-    _mensagem(
-      favorito
-          ? '${widget.nome} adicionado aos favoritos ❤️'
-          : '${widget.nome} removido dos favoritos',
-    );
   }
 
   // ============================================================
@@ -650,7 +779,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     }
 
     setState(() {
-      final index = carrinho.indexWhere(
+      final index =
+          carrinho.indexWhere(
         (item) =>
             item.produtoId == produtoId &&
             produtoId != null,
@@ -759,7 +889,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       MaterialPageRoute(
         builder: (_) => CartScreen(
           itens: carrinho,
-          restauranteId: restauranteId,
+          restauranteId:
+              restauranteId,
         ),
       ),
     ).then((_) {
@@ -834,13 +965,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return '$baseUrl/$imagem';
   }
 
-  // ============================================================
-  // URL LOGO
-  // ============================================================
-
-  String _urlLogo(
-    String imagem,
-  ) {
+  String _urlLogo(String imagem) {
     final valor = imagem.trim();
 
     if (valor.startsWith('http://') ||
@@ -888,19 +1013,129 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         width: 100,
         height: 100,
         fit: BoxFit.cover,
-        errorBuilder:
-            (_, __, ___) {
+        errorBuilder: (_, __, ___) {
           return _iconeLogo();
         },
       );
     } catch (e) {
       debugPrint(
-        'Erro ao carregar logoBase64: $e',
+        'Erro ao carregar logo Base64: $e',
       );
 
       return null;
     }
   }
+
+  // ============================================================
+// LOGO / FOTO DO RESTAURANTE
+// ============================================================
+
+Widget _logoRestaurante() {
+  // Primeiro usa a imagem que veio do HOME
+  final imagemHome = widget.imagem?.trim();
+
+  // Depois usa a imagem que veio da API
+  final imagemApi = logoRestaurante?.trim();
+
+  // Prioridade:
+  // 1. Imagem do Home
+  // 2. Imagem carregada da API
+  // 3. Base64
+  // 4. Ícone padrão
+
+  String? imagemFinal;
+
+  if (imagemHome != null && imagemHome.isNotEmpty) {
+    imagemFinal = imagemHome;
+  } else if (imagemApi != null && imagemApi.isNotEmpty) {
+    imagemFinal = imagemApi;
+  }
+
+  Widget imagem;
+
+  if (imagemFinal != null) {
+    imagem = Image.network(
+      _urlLogo(imagemFinal),
+      width: 100,
+      height: 100,
+      fit: BoxFit.cover,
+      loadingBuilder: (
+        context,
+        child,
+        loadingProgress,
+      ) {
+        if (loadingProgress == null) {
+          return child;
+        }
+
+        return Container(
+          color: Colors.white,
+          child: const Center(
+            child: SizedBox(
+              width: 24,
+              height: 24,
+              child: CircularProgressIndicator(
+                strokeWidth: 2.5,
+                color: laranja,
+              ),
+            ),
+          ),
+        );
+      },
+      errorBuilder: (
+        context,
+        error,
+        stackTrace,
+      ) {
+        // Se a imagem do Home falhar,
+        // tenta Base64 antes do ícone.
+        return _logoBase64Widget() ??
+            _iconeLogo();
+      },
+    );
+  } else {
+    imagem =
+        _logoBase64Widget() ??
+        _iconeLogo();
+  }
+
+  return Container(
+    width: 100,
+    height: 100,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(30),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withValues(
+            alpha: 0.20,
+          ),
+          blurRadius: 28,
+          offset: const Offset(0, 12),
+        ),
+      ],
+    ),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(30),
+      child: imagem,
+    ),
+  );
+}
+
+Widget _iconeLogo() {
+  return Container(
+    width: 100,
+    height: 100,
+    color: Colors.white,
+    child: const Center(
+      child: Icon(
+        Icons.restaurant_rounded,
+        color: laranja,
+        size: 48,
+      ),
+    ),
+  );
+}
 
   // ============================================================
   // BUILD
@@ -916,16 +1151,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           await Future.wait([
             _carregarProdutos(),
             _verificarStatusRestaurante(),
+            _carregarFavorito(),
           ]);
         },
         child: CustomScrollView(
           physics:
               const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // ==================================================
-            // HEADER
-            // ==================================================
-
             SliverAppBar(
               expandedHeight: 410,
               pinned: true,
@@ -941,13 +1173,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                 },
               ),
               actions: [
-                _botaoHeader(
-                  icon: favorito
-                      ? Icons.favorite_rounded
-                      : Icons.favorite_border_rounded,
-                  onPressed:
-                      alternarFavorito,
-                ),
+                _botaoHeaderFavorito(),
                 const SizedBox(width: 8),
               ],
               flexibleSpace:
@@ -959,20 +1185,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               ),
             ),
 
-            // ==================================================
-            // AVISO OFFLINE
-            // ==================================================
-
             if (!carregandoStatus &&
                 !restauranteOnline)
               SliverToBoxAdapter(
                 child:
                     _avisoRestauranteOffline(),
               ),
-
-            // ==================================================
-            // CARDÁPIO
-            // ==================================================
 
             SliverToBoxAdapter(
               child: Padding(
@@ -989,6 +1207,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                       child: Text(
                         'Cardápio',
                         style: TextStyle(
+                          color: Colors.black,
                           fontSize: 25,
                           fontWeight:
                               FontWeight.w800,
@@ -1003,10 +1222,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               ),
             ),
 
-            // ==================================================
-            // CATEGORIAS
-            // ==================================================
-
             if (!carregandoProdutos &&
                 produtos.isNotEmpty)
               SliverToBoxAdapter(
@@ -1016,10 +1231,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             const SliverToBoxAdapter(
               child: SizedBox(height: 10),
             ),
-
-            // ==================================================
-            // PRODUTOS
-            // ==================================================
 
             if (carregandoProdutos)
               const SliverToBoxAdapter(
@@ -1078,24 +1289,104 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           ],
         ),
       ),
-
-      // ========================================================
-      // CARRINHO
-      // ========================================================
-
       floatingActionButton:
           quantidadeItens > 0 &&
                   restauranteOnline
               ? _botaoCarrinho()
               : null,
-
       floatingActionButtonLocation:
           FloatingActionButtonLocation.centerFloat,
     );
   }
 
   // ============================================================
-  // HEADER DO RESTAURANTE
+  // FAVORITO
+  // ============================================================
+
+  Widget _botaoHeaderFavorito() {
+    return Container(
+      margin:
+          const EdgeInsets.symmetric(
+        vertical: 8,
+      ),
+      decoration:
+          BoxDecoration(
+        color:
+            Colors.black.withValues(
+          alpha: 0.18,
+        ),
+        shape:
+            BoxShape.circle,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        shape: const CircleBorder(),
+        child: InkWell(
+          customBorder:
+              const CircleBorder(),
+          onTap: carregandoFavorito
+              ? null
+              : alternarFavorito,
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Center(
+              child: AnimatedSwitcher(
+                duration:
+                    const Duration(
+                  milliseconds: 200,
+                ),
+                transitionBuilder:
+                    (
+                  child,
+                  animation,
+                ) {
+                  return ScaleTransition(
+                    scale: animation,
+                    child: child,
+                  );
+                },
+                child:
+                    carregandoFavorito
+                        ? const SizedBox(
+                            key: ValueKey(
+                              'loading',
+                            ),
+                            width: 20,
+                            height: 20,
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor:
+                                  AlwaysStoppedAnimation<
+                                      Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            favorito
+                                ? Icons.favorite_rounded
+                                : Icons
+                                    .favorite_border_rounded,
+                            key: ValueKey(
+                              favorito,
+                            ),
+                            color: favorito
+                                ? Colors.redAccent
+                                : Colors.white,
+                            size: 25,
+                          ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // HEADER
   // ============================================================
 
   Widget _cabecalhoRestaurante() {
@@ -1132,7 +1423,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               ),
             ),
           ),
-
           Positioned(
             left: -90,
             bottom: -70,
@@ -1150,7 +1440,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               ),
             ),
           ),
-
           Align(
             alignment:
                 Alignment.bottomCenter,
@@ -1166,17 +1455,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                 mainAxisSize:
                     MainAxisSize.min,
                 children: [
-                  // ==================================================
-                  // LOGO REAL DO RESTAURANTE
-                  // ==================================================
-
                   _logoRestaurante(),
 
                   const SizedBox(height: 12),
-
-                  // ==================================================
-                  // NOME
-                  // ==================================================
 
                   Text(
                     widget.nome,
@@ -1196,13 +1477,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
                   const SizedBox(height: 7),
 
-                  // STATUS
-
                   _statusPremium(),
 
                   const SizedBox(height: 8),
-
-                  // DESCRIÇÃO
 
                   if (widget.descricao
                       .trim()
@@ -1224,8 +1501,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     ),
 
                   const SizedBox(height: 10),
-
-                  // INFORMAÇÕES
 
                   Wrap(
                     alignment:
@@ -1259,106 +1534,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
-  // LOGO RESTAURANTE
-  // ============================================================
-
-  Widget _logoRestaurante() {
-    final logoBase64Widget =
-        _logoBase64Widget();
-
-    return Container(
-      width: 100,
-      height: 100,
-      decoration:
-          BoxDecoration(
-        color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(30),
-        boxShadow: [
-          BoxShadow(
-            color:
-                Colors.black.withValues(
-              alpha: 0.20,
-            ),
-            blurRadius: 28,
-            offset:
-                const Offset(
-              0,
-              12,
-            ),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius:
-            BorderRadius.circular(30),
-        child:
-            // ==================================================
-            // PRIORIDADE 1: BASE64
-            // ==================================================
-            logoBase64Widget ??
-                // ==================================================
-                // PRIORIDADE 2: URL DA LOGO
-                // ==================================================
-                (logoRestaurante != null &&
-                        logoRestaurante!
-                            .trim()
-                            .isNotEmpty
-                    ? Image.network(
-                        _urlLogo(
-                          logoRestaurante!,
-                        ),
-                        width: 100,
-                        height: 100,
-                        fit: BoxFit.cover,
-                        loadingBuilder:
-                            (
-                          context,
-                          child,
-                          progress,
-                        ) {
-                          if (progress ==
-                              null) {
-                            return child;
-                          }
-
-                          return _iconeLogo();
-                        },
-                        errorBuilder:
-                            (
-                          context,
-                          error,
-                          stackTrace,
-                        ) {
-                          return _iconeLogo();
-                        },
-                      )
-                    : _iconeLogo()),
-      ),
-    );
-  }
-
-  // ============================================================
-  // ÍCONE PADRÃO DA LOGO
-  // ============================================================
-
-  Widget _iconeLogo() {
-    return Container(
-      width: 100,
-      height: 100,
-      color: Colors.white,
-      child: const Center(
-        child: Icon(
-          Icons.restaurant_rounded,
-          color: laranja,
-          size: 48,
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // STATUS PREMIUM
+  // STATUS
   // ============================================================
 
   Widget _statusPremium() {
@@ -1417,10 +1593,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     );
   }
 
-  // ============================================================
-  // INFORMAÇÃO
-  // ============================================================
-
   Widget _informacaoHeader(
     IconData icon,
     String texto,
@@ -1439,13 +1611,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         ),
         borderRadius:
             BorderRadius.circular(20),
-        border:
-            Border.all(
-          color:
-              Colors.white.withValues(
-            alpha: 0.10,
-          ),
-        ),
       ),
       child: Row(
         mainAxisSize:
@@ -1471,10 +1636,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       ),
     );
   }
-
-  // ============================================================
-  // BOTÃO HEADER
-  // ============================================================
 
   Widget _botaoHeader({
     required IconData icon,
@@ -1504,10 +1665,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       ),
     );
   }
-
-  // ============================================================
-  // CONTADOR
-  // ============================================================
 
   Widget _contadorProdutos() {
     return Container(
@@ -1720,9 +1877,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             : 'Produto';
 
     final descricao =
-        produto['descricao']
-                ?.toString() ??
-            '';
+        produto['descricao']?.toString() ?? '';
 
     final preco =
         _precoProduto(
@@ -1794,9 +1949,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                 ),
               ),
             ),
-
             const SizedBox(width: 12),
-
             Expanded(
               child: Column(
                 mainAxisSize:
@@ -1811,13 +1964,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                         TextOverflow.ellipsis,
                     style:
                         const TextStyle(
+                      color: Colors.black,
                       fontSize: 16,
                       height: 1.15,
                       fontWeight:
                           FontWeight.w800,
                     ),
                   ),
-
                   if (descricao
                       .trim()
                       .isNotEmpty) ...[
@@ -1835,9 +1988,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                       ),
                     ),
                   ],
-
                   const SizedBox(height: 10),
-
                   Row(
                     crossAxisAlignment:
                         CrossAxisAlignment.center,
@@ -1877,10 +2028,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       ),
     );
   }
-
-  // ============================================================
-  // BOTÃO ADICIONAR
-  // ============================================================
 
   Widget _botaoAdicionar({
     required String nome,
@@ -1950,10 +2097,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     );
   }
 
-  // ============================================================
-  // IMAGEM PRODUTO
-  // ============================================================
-
   Widget _imagemProduto(
     String? imagem, {
     double tamanho = 105,
@@ -1972,20 +2115,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       width: tamanho,
       height: tamanho,
       fit: BoxFit.cover,
-      loadingBuilder:
-          (
-        context,
-        child,
-        progress,
-      ) {
-        if (progress == null) {
-          return child;
-        }
-
-        return _loadingImagem(
-          tamanho,
-        );
-      },
       errorBuilder:
           (
         context,
@@ -2009,10 +2138,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           const BoxDecoration(
         gradient:
             LinearGradient(
-          begin:
-              Alignment.topLeft,
-          end:
-              Alignment.bottomRight,
           colors: [
             Color(0xFFFFEAD9),
             Color(0xFFFFD5B5),
@@ -2027,29 +2152,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     );
   }
 
-  Widget _loadingImagem(
-    double tamanho,
-  ) {
-    return Container(
-      width: tamanho,
-      height: tamanho,
-      color: fundoImagem,
-      child: const Center(
-        child: SizedBox(
-          width: 24,
-          height: 24,
-          child:
-              CircularProgressIndicator(
-            strokeWidth: 2,
-            color: laranja,
-          ),
-        ),
-      ),
-    );
-  }
-
   // ============================================================
-  // CARRINHO FLUTUANTE
+  // CARRINHO
   // ============================================================
 
   Widget _botaoCarrinho() {
@@ -2069,10 +2173,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             BoxDecoration(
           gradient:
               const LinearGradient(
-            begin:
-                Alignment.centerLeft,
-            end:
-                Alignment.centerRight,
             colors: [
               Color(0xFFF97316),
               Color(0xFFEA580C),
@@ -2112,9 +2212,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                 size: 22,
               ),
             ),
-
             const SizedBox(width: 11),
-
             Expanded(
               child: Column(
                 mainAxisAlignment:
@@ -2124,9 +2222,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                 children: [
                   Text(
                     '$quantidadeItens ${quantidadeItens == 1 ? 'item' : 'itens'}',
-                    maxLines: 1,
-                    overflow:
-                        TextOverflow.ellipsis,
                     style: TextStyle(
                       color:
                           Colors.white.withValues(
@@ -2139,9 +2234,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     _formatarPreco(
                       totalCarrinho,
                     ),
-                    maxLines: 1,
-                    overflow:
-                        TextOverflow.ellipsis,
                     style:
                         const TextStyle(
                       color: Colors.white,
@@ -2153,9 +2245,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                 ],
               ),
             ),
-
-            const SizedBox(width: 6),
-
             const Text(
               'Ver carrinho',
               style:
@@ -2166,9 +2255,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     FontWeight.w800,
               ),
             ),
-
             const SizedBox(width: 7),
-
             const Icon(
               Icons.arrow_forward_rounded,
               color: Colors.white,
@@ -2261,15 +2348,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         color: Colors.white,
         borderRadius:
             BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color:
-                Colors.black.withValues(
-              alpha: 0.04,
-            ),
-            blurRadius: 20,
-          ),
-        ],
       ),
       child: Column(
         children: [
@@ -2291,9 +2369,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               size: 36,
             ),
           ),
-
           const SizedBox(height: 17),
-
           Text(
             titulo,
             textAlign:
@@ -2305,7 +2381,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                   FontWeight.w800,
             ),
           ),
-
           if (descricao != null) ...[
             const SizedBox(height: 8),
             Text(
@@ -2319,7 +2394,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               ),
             ),
           ],
-
           if (botao != null) ...[
             const SizedBox(height: 20),
             botao,

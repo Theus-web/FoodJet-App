@@ -32,22 +32,16 @@ const adapter = new JSONFile(
 // ============================================================
 
 const dadosPadrao = {
-
     usuarios: [],
-
     restaurantes: [],
-
     produtos: [],
-
     pedidos: [],
-
     entregadores: [],
-
     pagamentos: [],
-
     promocoes: [],
-
+    favoritos: [],
 };
+
 
 // ============================================================
 // BANCO LOWDB
@@ -93,9 +87,13 @@ function garantirEstrutura() {
     }
 
     if (!Array.isArray(db.data.promocoes)) {
-    db.data.promocoes = [];
-}
+        db.data.promocoes = [];
+    }
 
+ 
+    if (!Array.isArray(db.data.favoritos)) {
+        db.data.favoritos = [];
+    }
 }
 
 // ============================================================
@@ -108,21 +106,9 @@ async function conectar() {
 
     try {
 
-        // ====================================================
-        // LER BANCO
-        // ====================================================
-
         await db.read();
 
-        // ====================================================
-        // GARANTIR ESTRUTURA
-        // ====================================================
-
         garantirEstrutura();
-
-        // ====================================================
-        // VERIFICAR SE BANCO PRECISA SER CRIADO
-        // ====================================================
 
         if (!bancoConectado) {
 
@@ -164,6 +150,10 @@ async function conectar() {
                 db.data.pagamentos.length
             );
 
+            console.log(
+                "❤️ FAVORITOS NO BANCO:",
+                db.data.favoritos.length
+            );
         }
 
         return db;
@@ -177,9 +167,7 @@ async function conectar() {
         console.error(error);
 
         throw error;
-
     }
-
 }
 
 // ============================================================

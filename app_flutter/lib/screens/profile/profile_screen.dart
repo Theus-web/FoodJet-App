@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../login/login_screen.dart';
 import '../favorites/favorites_screen.dart';
 import '../orders/order_history_screen.dart';
-import '../address/my_addresses_screen.dart';
 import '../settings/settings_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
@@ -14,37 +14,230 @@ class ProfileScreen extends StatelessWidget {
     required this.usuario,
   });
 
+  static const Color laranja = Color(0xFFF97316);
+  static const Color vermelho = Color(0xFFDC2626);
+
+  // ============================================================
+  // ENCERRAR CONTA
+  // ============================================================
+
+  Future<void> _encerrarConta(
+    BuildContext context,
+  ) async {
+    final confirmado = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          titlePadding: const EdgeInsets.fromLTRB(
+            24,
+            24,
+            24,
+            10,
+          ),
+          contentPadding: const EdgeInsets.fromLTRB(
+            24,
+            8,
+            24,
+            10,
+          ),
+          actionsPadding: const EdgeInsets.fromLTRB(
+            18,
+            5,
+            18,
+            18,
+          ),
+          title: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: BoxDecoration(
+                  color: vermelho.withValues(
+                    alpha: 0.10,
+                  ),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.delete_forever_rounded,
+                  color: vermelho,
+                  size: 25,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Encerrar conta?',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: const Text(
+            'Essa ação encerra sua sessão no aplicativo e remove os dados locais da conta neste dispositivo.\n\n'
+            'A exclusão definitiva da conta e dos dados armazenados no servidor precisa ser realizada pelo sistema do FoodJet.',
+            style: TextStyle(
+              fontSize: 14,
+              height: 1.5,
+              color: Colors.black54,
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  false,
+                );
+              },
+              child: const Text(
+                'Cancelar',
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(
+                  dialogContext,
+                  true,
+                );
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: vermelho,
+                foregroundColor: Colors.white,
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 12,
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text(
+                'Encerrar conta',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmado != true) {
+      return;
+    }
+
+    await _limparDadosLocais(context);
+  }
+
+  // ============================================================
+  // LIMPAR DADOS LOCAIS
+  // ============================================================
+
+  Future<void> _limparDadosLocais(
+    BuildContext context,
+  ) async {
+    try {
+      final prefs =
+          await SharedPreferences.getInstance();
+
+      const chavesSessao = [
+        'token',
+        'accessToken',
+        'refreshToken',
+        'usuario',
+        'usuarioLogado',
+        'user',
+        'userId',
+        'clienteId',
+        'restauranteSelecionadoId',
+        'restauranteId',
+      ];
+
+      for (final chave in chavesSessao) {
+        await prefs.remove(chave);
+      }
+
+      await prefs.remove(
+        'foodjet_favoritos',
+      );
+
+      if (!context.mounted) {
+        return;
+      }
+
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => const LoginScreen(),
+        ),
+        (route) => false,
+      );
+    } catch (e) {
+      debugPrint(
+        'ERRO AO ENCERRAR CONTA: $e',
+      );
+
+      if (!context.mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Não foi possível encerrar a conta neste momento.',
+            ),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    }
+  }
+
   @override
-  Widget build(BuildContext context) {
-    const Color laranja = Color(0xFFF97316);
-
-    // ==============================
-    // DADOS REAIS DO USUÁRIO
-    // ==============================
-
+  Widget build(
+    BuildContext context,
+  ) {
     final String nome =
-        usuario['nome']?.toString() ?? 'Usuário';
+        usuario['nome']?.toString().trim().isNotEmpty == true
+            ? usuario['nome'].toString()
+            : 'Usuário';
 
     final String email =
-        usuario['email']?.toString() ??
-        'E-mail não informado';
+        usuario['email']?.toString().trim().isNotEmpty == true
+            ? usuario['email'].toString()
+            : 'E-mail não informado';
 
     final String telefone =
-        usuario['telefone']?.toString() ??
-        'Telefone não informado';
+        usuario['telefone']?.toString().trim().isNotEmpty == true
+            ? usuario['telefone'].toString()
+            : 'Telefone não informado';
 
     return Scaffold(
       backgroundColor: const Color(0xFFF5F5F5),
 
-      // ==============================
+      // ========================================================
       // APP BAR
-      // ==============================
+      // ========================================================
 
       appBar: AppBar(
         backgroundColor: laranja,
         foregroundColor: Colors.white,
         elevation: 0,
-
         title: const Text(
           'Meu Perfil',
           style: TextStyle(
@@ -53,31 +246,27 @@ class ProfileScreen extends StatelessWidget {
         ),
       ),
 
-      // ==============================
+      // ========================================================
       // CONTEÚDO
-      // ==============================
+      // ========================================================
 
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-
         child: Column(
           children: [
-
             const SizedBox(height: 15),
 
-            // ==============================
-            // FOTO DO USUÁRIO
-            // ==============================
+            // ==================================================
+            // FOTO
+            // ==================================================
 
             Container(
               width: 100,
               height: 100,
-
               decoration: const BoxDecoration(
                 color: laranja,
                 shape: BoxShape.circle,
               ),
-
               child: const Icon(
                 Icons.person,
                 size: 60,
@@ -87,15 +276,13 @@ class ProfileScreen extends StatelessWidget {
 
             const SizedBox(height: 15),
 
-            // ==============================
+            // ==================================================
             // NOME
-            // ==============================
+            // ==================================================
 
             Text(
               nome,
-
               textAlign: TextAlign.center,
-
               style: const TextStyle(
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
@@ -105,15 +292,13 @@ class ProfileScreen extends StatelessWidget {
 
             const SizedBox(height: 5),
 
-            // ==============================
-            // E-MAIL
-            // ==============================
+            // ==================================================
+            // EMAIL
+            // ==================================================
 
             Text(
               email,
-
               textAlign: TextAlign.center,
-
               style: const TextStyle(
                 fontSize: 15,
                 color: Colors.grey,
@@ -122,9 +307,9 @@ class ProfileScreen extends StatelessWidget {
 
             const SizedBox(height: 30),
 
-            // ==============================
+            // ==================================================
             // DADOS PESSOAIS
-            // ==============================
+            // ==================================================
 
             _itemPerfil(
               context,
@@ -141,49 +326,29 @@ class ProfileScreen extends StatelessWidget {
               },
             ),
 
-            // ==============================
-            // MEUS ENDEREÇOS
-            // ==============================
+            // ==================================================
+            // FAVORITOS
+            // ==================================================
 
             _itemPerfil(
               context,
-              Icons.location_on_outlined,
-              'Meus endereços',
-              'Gerenciar endereços de entrega',
-              () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        const MyAddressesScreen(),
-                  ),
-                );
-              },
-            ),
-
-            // ==============================
-            // MEUS FAVORITOS
-            // ==============================
-
-            _itemPerfil(
-              context,
-              Icons.favorite_border,
+              Icons.favorite_border_rounded,
               'Meus favoritos',
               'Restaurantes favoritos',
               () {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) =>
+                    builder: (_) =>
                         const FavoritesScreen(),
                   ),
                 );
               },
             ),
 
-            // ==============================
-            // MEUS PEDIDOS
-            // ==============================
+            // ==================================================
+            // PEDIDOS
+            // ==================================================
 
             _itemPerfil(
               context,
@@ -194,137 +359,61 @@ class ProfileScreen extends StatelessWidget {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) =>
+                    builder: (_) =>
                         const OrderHistoryScreen(),
                   ),
                 );
               },
             ),
 
-            // ==============================
+            // ==================================================
             // CONFIGURAÇÕES
-            // ==============================
+            // ==================================================
 
-           _itemPerfil(
-  context,
-  Icons.settings_outlined,
-  'Configurações',
-  'Preferências do aplicativo',
-  () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => SettingsScreen(
-          usuario: usuario,
-        ),
-      ),
-    );
-  },
-),
+            _itemPerfil(
+              context,
+              Icons.settings_outlined,
+              'Configurações',
+              'Preferências do aplicativo',
+              () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => SettingsScreen(
+                      usuario: usuario,
+                    ),
+                  ),
+                );
+              },
+            ),
 
             const SizedBox(height: 20),
 
-            // ==============================
+            // ==================================================
             // SAIR DA CONTA
-            // ==============================
+            // ==================================================
 
             SizedBox(
               width: double.infinity,
-
               child: OutlinedButton.icon(
                 onPressed: () {
-                  showDialog(
-                    context: context,
-
-                    builder: (dialogContext) {
-                      return AlertDialog(
-                        title: const Text(
-                          'Sair da conta?',
-                        ),
-
-                        content: const Text(
-                          'Você deseja realmente sair da sua conta?',
-                        ),
-
-                        actions: [
-
-                          // CANCELAR
-                          TextButton(
-                            onPressed: () {
-                              Navigator.pop(
-                                dialogContext,
-                              );
-                            },
-
-                            child: const Text(
-                              'Cancelar',
-                            ),
-                          ),
-
-                          // SAIR
-                          ElevatedButton(
-                            onPressed: () {
-                              // Fecha o diálogo
-                              Navigator.pop(
-                                dialogContext,
-                              );
-
-                              // Volta para o login
-                              // removendo todas as telas anteriores
-                              Navigator.pushAndRemoveUntil(
-                                context,
-
-                                MaterialPageRoute(
-                                  builder: (context) =>
-                                      const LoginScreen(),
-                                ),
-
-                                (route) => false,
-                              );
-                            },
-
-                            style:
-                                ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  laranja,
-
-                              foregroundColor:
-                                  Colors.white,
-                            ),
-
-                            child: const Text(
-                              'Sair',
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                  );
+                  _mostrarDialogoSair(context);
                 },
-
                 icon: const Icon(
-                  Icons.logout,
+                  Icons.logout_rounded,
                 ),
-
                 label: const Text(
                   'Sair da conta',
                 ),
-
-                style:
-                    OutlinedButton.styleFrom(
-                  foregroundColor:
-                      Colors.red,
-
-                  side:
-                      const BorderSide(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(
                     color: Colors.red,
                   ),
-
                   padding:
                       const EdgeInsets.symmetric(
                     vertical: 15,
                   ),
-
                   shape:
                       RoundedRectangleBorder(
                     borderRadius:
@@ -336,6 +425,90 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
 
+            const SizedBox(height: 14),
+
+            // ==================================================
+            // ENCERRAR CONTA
+            // ==================================================
+
+            SizedBox(
+              width: double.infinity,
+              child: TextButton.icon(
+                onPressed: () {
+                  _encerrarConta(context);
+                },
+                icon: const Icon(
+                  Icons.delete_forever_rounded,
+                  color: vermelho,
+                ),
+                label: const Text(
+                  'Encerrar minha conta',
+                  style: TextStyle(
+                    color: vermelho,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                style: TextButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(
+                    vertical: 15,
+                  ),
+                  shape:
+                      RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(
+                      14,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 20),
+
+            // ==================================================
+            // AVISO
+            // ==================================================
+
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(
+                  alpha: 0.05,
+                ),
+                borderRadius:
+                    BorderRadius.circular(14),
+                border: Border.all(
+                  color: Colors.red.withValues(
+                    alpha: 0.10,
+                  ),
+                ),
+              ),
+              child: const Row(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline_rounded,
+                    color: Colors.redAccent,
+                    size: 20,
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'O encerramento da conta é uma ação importante. Certifique-se de que realmente deseja sair do FoodJet.',
+                      style: TextStyle(
+                        color: Colors.black54,
+                        fontSize: 12,
+                        height: 1.4,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 30),
           ],
         ),
@@ -343,9 +516,70 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  // ==================================================
+  // ============================================================
+  // DIÁLOGO SAIR
+  // ============================================================
+
+  void _mostrarDialogoSair(
+    BuildContext context,
+  ) {
+    showDialog(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          shape: RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(22),
+          ),
+          title: const Text(
+            'Sair da conta?',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+          content: const Text(
+            'Você deseja realmente sair da sua conta?',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+              },
+              child: const Text(
+                'Cancelar',
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(dialogContext);
+
+                Navigator.pushAndRemoveUntil(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        const LoginScreen(),
+                  ),
+                  (route) => false,
+                );
+              },
+              style:
+                  ElevatedButton.styleFrom(
+                backgroundColor: laranja,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text(
+                'Sair',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ============================================================
   // DADOS PESSOAIS
-  // ==================================================
+  // ============================================================
 
   static void _mostrarDadosPessoais(
     BuildContext context,
@@ -355,10 +589,7 @@ class ProfileScreen extends StatelessWidget {
   ) {
     showModalBottomSheet(
       context: context,
-
-      backgroundColor:
-          Colors.white,
-
+      backgroundColor: Colors.white,
       shape:
           const RoundedRectangleBorder(
         borderRadius:
@@ -366,21 +597,14 @@ class ProfileScreen extends StatelessWidget {
           top: Radius.circular(25),
         ),
       ),
-
       builder: (context) {
         return Padding(
-          padding:
-              const EdgeInsets.all(24),
-
+          padding: const EdgeInsets.all(24),
           child: Column(
-            mainAxisSize:
-                MainAxisSize.min,
-
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment:
                 CrossAxisAlignment.start,
-
             children: [
-
               const Center(
                 child: Icon(
                   Icons.drag_handle,
@@ -392,11 +616,9 @@ class ProfileScreen extends StatelessWidget {
 
               const Text(
                 'Dados pessoais',
-
                 style: TextStyle(
                   fontSize: 22,
-                  fontWeight:
-                      FontWeight.bold,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
 
@@ -427,32 +649,21 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 25),
 
               SizedBox(
-                width:
-                    double.infinity,
-
-                child:
-                    ElevatedButton(
+                width: double.infinity,
+                child: ElevatedButton(
                   onPressed: () {
-                    Navigator.pop(
-                      context,
-                    );
+                    Navigator.pop(context);
                   },
-
                   style:
                       ElevatedButton.styleFrom(
-                    backgroundColor:
-                        const Color(
-                      0xFFF97316,
-                    ),
-
+                    backgroundColor: laranja,
                     foregroundColor:
                         Colors.white,
-
                     padding:
-                        const EdgeInsets.symmetric(
+                        const EdgeInsets
+                            .symmetric(
                       vertical: 15,
                     ),
-
                     shape:
                         RoundedRectangleBorder(
                       borderRadius:
@@ -461,9 +672,7 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ),
                   ),
-
-                  child:
-                      const Text(
+                  child: const Text(
                     'Fechar',
                   ),
                 ),
@@ -477,9 +686,9 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  // ==================================================
+  // ============================================================
   // LINHA DE DADO
-  // ==================================================
+  // ============================================================
 
   static Widget _linhaDado(
     IconData icone,
@@ -488,30 +697,17 @@ class ProfileScreen extends StatelessWidget {
   ) {
     return Row(
       children: [
-
         Container(
           width: 45,
           height: 45,
-
-          decoration:
-              BoxDecoration(
-            color:
-                Colors.orange.shade50,
-
+          decoration: BoxDecoration(
+            color: Colors.orange.shade50,
             borderRadius:
-                BorderRadius.circular(
-              12,
-            ),
+                BorderRadius.circular(12),
           ),
-
-          child:
-              Icon(
+          child: Icon(
             icone,
-
-            color:
-                const Color(
-              0xFFF97316,
-            ),
+            color: laranja,
           ),
         ),
 
@@ -521,17 +717,12 @@ class ProfileScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment:
                 CrossAxisAlignment.start,
-
             children: [
-
               Text(
                 titulo,
-
-                style:
-                    const TextStyle(
+                style: const TextStyle(
                   fontSize: 12,
-                  color:
-                      Colors.grey,
+                  color: Colors.grey,
                 ),
               ),
 
@@ -539,14 +730,11 @@ class ProfileScreen extends StatelessWidget {
 
               Text(
                 valor,
-
-                style:
-                    const TextStyle(
+                style: const TextStyle(
                   fontSize: 16,
                   fontWeight:
                       FontWeight.w600,
-                  color:
-                      Colors.black,
+                  color: Colors.black,
                 ),
               ),
             ],
@@ -556,9 +744,9 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  // ==================================================
+  // ============================================================
   // ITEM DO PERFIL
-  // ==================================================
+  // ============================================================
 
   static Widget _itemPerfil(
     BuildContext context,
@@ -567,86 +755,57 @@ class ProfileScreen extends StatelessWidget {
     String subtitulo,
     VoidCallback aoClicar,
   ) {
-    const Color laranja =
-        Color(0xFFF97316);
-
     return Container(
       margin:
           const EdgeInsets.only(
         bottom: 12,
       ),
-
       decoration:
           BoxDecoration(
-        color:
-            Colors.white,
-
+        color: Colors.white,
         borderRadius:
-            BorderRadius.circular(
-          15,
-        ),
+            BorderRadius.circular(15),
       ),
-
-      child:
-          ListTile(
-        onTap:
-            aoClicar,
-
+      child: ListTile(
+        onTap: aoClicar,
         contentPadding:
             const EdgeInsets.symmetric(
           horizontal: 18,
           vertical: 5,
         ),
-
-        leading:
-            Container(
+        leading: Container(
           width: 45,
           height: 45,
-
           decoration:
               BoxDecoration(
             color:
                 Colors.orange.shade50,
-
             borderRadius:
                 BorderRadius.circular(
               12,
             ),
           ),
-
-          child:
-              Icon(
+          child: Icon(
             icone,
-            color:
-                laranja,
+            color: laranja,
           ),
         ),
-
-        title:
-            Text(
+        title: Text(
           titulo,
-
           style:
               const TextStyle(
             fontWeight:
                 FontWeight.bold,
-
-            color:
-                Colors.black,
+            color: Colors.black,
           ),
         ),
-
-        subtitle:
-            Text(
+        subtitle: Text(
           subtitulo,
-
           style:
               const TextStyle(
-            color:
-                Colors.grey,
+            color: Colors.grey,
           ),
         ),
-
         trailing:
             const Icon(
           Icons.arrow_forward_ios,

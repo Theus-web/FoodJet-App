@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 
 import '../../config/api.dart';
 import 'cart_screen.dart';
+import 'checkout_payment_screen.dart';
 import 'order_tracking_screen.dart';
 
 class OrderReviewScreen extends StatefulWidget {
@@ -28,7 +29,8 @@ class OrderReviewScreen extends StatefulWidget {
       _OrderReviewScreenState();
 }
 
-class _OrderReviewScreenState extends State<OrderReviewScreen> {
+class _OrderReviewScreenState
+    extends State<OrderReviewScreen> {
   static const Color laranja = Color(0xFFF97316);
   static const Color fundo = Color(0xFFF5F5F5);
 
@@ -38,8 +40,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   // CLIENTE
   // ============================================================
 
-  // Temporário conforme sua estrutura atual.
-  // Depois podemos pegar automaticamente do usuário logado.
+  // Mantido conforme sua estrutura atual.
+  // Depois podemos trocar pelo ID real vindo da sessão.
   final int clienteId = 1784355543711;
 
   // ============================================================
@@ -55,7 +57,9 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   }
 
   double get totalPedido {
-    return widget.subtotal + taxaServico + taxaEntrega;
+    return widget.subtotal +
+        taxaServico +
+        taxaEntrega;
   }
 
   // ============================================================
@@ -73,12 +77,23 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   String enderecoCompleto() {
     final rua = widget.endereco['rua'] ?? '';
     final numero = widget.endereco['numero'] ?? '';
-    final complemento = widget.endereco['complemento'] ?? '';
+    final complemento =
+        widget.endereco['complemento'] ?? '';
     final bairro = widget.endereco['bairro'] ?? '';
     final cidade = widget.endereco['cidade'] ?? '';
     final estado = widget.endereco['estado'] ?? '';
 
-    String resultado = '$rua, $numero';
+    String resultado = '';
+
+    if (rua.isNotEmpty) {
+      resultado = rua;
+
+      if (numero.isNotEmpty) {
+        resultado += ', $numero';
+      }
+    } else if (numero.isNotEmpty) {
+      resultado = numero;
+    }
 
     if (complemento.isNotEmpty) {
       resultado += ' - $complemento';
@@ -89,10 +104,24 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     }
 
     if (cidade.isNotEmpty || estado.isNotEmpty) {
-      resultado += '\n$cidade - $estado';
+      resultado += '\n';
+
+      if (cidade.isNotEmpty) {
+        resultado += cidade;
+      }
+
+      if (estado.isNotEmpty) {
+        if (cidade.isNotEmpty) {
+          resultado += ' - ';
+        }
+
+        resultado += estado;
+      }
     }
 
-    return resultado;
+    return resultado.isEmpty
+        ? 'Endereço não informado'
+        : resultado;
   }
 
   // ============================================================
@@ -106,9 +135,76 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
         'nome': item.nome,
         'preco': item.preco,
         'quantidade': item.quantidade,
-        'subtotal': item.preco * item.quantidade,
+        'subtotal':
+            item.preco * item.quantidade,
       };
     }).toList();
+  }
+
+  // ============================================================
+  // IR PARA CHECKOUT
+  // ============================================================
+
+  void continuarParaPagamento() {
+    if (enviando) return;
+
+    FocusScope.of(context).unfocus();
+
+    if (widget.itens.isEmpty) {
+      _mensagem(
+        'Seu carrinho está vazio.',
+        erro: true,
+      );
+      return;
+    }
+
+    if (widget.restauranteId.isEmpty) {
+      _mensagem(
+        'Restaurante não identificado.',
+        erro: true,
+      );
+      return;
+    }
+
+    debugPrint(
+      '========================================',
+    );
+
+    debugPrint(
+      '💳 ABRINDO CHECKOUT FOODJET',
+    );
+
+    debugPrint(
+      '🏪 RESTAURANTE: ${widget.restauranteId}',
+    );
+
+    debugPrint(
+      '💳 PAGAMENTO: ${widget.pagamento}',
+    );
+
+    debugPrint(
+      '💰 TOTAL: $totalPedido',
+    );
+
+    debugPrint(
+      '========================================',
+    );
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) =>
+            CheckoutPaymentScreen(
+          total: totalPedido,
+          pagamento: widget.pagamento,
+          restauranteId:
+              widget.restauranteId,
+          onPagamentoConfirmado: () {
+            confirmarPedido();
+          },
+        ),
+      ),
+    );
   }
 
   // ============================================================
@@ -141,7 +237,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     });
 
     try {
-      final itensPedido = _montarItensPedido();
+      final itensPedido =
+          _montarItensPedido();
 
       // ========================================================
       // PEDIDO
@@ -149,43 +246,66 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
       final pedido = {
         'clienteId': clienteId,
-        'restauranteId': widget.restauranteId,
+        'restauranteId':
+            widget.restauranteId,
         'itens': itensPedido,
         'endereco': widget.endereco,
         'pagamento': widget.pagamento,
         'subtotal': widget.subtotal,
         'taxaServico': taxaServico,
-        'percentualTaxaServico': percentualTaxaServico,
+        'percentualTaxaServico':
+            percentualTaxaServico,
         'taxaEntrega': taxaEntrega,
         'total': totalPedido,
       };
 
-      debugPrint('========================================');
-      debugPrint('📦 ENVIANDO PEDIDO PARA API');
-      debugPrint('👤 CLIENTE: $clienteId');
+      debugPrint(
+        '========================================',
+      );
+
+      debugPrint(
+        '📦 ENVIANDO PEDIDO PARA API',
+      );
+
+      debugPrint(
+        '👤 CLIENTE: $clienteId',
+      );
+
       debugPrint(
         '🏪 RESTAURANTE: ${widget.restauranteId}',
       );
-      debugPrint('🛒 ITENS: $itensPedido');
+
+      debugPrint(
+        '🛒 ITENS: $itensPedido',
+      );
+
       debugPrint(
         '📍 ENDEREÇO: ${widget.endereco}',
       );
+
       debugPrint(
         '💳 PAGAMENTO: ${widget.pagamento}',
       );
+
       debugPrint(
         '💵 SUBTOTAL: ${widget.subtotal}',
       );
+
       debugPrint(
         '🧾 TAXA SERVIÇO: $taxaServico',
       );
+
       debugPrint(
         '🛵 TAXA ENTREGA: $taxaEntrega',
       );
+
       debugPrint(
         '💰 TOTAL: $totalPedido',
       );
-      debugPrint('========================================');
+
+      debugPrint(
+        '========================================',
+      );
 
       // ========================================================
       // URL
@@ -195,7 +315,9 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
         '${Api.baseUrl}/orders',
       );
 
-      debugPrint('🌐 URL PEDIDO: $url');
+      debugPrint(
+        '🌐 URL PEDIDO: $url',
+      );
 
       // ========================================================
       // POST
@@ -205,8 +327,10 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           .post(
             url,
             headers: {
-              'Content-Type': 'application/json',
-              'Accept': 'application/json',
+              'Content-Type':
+                  'application/json',
+              'Accept':
+                  'application/json',
             },
             body: jsonEncode(pedido),
           )
@@ -233,9 +357,11 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
         Map<String, dynamic> dados = {};
 
         try {
-          final resultado = jsonDecode(resposta.body);
+          final resultado =
+              jsonDecode(resposta.body);
 
-          if (resultado is Map<String, dynamic>) {
+          if (resultado
+              is Map<String, dynamic>) {
             dados = resultado;
           }
         } catch (e) {
@@ -248,7 +374,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
         // LOCALIZAR PEDIDO CRIADO
         // ======================================================
 
-        dynamic pedidoCriado = dados['pedido'];
+        dynamic pedidoCriado =
+            dados['pedido'];
 
         // Caso a API retorne diretamente:
         // { id: 123, ... }
@@ -257,7 +384,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           pedidoCriado = dados;
         }
 
-        if (pedidoCriado is! Map<String, dynamic>) {
+        if (pedidoCriado
+            is! Map<String, dynamic>) {
           _mensagem(
             'Pedido criado, mas a API não retornou os dados do pedido.',
             erro: true,
@@ -269,7 +397,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
         // ID DO PEDIDO
         // ======================================================
 
-        final idRecebido = pedidoCriado['id'];
+        final idRecebido =
+            pedidoCriado['id'];
 
         if (idRecebido == null) {
           _mensagem(
@@ -279,7 +408,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           return;
         }
 
-        final pedidoId = int.tryParse(
+        final pedidoId =
+            int.tryParse(
           idRecebido.toString(),
         );
 
@@ -312,17 +442,22 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
         );
 
         debugPrint(
+          '💰 TOTAL: $totalPedido',
+        );
+
+        debugPrint(
           '========================================',
         );
 
         // ======================================================
-        // ABRIR ACOMPANHAMENTO DO PEDIDO
+        // ABRIR ACOMPANHAMENTO
         // ======================================================
 
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => OrderTrackingScreen(
+            builder: (context) =>
+                OrderTrackingScreen(
               pedidoId: pedidoId,
             ),
           ),
@@ -338,9 +473,11 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
       Map<String, dynamic> erro = {};
 
       try {
-        final resultado = jsonDecode(resposta.body);
+        final resultado =
+            jsonDecode(resposta.body);
 
-        if (resultado is Map<String, dynamic>) {
+        if (resultado
+            is Map<String, dynamic>) {
           erro = resultado;
         }
       } catch (_) {}
@@ -385,17 +522,24 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   }) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context)
+        .hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
       SnackBar(
         content: Text(texto),
-        backgroundColor:
-            erro ? Colors.red.shade700 : laranja,
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+        backgroundColor: erro
+            ? Colors.red.shade700
+            : laranja,
+        behavior:
+            SnackBarBehavior.floating,
+        duration:
+            const Duration(seconds: 3),
+        shape:
+            RoundedRectangleBorder(
+          borderRadius:
+              BorderRadius.circular(12),
         ),
       ),
     );
@@ -410,17 +554,19 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   }) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(16),
+      padding:
+          const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius:
+            BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(
-              alpha: 0.035,
-            ),
+            color: Colors.black
+                .withValues(alpha: 0.035),
             blurRadius: 8,
-            offset: const Offset(0, 3),
+            offset:
+                const Offset(0, 3),
           ),
         ],
       ),
@@ -439,21 +585,25 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
       appBar: AppBar(
         backgroundColor: laranja,
-        foregroundColor: Colors.white,
+        foregroundColor:
+            Colors.white,
         elevation: 0,
         title: const Text(
           'Revisar Pedido',
           style: TextStyle(
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
       ),
 
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding:
+            const EdgeInsets.all(20),
 
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
 
           children: [
             const Text(
@@ -461,7 +611,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               style: TextStyle(
                 color: Colors.black,
                 fontSize: 22,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
 
@@ -475,7 +626,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               'Itens do pedido',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
 
@@ -486,45 +638,58 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                 children: List.generate(
                   widget.itens.length,
                   (index) {
-                    final item = widget.itens[index];
+                    final item =
+                        widget.itens[index];
 
                     final subtotalItem =
-                        item.preco * item.quantidade;
+                        item.preco *
+                            item.quantidade;
 
                     return Padding(
-                      padding: EdgeInsets.only(
-                        bottom:
-                            index == widget.itens.length - 1
-                                ? 0
-                                : 14,
+                      padding:
+                          EdgeInsets.only(
+                        bottom: index ==
+                                widget.itens.length -
+                                    1
+                            ? 0
+                            : 14,
                       ),
-
                       child: Row(
                         crossAxisAlignment:
-                            CrossAxisAlignment.start,
-
+                            CrossAxisAlignment
+                                .start,
                         children: [
                           Expanded(
-                            child: Column(
+                            child:
+                                Column(
                               crossAxisAlignment:
-                                  CrossAxisAlignment.start,
-
+                                  CrossAxisAlignment
+                                      .start,
                               children: [
                                 Text(
                                   item.nome,
-                                  style: const TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
+                                  style:
+                                      const TextStyle(
+                                    fontSize:
+                                        16,
+                                    fontWeight:
+                                        FontWeight
+                                            .bold,
                                   ),
                                 ),
 
-                                const SizedBox(height: 4),
+                                const SizedBox(
+                                  height: 4,
+                                ),
 
                                 Text(
                                   '${item.quantidade}x ${formatarPreco(item.preco)}',
-                                  style: const TextStyle(
-                                    color: Colors.black54,
-                                    fontSize: 14,
+                                  style:
+                                      const TextStyle(
+                                    color:
+                                        Colors.black54,
+                                    fontSize:
+                                        14,
                                   ),
                                 ),
                               ],
@@ -532,10 +697,14 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                           ),
 
                           Text(
-                            formatarPreco(subtotalItem),
-                            style: const TextStyle(
+                            formatarPreco(
+                              subtotalItem,
+                            ),
+                            style:
+                                const TextStyle(
                               fontSize: 16,
-                              fontWeight: FontWeight.bold,
+                              fontWeight:
+                                  FontWeight.bold,
                             ),
                           ),
                         ],
@@ -556,7 +725,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               'Endereço de entrega',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
 
@@ -565,32 +735,40 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
             _card(
               child: Row(
                 crossAxisAlignment:
-                    CrossAxisAlignment.start,
-
+                    CrossAxisAlignment
+                        .start,
                 children: [
                   Container(
                     width: 42,
                     height: 42,
-
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFE8D8),
+                    decoration:
+                        BoxDecoration(
+                      color:
+                          const Color(
+                        0xFFFFE8D8,
+                      ),
                       borderRadius:
-                          BorderRadius.circular(12),
+                          BorderRadius
+                              .circular(12),
                     ),
-
-                    child: const Icon(
+                    child:
+                        const Icon(
                       Icons.location_on,
                       color: laranja,
                     ),
                   ),
 
-                  const SizedBox(width: 12),
+                  const SizedBox(
+                    width: 12,
+                  ),
 
                   Expanded(
                     child: Text(
                       enderecoCompleto(),
-                      style: const TextStyle(
-                        color: Colors.black87,
+                      style:
+                          const TextStyle(
+                        color:
+                            Colors.black87,
                         fontSize: 15,
                         height: 1.5,
                       ),
@@ -610,7 +788,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               'Forma de pagamento',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
 
@@ -622,27 +801,35 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                   Container(
                     width: 42,
                     height: 42,
-
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFE8D8),
+                    decoration:
+                        BoxDecoration(
+                      color:
+                          const Color(
+                        0xFFFFE8D8,
+                      ),
                       borderRadius:
-                          BorderRadius.circular(12),
+                          BorderRadius
+                              .circular(12),
                     ),
-
-                    child: const Icon(
+                    child:
+                        const Icon(
                       Icons.payment,
                       color: laranja,
                     ),
                   ),
 
-                  const SizedBox(width: 12),
+                  const SizedBox(
+                    width: 12,
+                  ),
 
                   Expanded(
                     child: Text(
                       widget.pagamento,
-                      style: const TextStyle(
+                      style:
+                          const TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
                     ),
                   ),
@@ -660,7 +847,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               'Resumo dos valores',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
 
@@ -674,14 +862,18 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                     widget.subtotal,
                   ),
 
-                  const SizedBox(height: 10),
+                  const SizedBox(
+                    height: 10,
+                  ),
 
                   _linhaValor(
                     'Taxa de serviço',
                     taxaServico,
                   ),
 
-                  const SizedBox(height: 10),
+                  const SizedBox(
+                    height: 10,
+                  ),
 
                   _linhaValor(
                     'Taxa de entrega',
@@ -689,7 +881,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                   ),
 
                   const Padding(
-                    padding: EdgeInsets.symmetric(
+                    padding:
+                        EdgeInsets.symmetric(
                       vertical: 14,
                     ),
                     child: Divider(),
@@ -697,23 +890,29 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
                   Row(
                     mainAxisAlignment:
-                        MainAxisAlignment.spaceBetween,
-
+                        MainAxisAlignment
+                            .spaceBetween,
                     children: [
                       const Text(
                         'Total',
-                        style: TextStyle(
+                        style:
+                            TextStyle(
                           fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                          fontWeight:
+                              FontWeight.bold,
                         ),
                       ),
 
                       Text(
-                        formatarPreco(totalPedido),
-                        style: const TextStyle(
+                        formatarPreco(
+                          totalPedido,
+                        ),
+                        style:
+                            const TextStyle(
                           color: laranja,
                           fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                          fontWeight:
+                              FontWeight.bold,
                         ),
                       ),
                     ],
@@ -725,66 +924,71 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
             const SizedBox(height: 30),
 
             // ==================================================
-            // BOTÃO
+            // BOTÃO CHECKOUT
             // ==================================================
 
             SizedBox(
               width: double.infinity,
               height: 56,
+              child:
+                  ElevatedButton(
+                onPressed: enviando
+                    ? null
+                    : continuarParaPagamento,
 
-              child: ElevatedButton(
-                onPressed:
-                    enviando ? null : confirmarPedido,
-
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: laranja,
-                  foregroundColor: Colors.white,
+                style:
+                    ElevatedButton.styleFrom(
+                  backgroundColor:
+                      laranja,
+                  foregroundColor:
+                      Colors.white,
                   disabledBackgroundColor:
                       Colors.grey.shade400,
                   elevation: 0,
-
-                  shape: RoundedRectangleBorder(
+                  shape:
+                      RoundedRectangleBorder(
                     borderRadius:
-                        BorderRadius.circular(14),
+                        BorderRadius
+                            .circular(14),
                   ),
                 ),
 
-                child: enviando
-                    ? const SizedBox(
-                        width: 25,
-                        height: 25,
+                child: const Row(
+                  mainAxisAlignment:
+                      MainAxisAlignment
+                          .center,
+                  children: [
+                    Icon(
+                      Icons
+                          .lock_outline,
+                      size: 20,
+                    ),
 
-                        child:
-                            CircularProgressIndicator(
-                          strokeWidth: 3,
+                    SizedBox(
+                      width: 8,
+                    ),
 
-                          valueColor:
-                              AlwaysStoppedAnimation<Color>(
-                            Colors.white,
-                          ),
-                        ),
-                      )
-
-                    : const Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment.center,
-
-                        children: [
-                          Icon(
-                            Icons.check_circle_outline,
-                          ),
-
-                          SizedBox(width: 8),
-
-                          Text(
-                            'CONFIRMAR PEDIDO',
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
+                    Text(
+                      'IR PARA PAGAMENTO',
+                      style:
+                          TextStyle(
+                        fontSize: 16,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
+                    ),
+
+                    SizedBox(
+                      width: 8,
+                    ),
+
+                    Icon(
+                      Icons
+                          .arrow_forward,
+                      size: 20,
+                    ),
+                  ],
+                ),
               ),
             ),
 
@@ -805,21 +1009,25 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   ) {
     return Row(
       mainAxisAlignment:
-          MainAxisAlignment.spaceBetween,
-
+          MainAxisAlignment
+              .spaceBetween,
       children: [
         Text(
           titulo,
-          style: const TextStyle(
-            color: Colors.black87,
+          style:
+              const TextStyle(
+            color:
+                Colors.black87,
             fontSize: 15,
           ),
         ),
 
         Text(
           formatarPreco(valor),
-          style: const TextStyle(
-            color: Colors.black87,
+          style:
+              const TextStyle(
+            color:
+                Colors.black87,
             fontSize: 15,
           ),
         ),
