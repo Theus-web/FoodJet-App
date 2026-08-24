@@ -55,6 +55,19 @@
       "restauranteId": "rest_1786542500158",
       "criadoEm": "2026-08-12T13:48:24.243Z",
       "atualizadoEm": "2026-08-19T03:17:00.601Z"
+    },
+    {
+      "id": "user_1787433438203",
+      "nome": "Teste",
+      "email": "test_user_4575768576989414454@testuser.com",
+      "telefone": "",
+      "cpf": "",
+      "senha": "$2b$10$yq0e4Qa2e/yN8s/aL0EEn.ZK.ELhMG2IOqFg5qwenNWqFnb94sjNa",
+      "tipo": "CLIENTE",
+      "restauranteId": null,
+      "endereco": null,
+      "criadoEm": "2026-08-22T21:17:19.818Z",
+      "atualizadoEm": "2026-08-22T21:17:19.850Z"
     }
   ],
   "restaurantes": [
@@ -206,6 +219,39 @@
       "total": 61.5,
       "status": "AGUARDANDO_RESTAURANTE",
       "criadoEm": "2026-08-22T18:25:52.750Z",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      }
+    },
+    {
+      "id": 1787424643956,
+      "clienteId": "",
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "1786938835441",
+          "nome": "Oniguiri",
+          "preco": 50,
+          "quantidade": 1,
+          "subtotal": 50
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "55",
+        "bairro": "Bethânia",
+        "complemento": "Cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "CARTAO",
+      "subtotal": 50,
+      "total": 61.5,
+      "status": "AGUARDANDO_RESTAURANTE",
+      "criadoEm": "2026-08-22T18:50:43.956Z",
       "suporte": {
         "aberto": false,
         "status": "FECHADO",

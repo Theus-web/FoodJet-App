@@ -1,17 +1,36 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../config/api.dart';
+import 'cart_screen.dart';
+import 'order_tracking_screen.dart';
 
 class CheckoutPaymentScreen extends StatefulWidget {
   final double total;
   final String pagamento;
   final String restauranteId;
-  final VoidCallback? onPagamentoConfirmado;
+
+  final List<CartItem> itens;
+  final Map<String, String> endereco;
+
+  final double subtotal;
+  final double taxaServico;
+  final double taxaEntrega;
 
   const CheckoutPaymentScreen({
     super.key,
     required this.total,
     required this.pagamento,
     required this.restauranteId,
-    this.onPagamentoConfirmado,
+    required this.itens,
+    required this.endereco,
+    required this.subtotal,
+    required this.taxaServico,
+    required this.taxaEntrega,
   });
 
   @override
@@ -21,34 +40,150 @@ class CheckoutPaymentScreen extends StatefulWidget {
 
 class _CheckoutPaymentScreenState
     extends State<CheckoutPaymentScreen> {
-  static const Color laranja = Color(0xFFF97316);
-  static const Color fundo = Color(0xFFF5F5F5);
+  static const Color laranja =
+      Color(0xFFF97316);
+
+  static const Color fundo =
+      Color(0xFFF5F5F5);
 
   String metodoSelecionado = '';
 
   bool processando = false;
 
+  bool pagamentoGerado = false;
+
+  bool verificandoPagamento = false;
+
+  String? emailUsuario;
+
+  String? pagamentoId;
+
+  String qrCode = '';
+
+  String qrCodeBase64 = '';
+
+  String ticketUrl = '';
+
+  Timer? timer;
+
   @override
   void initState() {
     super.initState();
 
-    metodoSelecionado = widget.pagamento;
+    metodoSelecionado =
+        widget.pagamento.isNotEmpty
+            ? widget.pagamento
+            : 'PIX';
+
+    carregarEmail();
   }
+
+  @override
+  void dispose() {
+    timer?.cancel();
+    super.dispose();
+  }
+
+  // ============================================================
+  // E-MAIL DO USUÁRIO
+  // ============================================================
+
+  Future<void> carregarEmail() async {
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    final usuarioJson =
+        prefs.getString('usuario');
+
+    String? email;
+
+    if (usuarioJson != null &&
+        usuarioJson.isNotEmpty) {
+      try {
+        final usuario =
+            jsonDecode(usuarioJson);
+
+        if (usuario is Map) {
+          email =
+              usuario['email']?.toString();
+        }
+      } catch (e) {
+        debugPrint(
+          'Erro lendo usuário: $e',
+        );
+      }
+    }
+
+    if (email == null || email.isEmpty) {
+      email = prefs.getString('email');
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      emailUsuario = email;
+    });
+
+    debugPrint(
+      '📧 EMAIL DO CLIENTE: $email',
+    );
+  }
+
+  // ============================================================
+  // TOKEN
+  // ============================================================
+
+  Future<String?> obterToken() async {
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    return prefs.getString('token');
+  }
+
+  // ============================================================
+  // PREÇO
+  // ============================================================
 
   String formatarPreco(double valor) {
     return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 
   // ============================================================
-  // PAGAR
+  // GERAR PIX
   // ============================================================
 
-  Future<void> processarPagamento() async {
+  Future<void> gerarPix() async {
     if (processando) return;
 
-    if (metodoSelecionado.isEmpty) {
+    final email = emailUsuario;
+
+    if (email == null || email.trim().isEmpty) {
       mensagem(
-        'Selecione uma forma de pagamento.',
+        'Não encontramos o e-mail da sua conta. Faça login novamente.',
+        erro: true,
+      );
+      return;
+    }
+
+    if (widget.total <= 0) {
+      mensagem(
+        'O valor do pedido é inválido.',
+        erro: true,
+      );
+      return;
+    }
+
+    if (widget.itens.isEmpty) {
+      mensagem(
+        'Seu carrinho está vazio.',
+        erro: true,
+      );
+      return;
+    }
+
+    if (widget.restauranteId.isEmpty) {
+      mensagem(
+        'Restaurante não identificado.',
         erro: true,
       );
       return;
@@ -59,35 +194,468 @@ class _CheckoutPaymentScreenState
     });
 
     try {
+      final token =
+          await obterToken();
+
+      if (token == null ||
+          token.isEmpty) {
+        throw Exception(
+          'Sessão expirada. Faça login novamente.',
+        );
+      }
+
       /*
-       * IMPORTANTE:
+       * Não criamos o pedido aqui.
        *
-       * Aqui será conectado o Mercado Pago.
-       *
-       * O backend deverá criar a preferência
-       * / pagamento e retornar os dados do checkout.
-       *
-       * Neste momento estamos deixando a interface
-       * pronta sem processar pagamento real.
+       * O backend utiliza uma referência temporária
+       * para o pagamento.
        */
 
-      await Future.delayed(
-        const Duration(seconds: 2),
+      final referencia =
+          'FOODJET-${DateTime.now().millisecondsSinceEpoch}';
+
+      final url = Uri.parse(
+        '${Api.baseUrl}/pagamentos/pix',
+      );
+
+      debugPrint(
+        '========================================',
+      );
+
+      debugPrint(
+        '💳 GERANDO PIX MERCADO PAGO',
+      );
+
+      debugPrint(
+        '📧 EMAIL: $email',
+      );
+
+      debugPrint(
+        '💰 VALOR: ${widget.total}',
+      );
+
+      debugPrint(
+        '🔖 REFERÊNCIA: $referencia',
+      );
+
+      debugPrint(
+        '========================================',
+      );
+
+      final resposta =
+          await http.post(
+        url,
+        headers: {
+          'Content-Type':
+              'application/json',
+          'Accept':
+              'application/json',
+          'Authorization':
+              'Bearer $token',
+        },
+        body: jsonEncode({
+          'valor': widget.total,
+          'email': email.trim(),
+          'pedidoId': referencia,
+        }),
+      ).timeout(
+        const Duration(seconds: 20),
+      );
+
+      debugPrint(
+        'STATUS PIX: ${resposta.statusCode}',
+      );
+
+      debugPrint(
+        'RESPOSTA PIX: ${resposta.body}',
       );
 
       if (!mounted) return;
 
+      Map<String, dynamic> dados = {};
+
+      try {
+        final decoded =
+            jsonDecode(resposta.body);
+
+        if (decoded is Map<String, dynamic>) {
+          dados = decoded;
+        }
+      } catch (_) {}
+
+      if (resposta.statusCode < 200 ||
+          resposta.statusCode >= 300) {
+        throw Exception(
+          dados['erro']?.toString() ??
+              dados['mensagem']?.toString() ??
+              'Não foi possível gerar o pagamento.',
+        );
+      }
+
+      final pix =
+          dados['pix'];
+
+      if (pix is! Map) {
+        throw Exception(
+          'O Mercado Pago não retornou os dados do PIX.',
+        );
+      }
+
+      final id =
+          dados['pagamentoId']?.toString();
+
+      final codigo =
+          pix['qrCode']?.toString() ?? '';
+
+      final base64 =
+          pix['qrCodeBase64']?.toString() ?? '';
+
+      final ticket =
+          pix['ticketUrl']?.toString() ?? '';
+
+      if (id == null ||
+          id.isEmpty) {
+        throw Exception(
+          'O pagamento não retornou um ID válido.',
+        );
+      }
+
+      if (codigo.isEmpty &&
+          base64.isEmpty) {
+        throw Exception(
+          'O Mercado Pago não retornou o QR Code.',
+        );
+      }
+
+      setState(() {
+        pagamentoId = id;
+        qrCode = codigo;
+        qrCodeBase64 = base64;
+        ticketUrl = ticket;
+        pagamentoGerado = true;
+      });
+
+      iniciarVerificacao();
+
       mensagem(
-        'Pagamento preparado com sucesso.',
+        'PIX gerado. Escaneie o QR Code para pagar.',
       );
-
-      widget.onPagamentoConfirmado?.call();
-
     } catch (e) {
+      debugPrint(
+        '❌ ERRO AO GERAR PIX: $e',
+      );
+
       if (!mounted) return;
 
       mensagem(
-        'Não foi possível iniciar o pagamento.',
+        e.toString().replaceFirst(
+          'Exception: ',
+          '',
+        ),
+        erro: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          processando = false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // CONSULTAR PAGAMENTO
+  // ============================================================
+
+  void iniciarVerificacao() {
+    timer?.cancel();
+
+    timer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) {
+        consultarPagamento();
+      },
+    );
+  }
+
+  Future<void> consultarPagamento() async {
+    if (verificandoPagamento) return;
+
+    final id = pagamentoId;
+
+    if (id == null || id.isEmpty) return;
+
+    verificandoPagamento = true;
+
+    try {
+      final token =
+          await obterToken();
+
+      if (token == null ||
+          token.isEmpty) {
+        return;
+      }
+
+      final url = Uri.parse(
+        '${Api.baseUrl}/pagamentos/$id',
+      );
+
+      final resposta =
+          await http.get(
+        url,
+        headers: {
+          'Accept':
+              'application/json',
+          'Authorization':
+              'Bearer $token',
+        },
+      ).timeout(
+        const Duration(seconds: 10),
+      );
+
+      debugPrint(
+        '🔎 STATUS PAGAMENTO: ${resposta.body}',
+      );
+
+      if (resposta.statusCode != 200) {
+        return;
+      }
+
+      final dados =
+          jsonDecode(resposta.body);
+
+      final status =
+          dados['status']
+              ?.toString()
+              .toLowerCase();
+
+      if (status == 'approved') {
+        timer?.cancel();
+
+        if (!mounted) return;
+
+        setState(() {
+          verificandoPagamento = false;
+        });
+
+        await confirmarPedidoDepoisDoPagamento();
+
+        return;
+      }
+
+      if (status == 'rejected' ||
+          status == 'cancelled') {
+        timer?.cancel();
+
+        if (!mounted) return;
+
+        mensagem(
+          'O pagamento não foi aprovado.',
+          erro: true,
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        '⚠️ Erro consultando pagamento: $e',
+      );
+    } finally {
+      verificandoPagamento = false;
+    }
+  }
+
+  // ============================================================
+  // MONTAR ITENS
+  // ============================================================
+
+  List<Map<String, dynamic>>
+      montarItensPedido() {
+    return widget.itens.map(
+      (item) {
+        return {
+          'produtoId': item.produtoId,
+          'nome': item.nome,
+          'preco': item.preco,
+          'quantidade': item.quantidade,
+          'subtotal':
+              item.preco *
+                  item.quantidade,
+        };
+      },
+    ).toList();
+  }
+
+  // ============================================================
+  // CRIAR PEDIDO DEPOIS DO PAGAMENTO
+  // ============================================================
+
+  Future<void>
+      confirmarPedidoDepoisDoPagamento() async {
+    if (!mounted) return;
+
+    setState(() {
+      processando = true;
+    });
+
+    try {
+      final token =
+          await obterToken();
+
+      if (token == null ||
+          token.isEmpty) {
+        throw Exception(
+          'Sessão expirada.',
+        );
+      }
+
+      final pedido = {
+        'restauranteId':
+            widget.restauranteId,
+
+        'itens':
+            montarItensPedido(),
+
+        'endereco':
+            widget.endereco,
+
+        'pagamento':
+            metodoSelecionado,
+
+        'pagamentoId':
+            pagamentoId,
+
+        'statusPagamento':
+            'approved',
+
+        'subtotal':
+            widget.subtotal,
+
+        'taxaServico':
+            widget.taxaServico,
+
+        'taxaEntrega':
+            widget.taxaEntrega,
+
+        'total':
+            widget.total,
+      };
+
+      final resposta =
+          await http.post(
+        Uri.parse(
+          '${Api.baseUrl}/orders',
+        ),
+        headers: {
+          'Content-Type':
+              'application/json',
+          'Accept':
+              'application/json',
+          'Authorization':
+              'Bearer $token',
+        },
+        body:
+            jsonEncode(pedido),
+      ).timeout(
+        const Duration(seconds: 15),
+      );
+
+      debugPrint(
+        '📦 RESPOSTA CRIAÇÃO PEDIDO: ${resposta.body}',
+      );
+
+      if (!mounted) return;
+
+      if (resposta.statusCode != 200 &&
+          resposta.statusCode != 201) {
+        final dados =
+            jsonDecode(resposta.body);
+
+        throw Exception(
+          dados['erro']?.toString() ??
+              dados['mensagem']?.toString() ??
+              'Pagamento aprovado, mas não foi possível criar o pedido.',
+        );
+      }
+
+      final dados =
+          jsonDecode(resposta.body);
+
+      dynamic pedidoCriado =
+          dados['pedido'];
+
+      if (pedidoCriado == null &&
+          dados['id'] != null) {
+        pedidoCriado = dados;
+      }
+
+      if (pedidoCriado is! Map) {
+        throw Exception(
+          'Pedido criado sem retorno do ID.',
+        );
+      }
+
+      final id =
+          pedidoCriado['id'];
+
+      if (id == null) {
+        throw Exception(
+          'Pedido criado sem ID.',
+        );
+      }
+
+      final pedidoId =
+          int.tryParse(
+        id.toString(),
+      );
+
+      if (pedidoId == null) {
+        throw Exception(
+          'ID do pedido inválido.',
+        );
+      }
+
+      timer?.cancel();
+
+      debugPrint(
+        '========================================',
+      );
+
+      debugPrint(
+        '✅ PAGAMENTO APROVADO',
+      );
+
+      debugPrint(
+        '✅ PEDIDO CRIADO',
+      );
+
+      debugPrint(
+        '🆔 PEDIDO: $pedidoId',
+      );
+
+      debugPrint(
+        '========================================',
+      );
+
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              OrderTrackingScreen(
+            pedidoId: pedidoId,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint(
+        '❌ ERRO CRIANDO PEDIDO: $e',
+      );
+
+      if (!mounted) return;
+
+      mensagem(
+        e.toString().replaceFirst(
+          'Exception: ',
+          '',
+        ),
         erro: true,
       );
     } finally {
@@ -114,11 +682,13 @@ class _CheckoutPaymentScreenState
         metodoSelecionado == id;
 
     return GestureDetector(
-      onTap: () {
-        setState(() {
-          metodoSelecionado = id;
-        });
-      },
+      onTap: pagamentoGerado
+          ? null
+          : () {
+              setState(() {
+                metodoSelecionado = id;
+              });
+            },
       child: AnimatedContainer(
         duration:
             const Duration(milliseconds: 200),
@@ -127,7 +697,9 @@ class _CheckoutPaymentScreenState
         padding:
             const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: pagamentoGerado
+              ? Colors.grey.shade100
+              : Colors.white,
           borderRadius:
               BorderRadius.circular(18),
           border: Border.all(
@@ -154,7 +726,9 @@ class _CheckoutPaymentScreenState
               height: 52,
               decoration: BoxDecoration(
                 color: selecionado
-                    ? const Color(0xFFFFE8D8)
+                    ? const Color(
+                        0xFFFFE8D8,
+                      )
                     : Colors.grey.shade100,
                 borderRadius:
                     BorderRadius.circular(15),
@@ -183,9 +757,7 @@ class _CheckoutPaymentScreenState
                           FontWeight.bold,
                     ),
                   ),
-
                   const SizedBox(height: 4),
-
                   Text(
                     descricao,
                     style: TextStyle(
@@ -198,33 +770,11 @@ class _CheckoutPaymentScreenState
               ),
             ),
 
-            AnimatedContainer(
-              duration:
-                  const Duration(
-                milliseconds: 200,
+            if (selecionado)
+              const Icon(
+                Icons.check_circle,
+                color: laranja,
               ),
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selecionado
-                      ? laranja
-                      : Colors.grey.shade400,
-                  width: 2,
-                ),
-                color: selecionado
-                    ? laranja
-                    : Colors.transparent,
-              ),
-              child: selecionado
-                  ? const Icon(
-                      Icons.check,
-                      color: Colors.white,
-                      size: 16,
-                    )
-                  : null,
-            ),
           ],
         ),
       ),
@@ -248,9 +798,10 @@ class _CheckoutPaymentScreenState
         .showSnackBar(
       SnackBar(
         content: Text(texto),
-        backgroundColor: erro
-            ? Colors.red.shade700
-            : laranja,
+        backgroundColor:
+            erro
+                ? Colors.red.shade700
+                : laranja,
         behavior:
             SnackBarBehavior.floating,
         shape:
@@ -258,6 +809,136 @@ class _CheckoutPaymentScreenState
           borderRadius:
               BorderRadius.circular(12),
         ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // QR CODE
+  // ============================================================
+
+  Widget areaPix() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(20),
+      ),
+      child: Column(
+        children: [
+          const Icon(
+            Icons.pix,
+            size: 42,
+            color: Color(0xFF32BCAD),
+          ),
+
+          const SizedBox(height: 12),
+
+          const Text(
+            'PIX gerado',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight:
+                  FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 6),
+
+          Text(
+            'Pague pelo aplicativo do seu banco.',
+            textAlign:
+                TextAlign.center,
+            style: TextStyle(
+              color:
+                  Colors.grey.shade600,
+            ),
+          ),
+
+          const SizedBox(height: 20),
+
+          if (qrCodeBase64.isNotEmpty)
+            Container(
+              width: 230,
+              height: 230,
+              padding:
+                  const EdgeInsets.all(12),
+              color: Colors.white,
+              child: Image.memory(
+                base64Decode(
+                  qrCodeBase64
+                      .contains(',')
+                      ? qrCodeBase64
+                          .split(',')
+                          .last
+                      : qrCodeBase64,
+                ),
+                fit: BoxFit.contain,
+                errorBuilder:
+                    (_, __, ___) {
+                  return const Icon(
+                    Icons.qr_code_2,
+                    size: 180,
+                  );
+                },
+              ),
+            )
+          else
+            const Icon(
+              Icons.qr_code_2,
+              size: 200,
+            ),
+
+          const SizedBox(height: 20),
+
+          if (qrCode.isNotEmpty)
+            Container(
+              padding:
+                  const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color:
+                    Colors.grey.shade100,
+                borderRadius:
+                    BorderRadius.circular(12),
+              ),
+              child: SelectableText(
+                qrCode,
+                maxLines: 4,
+                style:
+                    const TextStyle(
+                  fontSize: 11,
+                ),
+              ),
+            ),
+
+          const SizedBox(height: 15),
+
+          if (verificandoPagamento)
+            const Column(
+              children: [
+                SizedBox(
+                  width: 24,
+                  height: 24,
+                  child:
+                      CircularProgressIndicator(
+                    strokeWidth: 3,
+                  ),
+                ),
+                SizedBox(height: 10),
+                Text(
+                  'Aguardando confirmação do pagamento...',
+                  textAlign:
+                      TextAlign.center,
+                  style: TextStyle(
+                    fontWeight:
+                        FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+        ],
       ),
     );
   }
@@ -288,19 +969,17 @@ class _CheckoutPaymentScreenState
         child: Column(
           children: [
             Expanded(
-              child: SingleChildScrollView(
+              child:
+                  SingleChildScrollView(
                 padding:
                     const EdgeInsets.all(20),
                 child: Column(
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
                   children: [
-                    // ==================================================
-                    // TOTAL
-                    // ==================================================
-
                     Container(
-                      width: double.infinity,
+                      width:
+                          double.infinity,
                       padding:
                           const EdgeInsets.all(20),
                       decoration:
@@ -312,8 +991,12 @@ class _CheckoutPaymentScreenState
                           end:
                               Alignment.bottomRight,
                           colors: [
-                            Color(0xFFF97316),
-                            Color(0xFFEA580C),
+                            Color(
+                              0xFFF97316,
+                            ),
+                            Color(
+                              0xFFEA580C,
+                            ),
                           ],
                         ),
                         borderRadius:
@@ -327,10 +1010,10 @@ class _CheckoutPaymentScreenState
                         children: [
                           const Text(
                             'Total do pedido',
-                            style: TextStyle(
+                            style:
+                                TextStyle(
                               color:
                                   Colors.white70,
-                              fontSize: 14,
                             ),
                           ),
 
@@ -401,8 +1084,9 @@ class _CheckoutPaymentScreenState
                     ),
 
                     Text(
-                      'Selecione uma opção para finalizar seu pedido.',
-                      style: TextStyle(
+                      'Seu pedido só será confirmado após o pagamento aprovado.',
+                      style:
+                          TextStyle(
                         color:
                             Colors.grey.shade600,
                         fontSize: 14,
@@ -413,52 +1097,43 @@ class _CheckoutPaymentScreenState
                       height: 18,
                     ),
 
-                    // ==================================================
-                    // PIX
-                    // ==================================================
-
                     opcao(
                       id: 'PIX',
                       icone: Icons.pix,
                       titulo: 'PIX',
                       descricao:
-                          'Pague instantaneamente pelo PIX',
+                          'Pagamento instantâneo pelo seu banco.',
                     ),
-
-                    // ==================================================
-                    // MERCADO PAGO
-                    // ==================================================
 
                     opcao(
                       id: 'MERCADO_PAGO',
-                      icone:
-                          Icons.account_balance_wallet_outlined,
+                      icone: Icons
+                          .account_balance_wallet_outlined,
                       titulo:
                           'Mercado Pago',
                       descricao:
-                          'Cartão, PIX ou saldo Mercado Pago',
+                          'Pague com PIX pelo Mercado Pago.',
                     ),
-
-                    // ==================================================
-                    // NUBANK
-                    // ==================================================
 
                     opcao(
                       id: 'NUBANK',
                       icone:
                           Icons.account_balance,
-                      titulo:
-                          'Nubank',
+                      titulo: 'Nubank',
                       descricao:
-                          'Pague usando sua conta Nubank',
+                          'Pague pelo aplicativo Nubank usando PIX.',
                       logo: Container(
                         alignment:
                             Alignment.center,
-                        child: const Text(
+                        child:
+                            const Text(
                           'Nu',
-                          style: TextStyle(
+                          style:
+                              TextStyle(
                             color:
-                                Color(0xFF820AD1),
+                                Color(
+                              0xFF820AD1,
+                            ),
                             fontSize: 22,
                             fontWeight:
                                 FontWeight.bold,
@@ -467,104 +1142,38 @@ class _CheckoutPaymentScreenState
                       ),
                     ),
 
-                    // ==================================================
-                    // CARTÃO
-                    // ==================================================
-
                     opcao(
                       id: 'CARTAO',
                       icone:
                           Icons.credit_card,
-                      titulo:
-                          'Cartão',
+                      titulo: 'Cartão',
                       descricao:
-                          'Cartão de crédito ou débito',
+                          'Pagamento com cartão.',
                     ),
-
-                    // ==================================================
-                    // DINHEIRO
-                    // ==================================================
 
                     opcao(
                       id: 'DINHEIRO',
                       icone:
                           Icons.payments_outlined,
-                      titulo:
-                          'Dinheiro',
+                      titulo: 'Dinheiro',
                       descricao:
-                          'Pagar na entrega',
+                          'Pagar na entrega.',
                     ),
 
-                    const SizedBox(
-                      height: 20,
-                    ),
-
-                    // ==================================================
-                    // SEGURANÇA
-                    // ==================================================
-
-                    Container(
-                      padding:
-                          const EdgeInsets.all(15),
-                      decoration:
-                          BoxDecoration(
-                        color: Colors.white,
-                        borderRadius:
-                            BorderRadius.circular(
-                          16,
-                        ),
+                    if (pagamentoGerado &&
+                        metodoSelecionado !=
+                            'DINHEIRO' &&
+                        metodoSelecionado !=
+                            'CARTAO') ...[
+                      const SizedBox(
+                        height: 20,
                       ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration:
-                                BoxDecoration(
-                              color:
-                                  const Color(
-                                0xFFFFE8D8,
-                              ),
-                              borderRadius:
-                                  BorderRadius.circular(
-                                12,
-                              ),
-                            ),
-                            child: const Icon(
-                              Icons.verified_user_outlined,
-                              color:
-                                  laranja,
-                            ),
-                          ),
-
-                          const SizedBox(
-                            width: 12,
-                          ),
-
-                          Expanded(
-                            child: Text(
-                              'Seus dados de pagamento são protegidos e utilizados somente para processar esta compra.',
-                              style:
-                                  TextStyle(
-                                color: Colors
-                                    .grey
-                                    .shade700,
-                                fontSize: 12,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                      areaPix(),
+                    ],
                   ],
                 ),
               ),
             ),
-
-            // ==========================================================
-            // BOTÃO
-            // ==========================================================
 
             Container(
               padding:
@@ -574,17 +1183,16 @@ class _CheckoutPaymentScreenState
                 20,
                 20,
               ),
-              decoration:
-                  const BoxDecoration(
-                color: Colors.white,
-              ),
+              color: Colors.white,
               child: SizedBox(
-                width: double.infinity,
+                width:
+                    double.infinity,
                 height: 56,
                 child: ElevatedButton(
-                  onPressed: processando
-                      ? null
-                      : processarPagamento,
+                  onPressed:
+                      processando
+                          ? null
+                          : gerarPix,
                   style:
                       ElevatedButton.styleFrom(
                     backgroundColor:
@@ -623,13 +1231,14 @@ class _CheckoutPaymentScreenState
                           children: [
                             const Icon(
                               Icons.lock_outline,
-                              size: 19,
                             ),
                             const SizedBox(
                               width: 8,
                             ),
                             Text(
-                              'PAGAR ${formatarPreco(widget.total)}',
+                              pagamentoGerado
+                                  ? 'AGUARDANDO PAGAMENTO'
+                                  : 'PAGAR ${formatarPreco(widget.total)}',
                               style:
                                   const TextStyle(
                                 fontSize: 16,

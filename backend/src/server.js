@@ -1,90 +1,140 @@
 require("dotenv").config();
 
-console.log("========================================");
-console.log("🔐 MERCADO PAGO");
-console.log(
-  "TOKEN CARREGADO:",
-  process.env.MERCADOPAGO_ACCESS_TOKEN
-    ? "SIM"
-    : "NÃO"
-);
-console.log(
-  "TIPO:",
-  process.env.MERCADOPAGO_ACCESS_TOKEN?.startsWith("TEST-")
-    ? "TESTE"
-    : process.env.MERCADOPAGO_ACCESS_TOKEN?.startsWith("APP_USR-")
-      ? "PRODUÇÃO"
-      : "DESCONHECIDO"
-);
-console.log("========================================");
-
 const http = require("http");
 const app = require("./app");
 
 const { Server } = require("socket.io");
-
 const { conectar } = require("./config/database");
 
-const promotionRoutes =  require("./routes/promotion");
-    
-const paymentRoutes = require("./routes/paymentRoutes");
+// ============================================================
+// CONFIGURAÇÃO
+// ============================================================
+
+const PORT = process.env.PORT || 3000;
+
+// ============================================================
+// MERCADO PAGO
+// ============================================================
+
+const mercadoPagoToken =
+  process.env.MERCADOPAGO_ACCESS_TOKEN;
+
+console.log("========================================");
+console.log("🔐 FOODJET - MERCADO PAGO");
+console.log("========================================");
+
+console.log(
+  "TOKEN CARREGADO:",
+  mercadoPagoToken ? "SIM" : "NÃO"
+);
+
+console.log(
+  "AMBIENTE:",
+  process.env.MERCADOPAGO_ENVIRONMENT || "production"
+);
+
+console.log(
+  "TIPO DO TOKEN:",
+  mercadoPagoToken?.startsWith("TEST-")
+    ? "⚠️ TESTE"
+    : mercadoPagoToken?.startsWith("APP_USR-")
+      ? "✅ PRODUÇÃO"
+      : "❓ DESCONHECIDO"
+);
+
+console.log("========================================");
+
+// ============================================================
+// ROTAS
+// ============================================================
+
+const promotionRoutes =
+  require("./routes/promotion");
+
+const paymentRoutes =
+  require("./routes/paymentRoutes");
+
+const financeRoutes =
+  require("./routes/finance");
+
+const mercadoPagoWebhookRoutes =
+  require("./routes/mercadoPagoWebhook");
+
+// ============================================================
+// PAGAMENTOS
+// ============================================================
 
 app.use(
   "/api/pagamentos",
   paymentRoutes
 );
 
-console.log("🔥 ROTAS DE PROMOÇÃO CARREGADAS");
+// ============================================================
+// PROMOÇÕES
+// ============================================================
 
 app.use(
- "/api/promocoes",
- promotionRoutes
+  "/api/promocoes",
+  promotionRoutes
 );
 
-const mercadoPagoWebhookRoutes =
-  require("./routes/mercadoPagoWebhook");
+console.log(
+  "🔥 ROTAS DE PROMOÇÃO CARREGADAS"
+);
+
+// ============================================================
+// FINANCEIRO
+// ============================================================
+
+app.use(
+  "/api/finance",
+  financeRoutes
+);
+
+// ============================================================
+// MERCADO PAGO WEBHOOK
+// ============================================================
 
 app.use(
   "/api/mercadopago",
   mercadoPagoWebhookRoutes
 );
 
-// ============================================================
-// CONFIGURAÇÕES
-// ============================================================
+console.log(
+  "🔔 WEBHOOK MERCADO PAGO CARREGADO"
+);
 
-const PORT = process.env.PORT || 3000;
-
-// ============================================================
-// ROTAS FINANCEIRAS
-// ============================================================
-
-const financeRoutes = require("./routes/finance");
-
-app.use(
-    "/api/finance",
-    financeRoutes
+console.log(
+  "📍 POST /api/mercadopago/webhook"
 );
 
 // ============================================================
 // SERVIDOR HTTP
 // ============================================================
 
-const server = http.createServer(app);
+const server =
+  http.createServer(app);
 
 // ============================================================
 // SOCKET.IO
 // ============================================================
 
-const io = new Server(server, {
+const io =
+  new Server(server, {
     cors: {
-        origin: "*",
-        methods: ["GET", "POST", "PUT", "PATCH", "DELETE"]
-    }
-});
+      origin: "*",
+      methods: [
+        "GET",
+        "POST",
+        "PUT",
+        "PATCH",
+        "DELETE",
+      ],
+    },
+  });
 
 // ============================================================
-// DISPONIBILIZAR SOCKET GLOBALMENTE
+// SOCKET GLOBAL
 // ============================================================
 
 global.io = io;
@@ -93,40 +143,42 @@ global.io = io;
 // WEBSOCKET
 // ============================================================
 
-io.on("connection", (socket) => {
+io.on(
+  "connection",
+  (socket) => {
 
     console.log(
-        "🟢 Cliente WebSocket conectado:",
-        socket.id
+      "🟢 Cliente WebSocket conectado:",
+      socket.id
     );
 
     // ========================================================
-    // ENTRAR NA SALA DO RESTAURANTE
+    // RESTAURANTE ENTRA NA SALA
     // ========================================================
 
     socket.on(
-        "entrar_restaurante",
-        (restauranteId) => {
+      "entrar_restaurante",
+      (restauranteId) => {
 
-            if (!restauranteId) {
-                console.log(
-                    "⚠️ Restaurante tentou entrar sem ID"
-                );
+        if (!restauranteId) {
 
-                return;
-            }
+          console.log(
+            "⚠️ Restaurante tentou entrar sem ID"
+          );
 
-            const sala =
-                "restaurante_" +
-                restauranteId;
-
-            socket.join(sala);
-
-            console.log(
-                "🏪 Restaurante conectado na sala:",
-                sala
-            );
+          return;
         }
+
+        const sala =
+          `restaurante_${restauranteId}`;
+
+        socket.join(sala);
+
+        console.log(
+          "🏪 Restaurante conectado na sala:",
+          sala
+        );
+      }
     );
 
     // ========================================================
@@ -134,92 +186,128 @@ io.on("connection", (socket) => {
     // ========================================================
 
     socket.on(
-        "disconnect",
-        () => {
+      "disconnect",
+      () => {
 
-            console.log(
-                "🔴 Cliente desconectado:",
-                socket.id
-            );
-        }
+        console.log(
+          "🔴 Cliente WebSocket desconectado:",
+          socket.id
+        );
+      }
     );
-});
+  }
+);
 
 // ============================================================
-// INICIAR FOODJET
+// INICIAR SERVIDOR
 // ============================================================
 
 async function iniciarServidor() {
 
-    try {
+  try {
 
-        console.log(
-            "================================"
-        );
+    console.log(
+      "========================================"
+    );
 
-        console.log(
-            "🚀 Iniciando FoodJet..."
-        );
+    console.log(
+      "🚀 INICIANDO FOODJET"
+    );
 
-        console.log(
-            "================================"
-        );
+    console.log(
+      "========================================"
+    );
 
-        // ====================================================
-        // CONECTAR BANCO
-        // ====================================================
+    // --------------------------------------------------------
+    // VALIDAR MERCADO PAGO
+    // --------------------------------------------------------
 
-        await conectar();
+    if (!mercadoPagoToken) {
 
-        console.log(
-            "✅ Banco de dados conectado"
-        );
+      console.warn(
+        "⚠️ MERCADOPAGO_ACCESS_TOKEN NÃO CONFIGURADO"
+      );
 
-        // ====================================================
-        // INICIAR SERVIDOR
-        // ====================================================
+    } else {
 
-        server.listen(
-            PORT,
-            "0.0.0.0",
-            () => {
-
-                console.log(
-                    "================================"
-                );
-
-                console.log(
-                    "🚀 FoodJet API iniciada"
-                );
-
-                console.log(
-                    `🌐 Porta: ${PORT}`
-                );
-
-                console.log(
-                    `🔗 API: http://localhost:${PORT}`
-                );
-
-                console.log(
-                    "🔌 WebSocket ativo"
-                );
-
-                console.log(
-                    "================================"
-                );
-            }
-        );
-
-    } catch (error) {
-
-        console.error(
-            "❌ ERRO AO INICIAR FOODJET:"
-        );
-
-        console.error(error);
-
-        process.exit(1);
+      console.log(
+        "✅ MERCADOPAGO_ACCESS_TOKEN CONFIGURADO"
+      );
     }
+
+    // --------------------------------------------------------
+    // BANCO
+    // --------------------------------------------------------
+
+    await conectar();
+
+    console.log(
+      "✅ Banco de dados conectado"
+    );
+
+    // --------------------------------------------------------
+    // SERVIDOR
+    // --------------------------------------------------------
+
+    server.listen(
+      PORT,
+      "0.0.0.0",
+      () => {
+
+        console.log(
+          "========================================"
+        );
+
+        console.log(
+          "🚀 FOODJET API ONLINE"
+        );
+
+        console.log(
+          `🌐 PORTA: ${PORT}`
+        );
+
+        console.log(
+          "🌍 HOST: 0.0.0.0"
+        );
+
+        console.log(
+          "🔌 SOCKET.IO: ATIVO"
+        );
+
+        console.log(
+          "💳 MERCADO PAGO: CONFIGURADO"
+        );
+
+        console.log(
+          "🔔 WEBHOOK: ATIVO"
+        );
+
+        console.log(
+          "========================================"
+        );
+      }
+    );
+
+  } catch (error) {
+
+    console.error(
+      "========================================"
+    );
+
+    console.error(
+      "❌ ERRO AO INICIAR FOODJET"
+    );
+
+    console.error(
+      error
+    );
+
+    console.error(
+      "========================================"
+    );
+
+    process.exit(1);
+  }
 }
 
 // ============================================================

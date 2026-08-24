@@ -1,12 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 
-import '../../config/api.dart';
 import 'cart_screen.dart';
 import 'checkout_payment_screen.dart';
-import 'order_tracking_screen.dart';
 
 class OrderReviewScreen extends StatefulWidget {
   final List<CartItem> itens;
@@ -34,22 +29,7 @@ class _OrderReviewScreenState
   static const Color laranja = Color(0xFFF97316);
   static const Color fundo = Color(0xFFF5F5F5);
 
-  bool enviando = false;
-
-  // ============================================================
-  // CLIENTE
-  // ============================================================
-
-  // Mantido conforme sua estrutura atual.
-  // Depois podemos trocar pelo ID real vindo da sessão.
-  final int clienteId = 1784355543711;
-
-  // ============================================================
-  // TAXAS
-  // ============================================================
-
   final double taxaEntrega = 6.50;
-
   final double percentualTaxaServico = 0.10;
 
   double get taxaServico {
@@ -62,17 +42,9 @@ class _OrderReviewScreenState
         taxaEntrega;
   }
 
-  // ============================================================
-  // FORMATAR PREÇO
-  // ============================================================
-
   String formatarPreco(double valor) {
     return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
   }
-
-  // ============================================================
-  // ENDEREÇO
-  // ============================================================
 
   String enderecoCompleto() {
     final rua = widget.endereco['rua'] ?? '';
@@ -83,17 +55,7 @@ class _OrderReviewScreenState
     final cidade = widget.endereco['cidade'] ?? '';
     final estado = widget.endereco['estado'] ?? '';
 
-    String resultado = '';
-
-    if (rua.isNotEmpty) {
-      resultado = rua;
-
-      if (numero.isNotEmpty) {
-        resultado += ', $numero';
-      }
-    } else if (numero.isNotEmpty) {
-      resultado = numero;
-    }
+    String resultado = '$rua, $numero';
 
     if (complemento.isNotEmpty) {
       resultado += ' - $complemento';
@@ -104,52 +66,64 @@ class _OrderReviewScreenState
     }
 
     if (cidade.isNotEmpty || estado.isNotEmpty) {
-      resultado += '\n';
-
-      if (cidade.isNotEmpty) {
-        resultado += cidade;
-      }
-
-      if (estado.isNotEmpty) {
-        if (cidade.isNotEmpty) {
-          resultado += ' - ';
-        }
-
-        resultado += estado;
-      }
+      resultado += '\n$cidade - $estado';
     }
 
-    return resultado.isEmpty
-        ? 'Endereço não informado'
-        : resultado;
+    return resultado;
   }
 
-  // ============================================================
-  // MONTAR ITENS
-  // ============================================================
+  Widget _card({
+    required Widget child,
+  }) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.035),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: child,
+    );
+  }
 
-  List<Map<String, dynamic>> _montarItensPedido() {
-    return widget.itens.map((item) {
-      return {
-        'produtoId': item.produtoId,
-        'nome': item.nome,
-        'preco': item.preco,
-        'quantidade': item.quantidade,
-        'subtotal':
-            item.preco * item.quantidade,
-      };
-    }).toList();
+  Widget _linhaValor(
+    String titulo,
+    double valor,
+  ) {
+    return Row(
+      mainAxisAlignment:
+          MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          titulo,
+          style: const TextStyle(
+            color: Colors.black87,
+            fontSize: 15,
+          ),
+        ),
+        Text(
+          formatarPreco(valor),
+          style: const TextStyle(
+            color: Colors.black87,
+            fontSize: 15,
+          ),
+        ),
+      ],
+    );
   }
 
   // ============================================================
   // IR PARA CHECKOUT
   // ============================================================
 
-  void continuarParaPagamento() {
-    if (enviando) return;
-
-    FocusScope.of(context).unfocus();
-
+  void abrirCheckout() {
     if (widget.itens.isEmpty) {
       _mensagem(
         'Seu carrinho está vazio.',
@@ -165,356 +139,28 @@ class _OrderReviewScreenState
       );
       return;
     }
-
-    debugPrint(
-      '========================================',
-    );
-
-    debugPrint(
-      '💳 ABRINDO CHECKOUT FOODJET',
-    );
-
-    debugPrint(
-      '🏪 RESTAURANTE: ${widget.restauranteId}',
-    );
-
-    debugPrint(
-      '💳 PAGAMENTO: ${widget.pagamento}',
-    );
-
-    debugPrint(
-      '💰 TOTAL: $totalPedido',
-    );
-
-    debugPrint(
-      '========================================',
-    );
 
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) =>
-            CheckoutPaymentScreen(
+        builder: (context) => CheckoutPaymentScreen(
           total: totalPedido,
           pagamento: widget.pagamento,
-          restauranteId:
-              widget.restauranteId,
-          onPagamentoConfirmado: () {
-            confirmarPedido();
-          },
+          restauranteId: widget.restauranteId,
+
+          itens: widget.itens,
+
+          endereco: widget.endereco,
+
+          subtotal: widget.subtotal,
+
+          taxaServico: taxaServico,
+
+          taxaEntrega: taxaEntrega,
         ),
       ),
     );
   }
-
-  // ============================================================
-  // CONFIRMAR PEDIDO
-  // ============================================================
-
-  Future<void> confirmarPedido() async {
-    if (enviando) return;
-
-    FocusScope.of(context).unfocus();
-
-    if (widget.itens.isEmpty) {
-      _mensagem(
-        'Seu carrinho está vazio.',
-        erro: true,
-      );
-      return;
-    }
-
-    if (widget.restauranteId.isEmpty) {
-      _mensagem(
-        'Restaurante não identificado.',
-        erro: true,
-      );
-      return;
-    }
-
-    setState(() {
-      enviando = true;
-    });
-
-    try {
-      final itensPedido =
-          _montarItensPedido();
-
-      // ========================================================
-      // PEDIDO
-      // ========================================================
-
-      final pedido = {
-        'clienteId': clienteId,
-        'restauranteId':
-            widget.restauranteId,
-        'itens': itensPedido,
-        'endereco': widget.endereco,
-        'pagamento': widget.pagamento,
-        'subtotal': widget.subtotal,
-        'taxaServico': taxaServico,
-        'percentualTaxaServico':
-            percentualTaxaServico,
-        'taxaEntrega': taxaEntrega,
-        'total': totalPedido,
-      };
-
-      debugPrint(
-        '========================================',
-      );
-
-      debugPrint(
-        '📦 ENVIANDO PEDIDO PARA API',
-      );
-
-      debugPrint(
-        '👤 CLIENTE: $clienteId',
-      );
-
-      debugPrint(
-        '🏪 RESTAURANTE: ${widget.restauranteId}',
-      );
-
-      debugPrint(
-        '🛒 ITENS: $itensPedido',
-      );
-
-      debugPrint(
-        '📍 ENDEREÇO: ${widget.endereco}',
-      );
-
-      debugPrint(
-        '💳 PAGAMENTO: ${widget.pagamento}',
-      );
-
-      debugPrint(
-        '💵 SUBTOTAL: ${widget.subtotal}',
-      );
-
-      debugPrint(
-        '🧾 TAXA SERVIÇO: $taxaServico',
-      );
-
-      debugPrint(
-        '🛵 TAXA ENTREGA: $taxaEntrega',
-      );
-
-      debugPrint(
-        '💰 TOTAL: $totalPedido',
-      );
-
-      debugPrint(
-        '========================================',
-      );
-
-      // ========================================================
-      // URL
-      // ========================================================
-
-      final url = Uri.parse(
-        '${Api.baseUrl}/orders',
-      );
-
-      debugPrint(
-        '🌐 URL PEDIDO: $url',
-      );
-
-      // ========================================================
-      // POST
-      // ========================================================
-
-      final resposta = await http
-          .post(
-            url,
-            headers: {
-              'Content-Type':
-                  'application/json',
-              'Accept':
-                  'application/json',
-            },
-            body: jsonEncode(pedido),
-          )
-          .timeout(
-            const Duration(seconds: 15),
-          );
-
-      debugPrint(
-        '📡 STATUS API: ${resposta.statusCode}',
-      );
-
-      debugPrint(
-        '📡 RESPOSTA API: ${resposta.body}',
-      );
-
-      if (!mounted) return;
-
-      // ========================================================
-      // SUCESSO
-      // ========================================================
-
-      if (resposta.statusCode == 200 ||
-          resposta.statusCode == 201) {
-        Map<String, dynamic> dados = {};
-
-        try {
-          final resultado =
-              jsonDecode(resposta.body);
-
-          if (resultado
-              is Map<String, dynamic>) {
-            dados = resultado;
-          }
-        } catch (e) {
-          debugPrint(
-            '⚠️ ERRO AO DECODIFICAR RESPOSTA: $e',
-          );
-        }
-
-        // ======================================================
-        // LOCALIZAR PEDIDO CRIADO
-        // ======================================================
-
-        dynamic pedidoCriado =
-            dados['pedido'];
-
-        // Caso a API retorne diretamente:
-        // { id: 123, ... }
-        if (pedidoCriado == null &&
-            dados['id'] != null) {
-          pedidoCriado = dados;
-        }
-
-        if (pedidoCriado
-            is! Map<String, dynamic>) {
-          _mensagem(
-            'Pedido criado, mas a API não retornou os dados do pedido.',
-            erro: true,
-          );
-          return;
-        }
-
-        // ======================================================
-        // ID DO PEDIDO
-        // ======================================================
-
-        final idRecebido =
-            pedidoCriado['id'];
-
-        if (idRecebido == null) {
-          _mensagem(
-            'Pedido criado, mas não recebemos o ID do pedido.',
-            erro: true,
-          );
-          return;
-        }
-
-        final pedidoId =
-            int.tryParse(
-          idRecebido.toString(),
-        );
-
-        if (pedidoId == null) {
-          _mensagem(
-            'O ID do pedido retornado pela API é inválido.',
-            erro: true,
-          );
-          return;
-        }
-
-        debugPrint(
-          '========================================',
-        );
-
-        debugPrint(
-          '✅ PEDIDO CRIADO COM SUCESSO',
-        );
-
-        debugPrint(
-          '🆔 PEDIDO ID: $pedidoId',
-        );
-
-        debugPrint(
-          '🏪 RESTAURANTE: ${widget.restauranteId}',
-        );
-
-        debugPrint(
-          '💳 PAGAMENTO: ${widget.pagamento}',
-        );
-
-        debugPrint(
-          '💰 TOTAL: $totalPedido',
-        );
-
-        debugPrint(
-          '========================================',
-        );
-
-        // ======================================================
-        // ABRIR ACOMPANHAMENTO
-        // ======================================================
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) =>
-                OrderTrackingScreen(
-              pedidoId: pedidoId,
-            ),
-          ),
-        );
-
-        return;
-      }
-
-      // ========================================================
-      // ERRO DA API
-      // ========================================================
-
-      Map<String, dynamic> erro = {};
-
-      try {
-        final resultado =
-            jsonDecode(resposta.body);
-
-        if (resultado
-            is Map<String, dynamic>) {
-          erro = resultado;
-        }
-      } catch (_) {}
-
-      final mensagem =
-          erro['erro']?.toString() ??
-          erro['mensagem']?.toString() ??
-          erro['error']?.toString() ??
-          'Não foi possível criar o pedido.';
-
-      _mensagem(
-        mensagem,
-        erro: true,
-      );
-    } catch (erro) {
-      debugPrint(
-        '❌ ERRO AO ENVIAR PEDIDO: $erro',
-      );
-
-      if (!mounted) return;
-
-      _mensagem(
-        'Não foi possível criar o pedido. Verifique sua conexão.',
-        erro: true,
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          enviando = false;
-        });
-      }
-    }
-  }
-
-  // ============================================================
-  // MENSAGEM
-  // ============================================================
 
   void _mensagem(
     String texto, {
@@ -525,58 +171,19 @@ class _OrderReviewScreenState
     ScaffoldMessenger.of(context)
         .hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(texto),
-        backgroundColor: erro
-            ? Colors.red.shade700
-            : laranja,
-        behavior:
-            SnackBarBehavior.floating,
-        duration:
-            const Duration(seconds: 3),
-        shape:
-            RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.circular(12),
+        backgroundColor:
+            erro ? Colors.red.shade700 : laranja,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
       ),
     );
   }
-
-  // ============================================================
-  // CARD
-  // ============================================================
-
-  Widget _card({
-    required Widget child,
-  }) {
-    return Container(
-      width: double.infinity,
-      padding:
-          const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black
-                .withValues(alpha: 0.035),
-            blurRadius: 8,
-            offset:
-                const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  // ============================================================
-  // BUILD
-  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -585,21 +192,18 @@ class _OrderReviewScreenState
 
       appBar: AppBar(
         backgroundColor: laranja,
-        foregroundColor:
-            Colors.white,
+        foregroundColor: Colors.white,
         elevation: 0,
         title: const Text(
           'Revisar Pedido',
           style: TextStyle(
-            fontWeight:
-                FontWeight.bold,
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
 
       body: SingleChildScrollView(
-        padding:
-            const EdgeInsets.all(20),
+        padding: const EdgeInsets.all(20),
 
         child: Column(
           crossAxisAlignment:
@@ -609,25 +213,18 @@ class _OrderReviewScreenState
             const Text(
               'Confira seu pedido',
               style: TextStyle(
-                color: Colors.black,
                 fontSize: 22,
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
             ),
 
             const SizedBox(height: 20),
 
-            // ==================================================
-            // ITENS
-            // ==================================================
-
             const Text(
               'Itens do pedido',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
             ),
 
@@ -638,64 +235,52 @@ class _OrderReviewScreenState
                 children: List.generate(
                   widget.itens.length,
                   (index) {
-                    final item =
-                        widget.itens[index];
+                    final item = widget.itens[index];
 
                     final subtotalItem =
-                        item.preco *
-                            item.quantidade;
+                        item.preco * item.quantidade;
 
                     return Padding(
-                      padding:
-                          EdgeInsets.only(
-                        bottom: index ==
-                                widget.itens.length -
-                                    1
-                            ? 0
-                            : 14,
+                      padding: EdgeInsets.only(
+                        bottom:
+                            index ==
+                                    widget.itens.length - 1
+                                ? 0
+                                : 14,
                       ),
                       child: Row(
                         crossAxisAlignment:
-                            CrossAxisAlignment
-                                .start,
+                            CrossAxisAlignment.start,
                         children: [
                           Expanded(
-                            child:
-                                Column(
+                            child: Column(
                               crossAxisAlignment:
-                                  CrossAxisAlignment
-                                      .start,
+                                  CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   item.nome,
                                   style:
                                       const TextStyle(
-                                    fontSize:
-                                        16,
+                                    fontSize: 16,
                                     fontWeight:
-                                        FontWeight
-                                            .bold,
+                                        FontWeight.bold,
                                   ),
                                 ),
-
                                 const SizedBox(
                                   height: 4,
                                 ),
-
                                 Text(
                                   '${item.quantidade}x ${formatarPreco(item.preco)}',
                                   style:
                                       const TextStyle(
                                     color:
                                         Colors.black54,
-                                    fontSize:
-                                        14,
+                                    fontSize: 14,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-
                           Text(
                             formatarPreco(
                               subtotalItem,
@@ -717,16 +302,11 @@ class _OrderReviewScreenState
 
             const SizedBox(height: 20),
 
-            // ==================================================
-            // ENDEREÇO
-            // ==================================================
-
             const Text(
               'Endereço de entrega',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
             ),
 
@@ -735,40 +315,31 @@ class _OrderReviewScreenState
             _card(
               child: Row(
                 crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
+                    CrossAxisAlignment.start,
                 children: [
                   Container(
                     width: 42,
                     height: 42,
-                    decoration:
-                        BoxDecoration(
+                    decoration: BoxDecoration(
                       color:
-                          const Color(
-                        0xFFFFE8D8,
-                      ),
+                          const Color(0xFFFFE8D8),
                       borderRadius:
-                          BorderRadius
-                              .circular(12),
+                          BorderRadius.circular(12),
                     ),
-                    child:
-                        const Icon(
+                    child: const Icon(
                       Icons.location_on,
                       color: laranja,
                     ),
                   ),
 
-                  const SizedBox(
-                    width: 12,
-                  ),
+                  const SizedBox(width: 12),
 
                   Expanded(
                     child: Text(
                       enderecoCompleto(),
                       style:
                           const TextStyle(
-                        color:
-                            Colors.black87,
+                        color: Colors.black87,
                         fontSize: 15,
                         height: 1.5,
                       ),
@@ -780,16 +351,11 @@ class _OrderReviewScreenState
 
             const SizedBox(height: 20),
 
-            // ==================================================
-            // PAGAMENTO
-            // ==================================================
-
             const Text(
               'Forma de pagamento',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
             ),
 
@@ -801,26 +367,19 @@ class _OrderReviewScreenState
                   Container(
                     width: 42,
                     height: 42,
-                    decoration:
-                        BoxDecoration(
+                    decoration: BoxDecoration(
                       color:
-                          const Color(
-                        0xFFFFE8D8,
-                      ),
+                          const Color(0xFFFFE8D8),
                       borderRadius:
-                          BorderRadius
-                              .circular(12),
+                          BorderRadius.circular(12),
                     ),
-                    child:
-                        const Icon(
+                    child: const Icon(
                       Icons.payment,
                       color: laranja,
                     ),
                   ),
 
-                  const SizedBox(
-                    width: 12,
-                  ),
+                  const SizedBox(width: 12),
 
                   Expanded(
                     child: Text(
@@ -839,16 +398,11 @@ class _OrderReviewScreenState
 
             const SizedBox(height: 20),
 
-            // ==================================================
-            // RESUMO
-            // ==================================================
-
             const Text(
               'Resumo dos valores',
               style: TextStyle(
                 fontSize: 18,
-                fontWeight:
-                    FontWeight.bold,
+                fontWeight: FontWeight.bold,
               ),
             ),
 
@@ -862,18 +416,14 @@ class _OrderReviewScreenState
                     widget.subtotal,
                   ),
 
-                  const SizedBox(
-                    height: 10,
-                  ),
+                  const SizedBox(height: 10),
 
                   _linhaValor(
                     'Taxa de serviço',
                     taxaServico,
                   ),
 
-                  const SizedBox(
-                    height: 10,
-                  ),
+                  const SizedBox(height: 10),
 
                   _linhaValor(
                     'Taxa de entrega',
@@ -895,8 +445,7 @@ class _OrderReviewScreenState
                     children: [
                       const Text(
                         'Total',
-                        style:
-                            TextStyle(
+                        style: TextStyle(
                           fontSize: 20,
                           fontWeight:
                               FontWeight.bold,
@@ -923,69 +472,38 @@ class _OrderReviewScreenState
 
             const SizedBox(height: 30),
 
-            // ==================================================
-            // BOTÃO CHECKOUT
-            // ==================================================
-
             SizedBox(
               width: double.infinity,
               height: 56,
-              child:
-                  ElevatedButton(
-                onPressed: enviando
-                    ? null
-                    : continuarParaPagamento,
-
+              child: ElevatedButton(
+                onPressed: abrirCheckout,
                 style:
                     ElevatedButton.styleFrom(
-                  backgroundColor:
-                      laranja,
+                  backgroundColor: laranja,
                   foregroundColor:
                       Colors.white,
-                  disabledBackgroundColor:
-                      Colors.grey.shade400,
                   elevation: 0,
                   shape:
                       RoundedRectangleBorder(
                     borderRadius:
-                        BorderRadius
-                            .circular(14),
+                        BorderRadius.circular(14),
                   ),
                 ),
-
                 child: const Row(
                   mainAxisAlignment:
-                      MainAxisAlignment
-                          .center,
+                      MainAxisAlignment.center,
                   children: [
                     Icon(
-                      Icons
-                          .lock_outline,
-                      size: 20,
+                      Icons.lock_outline,
                     ),
-
-                    SizedBox(
-                      width: 8,
-                    ),
-
+                    SizedBox(width: 8),
                     Text(
                       'IR PARA PAGAMENTO',
-                      style:
-                          TextStyle(
+                      style: TextStyle(
                         fontSize: 16,
                         fontWeight:
                             FontWeight.bold,
                       ),
-                    ),
-
-                    SizedBox(
-                      width: 8,
-                    ),
-
-                    Icon(
-                      Icons
-                          .arrow_forward,
-                      size: 20,
                     ),
                   ],
                 ),
@@ -996,42 +514,6 @@ class _OrderReviewScreenState
           ],
         ),
       ),
-    );
-  }
-
-  // ============================================================
-  // LINHA VALOR
-  // ============================================================
-
-  Widget _linhaValor(
-    String titulo,
-    double valor,
-  ) {
-    return Row(
-      mainAxisAlignment:
-          MainAxisAlignment
-              .spaceBetween,
-      children: [
-        Text(
-          titulo,
-          style:
-              const TextStyle(
-            color:
-                Colors.black87,
-            fontSize: 15,
-          ),
-        ),
-
-        Text(
-          formatarPreco(valor),
-          style:
-              const TextStyle(
-            color:
-                Colors.black87,
-            fontSize: 15,
-          ),
-        ),
-      ],
     );
   }
 }

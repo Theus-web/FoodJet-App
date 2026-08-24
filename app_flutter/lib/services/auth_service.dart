@@ -1,11 +1,16 @@
 import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 class AuthService {
+  // ==========================================================
+  // URL DA API
+  // ==========================================================
+
   static String get baseUrl {
-    // Flutter Web - Edge/Chrome
+    // Flutter Web
     if (kIsWeb) {
       return 'http://localhost:3000/api';
     }
@@ -18,28 +23,150 @@ class AuthService {
   // LOGIN
   // ==========================================================
 
-  Future<Map<String, dynamic>> login(String email, String senha) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/login'),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'email': email,
-        'senha': senha,
-      }),
+  Future<Map<String, dynamic>> login(
+    String email,
+    String senha,
+  ) async {
+    final emailNormalizado =
+        email.trim().toLowerCase();
+
+    debugPrint('========================================');
+    debugPrint('🔐 FOODJET - LOGIN');
+    debugPrint('📧 E-MAIL: $emailNormalizado');
+    debugPrint('========================================');
+
+    final response = await http
+        .post(
+          Uri.parse('$baseUrl/auth/login'),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'email': emailNormalizado,
+            'senha': senha,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 15),
+        );
+
+    debugPrint(
+      '📡 STATUS LOGIN: ${response.statusCode}',
+    );
+
+    debugPrint(
+      '📡 RESPOSTA LOGIN: ${response.body}',
     );
 
     final data = _decodeResponse(response);
 
     if (response.statusCode >= 200 &&
         response.statusCode < 300) {
-      final token = data['token']?.toString();
+      final prefs =
+          await SharedPreferences.getInstance();
 
-      if (token != null && token.isNotEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('token', token);
+      // ======================================================
+      // TOKEN
+      // ======================================================
+
+      final token =
+          data['token']?.toString();
+
+      if (token != null &&
+          token.isNotEmpty) {
+        await prefs.setString(
+          'token',
+          token,
+        );
+
+        debugPrint(
+          '✅ TOKEN SALVO',
+        );
+      } else {
+        debugPrint(
+          '⚠️ LOGIN NÃO RETORNOU TOKEN',
+        );
       }
+
+      // ======================================================
+      // USUÁRIO
+      // ======================================================
+
+      dynamic usuario =
+          data['usuario'];
+
+      // Caso o backend utilize "user"
+      if (usuario == null) {
+        usuario = data['user'];
+      }
+
+      // Caso o backend retorne o usuário
+      // diretamente na resposta
+      if (usuario == null &&
+          (data['id'] != null ||
+              data['email'] != null ||
+              data['nome'] != null)) {
+        usuario = data;
+      }
+
+      Map<String, dynamic> usuarioFinal;
+
+      if (usuario is Map) {
+        usuarioFinal =
+            Map<String, dynamic>.from(
+          usuario,
+        );
+      } else {
+        usuarioFinal = {};
+      }
+
+      // ======================================================
+      // GARANTIR E-MAIL
+      // ======================================================
+
+      final emailUsuario =
+          usuarioFinal['email']
+              ?.toString()
+              .trim()
+              .toLowerCase();
+
+      if (emailUsuario == null ||
+          emailUsuario.isEmpty) {
+        usuarioFinal['email'] =
+            emailNormalizado;
+      }
+
+      // ======================================================
+      // SALVAR USUÁRIO
+      // ======================================================
+
+      await prefs.setString(
+        'usuario',
+        jsonEncode(usuarioFinal),
+      );
+
+      // ======================================================
+      // SALVAR E-MAIL SEPARADAMENTE
+      // ======================================================
+
+      await prefs.setString(
+        'email',
+        emailNormalizado,
+      );
+
+      debugPrint('========================================');
+      debugPrint('✅ LOGIN CONCLUÍDO');
+      debugPrint(
+        '📧 E-MAIL SALVO: $emailNormalizado',
+      );
+      debugPrint(
+        '👤 USUÁRIO SALVO: $usuarioFinal',
+      );
+      debugPrint(
+        '🔐 TOKEN SALVO: ${token != null && token.isNotEmpty}',
+      );
+      debugPrint('========================================');
 
       return data;
     }
@@ -47,6 +174,7 @@ class AuthService {
     throw Exception(
       data['erro']?.toString() ??
           data['mensagem']?.toString() ??
+          data['error']?.toString() ??
           'Erro ao realizar login.',
     );
   }
@@ -56,7 +184,9 @@ class AuthService {
   // ==========================================================
 
   Future<String?> getToken() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs =
+        await SharedPreferences.getInstance();
+
     return prefs.getString('token');
   }
 
@@ -65,38 +195,111 @@ class AuthService {
   }
 
   // ==========================================================
+  // E-MAIL DO USUÁRIO LOGADO
+  // ==========================================================
+
+  Future<String?> obterEmail() async {
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    // Primeiro tenta o campo separado
+    final email =
+        prefs.getString('email');
+
+    if (email != null &&
+        email.trim().isNotEmpty) {
+      return email.trim().toLowerCase();
+    }
+
+    // Depois tenta dentro do usuário
+    final usuarioJson =
+        prefs.getString('usuario');
+
+    if (usuarioJson != null &&
+        usuarioJson.isNotEmpty) {
+      try {
+        final decoded =
+            jsonDecode(usuarioJson);
+
+        if (decoded is Map) {
+          final emailUsuario =
+              decoded['email']
+                  ?.toString()
+                  .trim()
+                  .toLowerCase();
+
+          if (emailUsuario != null &&
+              emailUsuario.isNotEmpty) {
+            return emailUsuario;
+          }
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  // ==========================================================
   // SESSÃO
   // ==========================================================
 
   Future<Map<String, dynamic>?> obterSessao() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs =
+        await SharedPreferences.getInstance();
 
-    final token = prefs.getString('token');
+    final token =
+        prefs.getString('token');
 
-    if (token == null || token.isEmpty) {
+    if (token == null ||
+        token.isEmpty) {
       return null;
     }
 
-    final usuarioJson = prefs.getString('usuario');
+    Map<String, dynamic> usuario = {};
 
-    if (usuarioJson == null || usuarioJson.isEmpty) {
-      return {
-        'token': token,
-      };
+    final usuarioJson =
+        prefs.getString('usuario');
+
+    if (usuarioJson != null &&
+        usuarioJson.isNotEmpty) {
+      try {
+        final decoded =
+            jsonDecode(usuarioJson);
+
+        if (decoded is Map) {
+          usuario =
+              Map<String, dynamic>.from(
+            decoded,
+          );
+        }
+      } catch (e) {
+        debugPrint(
+          '⚠️ Erro ao ler usuário salvo: $e',
+        );
+      }
     }
 
-    try {
-      final usuario = jsonDecode(usuarioJson);
+    // ========================================================
+    // RECUPERAR E-MAIL
+    // ========================================================
 
-      if (usuario is Map<String, dynamic>) {
-        return {
-          ...usuario,
-          'token': token,
-        };
+    if (usuario['email'] == null ||
+        usuario['email']
+            .toString()
+            .trim()
+            .isEmpty) {
+      final email =
+          prefs.getString('email');
+
+      if (email != null &&
+          email.trim().isNotEmpty) {
+        usuario['email'] =
+            email.trim().toLowerCase();
       }
-    } catch (_) {}
+    }
 
     return {
+      ...usuario,
       'token': token,
     };
   }
@@ -106,72 +309,98 @@ class AuthService {
   // ==========================================================
 
   Future<Map<String, dynamic>> recuperarSenha(
-  String email,
-) async {
-  final url = '$baseUrl/auth/recuperar-senha';
+    String email,
+  ) async {
+    final url =
+        '$baseUrl/auth/recuperar-senha';
 
-  print('========================================');
-  print('FOODJET - RECUPERAÇÃO DE SENHA');
-  print('URL: $url');
-  print('EMAIL: $email');
-  print('========================================');
-
-  try {
-    final response = await http.post(
-      Uri.parse(url),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'email': email.trim().toLowerCase(),
-      }),
+    debugPrint('========================================');
+    debugPrint(
+      'FOODJET - RECUPERAÇÃO DE SENHA',
     );
+    debugPrint('URL: $url');
+    debugPrint('EMAIL: $email');
+    debugPrint('========================================');
 
-    print('STATUS HTTP: ${response.statusCode}');
-    print('RESPOSTA: ${response.body}');
+    try {
+      final response = await http
+          .post(
+            Uri.parse(url),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({
+              'email': email
+                  .trim()
+                  .toLowerCase(),
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 15),
+          );
 
-    final data = _decodeResponse(response);
+      debugPrint(
+        'STATUS HTTP: ${response.statusCode}',
+      );
 
-    if (response.statusCode >= 200 &&
-        response.statusCode < 300) {
-      return data;
+      debugPrint(
+        'RESPOSTA: ${response.body}',
+      );
+
+      final data =
+          _decodeResponse(response);
+
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300) {
+        return data;
+      }
+
+      throw Exception(
+        data['erro']?.toString() ??
+            data['mensagem']?.toString() ??
+            'Não foi possível solicitar a recuperação da senha.',
+      );
+    } catch (e) {
+      debugPrint(
+        '❌ ERRO RECUPERAÇÃO DE SENHA: $e',
+      );
+
+      rethrow;
     }
-
-    throw Exception(
-      data['erro']?.toString() ??
-          data['mensagem']?.toString() ??
-          'Não foi possível solicitar a recuperação da senha.',
-    );
-  } catch (e) {
-    print('========================================');
-    print('ERRO RECUPERAÇÃO DE SENHA');
-    print(e);
-    print('========================================');
-
-    rethrow;
   }
-}
 
   // ==========================================================
   // VALIDAR CÓDIGO DE RECUPERAÇÃO
   // ==========================================================
 
-  Future<Map<String, dynamic>> validarCodigoRecuperacao({
+  Future<Map<String, dynamic>>
+      validarCodigoRecuperacao({
     required String email,
     required String codigo,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/validar-codigo-recuperacao'),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'email': email,
-        'codigo': codigo,
-      }),
-    );
+    final response = await http
+        .post(
+          Uri.parse(
+            '$baseUrl/auth/validar-codigo-recuperacao',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'email': email
+                .trim()
+                .toLowerCase(),
+            'codigo': codigo.trim(),
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 15),
+        );
 
-    final data = _decodeResponse(response);
+    final data =
+        _decodeResponse(response);
 
     if (response.statusCode >= 200 &&
         response.statusCode < 300) {
@@ -189,24 +418,35 @@ class AuthService {
   // REDEFINIR SENHA
   // ==========================================================
 
-  Future<Map<String, dynamic>> redefinirSenha({
+  Future<Map<String, dynamic>>
+      redefinirSenha({
     required String email,
     required String codigo,
     required String novaSenha,
   }) async {
-    final response = await http.post(
-      Uri.parse('$baseUrl/auth/redefinir-senha'),
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode({
-        'email': email,
-        'codigo': codigo,
-        'novaSenha': novaSenha,
-      }),
-    );
+    final response = await http
+        .post(
+          Uri.parse(
+            '$baseUrl/auth/redefinir-senha',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+          },
+          body: jsonEncode({
+            'email': email
+                .trim()
+                .toLowerCase(),
+            'codigo': codigo.trim(),
+            'novaSenha': novaSenha,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 15),
+        );
 
-    final data = _decodeResponse(response);
+    final data =
+        _decodeResponse(response);
 
     if (response.statusCode >= 200 &&
         response.statusCode < 300) {
@@ -224,24 +464,34 @@ class AuthService {
   // ALTERAR SENHA LOGADO
   // ==========================================================
 
-  Future<Map<String, dynamic>> alterarSenha({
+  Future<Map<String, dynamic>>
+      alterarSenha({
     required String token,
     required String senhaAtual,
     required String novaSenha,
   }) async {
-    final response = await http.put(
-      Uri.parse('$baseUrl/auth/alterar-senha'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode({
-        'senhaAtual': senhaAtual,
-        'novaSenha': novaSenha,
-      }),
-    );
+    final response = await http
+        .put(
+          Uri.parse(
+            '$baseUrl/auth/alterar-senha',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization':
+                'Bearer $token',
+          },
+          body: jsonEncode({
+            'senhaAtual': senhaAtual,
+            'novaSenha': novaSenha,
+          }),
+        )
+        .timeout(
+          const Duration(seconds: 15),
+        );
 
-    final data = _decodeResponse(response);
+    final data =
+        _decodeResponse(response);
 
     if (response.statusCode >= 200 &&
         response.statusCode < 300) {
@@ -259,21 +509,25 @@ class AuthService {
   // ATUALIZAR PERFIL
   // ==========================================================
 
-  Future<Map<String, dynamic>> atualizarPerfil({
+  Future<Map<String, dynamic>>
+      atualizarPerfil({
     required String token,
     String? nome,
     String? email,
     String? telefone,
     String? foto,
   }) async {
-    final Map<String, dynamic> body = {};
+    final Map<String, dynamic> body =
+        {};
 
     if (nome != null) {
       body['nome'] = nome;
     }
 
     if (email != null) {
-      body['email'] = email;
+      body['email'] = email
+          .trim()
+          .toLowerCase();
     }
 
     if (telefone != null) {
@@ -284,28 +538,59 @@ class AuthService {
       body['foto'] = foto;
     }
 
-    final response = await http.put(
-      Uri.parse('$baseUrl/auth/perfil'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer $token',
-      },
-      body: jsonEncode(body),
-    );
+    final response = await http
+        .put(
+          Uri.parse(
+            '$baseUrl/auth/perfil',
+          ),
+          headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+            'Authorization':
+                'Bearer $token',
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(
+          const Duration(seconds: 15),
+        );
 
-    final data = _decodeResponse(response);
+    final data =
+        _decodeResponse(response);
 
     if (response.statusCode >= 200 &&
         response.statusCode < 300) {
-      final usuario = data['usuario'];
+      final usuario =
+          data['usuario'];
 
-      if (usuario is Map<String, dynamic>) {
-        final prefs = await SharedPreferences.getInstance();
+      if (usuario is Map) {
+        final usuarioMap =
+            Map<String, dynamic>.from(
+          usuario,
+        );
+
+        final prefs =
+            await SharedPreferences
+                .getInstance();
 
         await prefs.setString(
           'usuario',
-          jsonEncode(usuario),
+          jsonEncode(usuarioMap),
         );
+
+        final emailUsuario =
+            usuarioMap['email']
+                ?.toString()
+                .trim()
+                .toLowerCase();
+
+        if (emailUsuario != null &&
+            emailUsuario.isNotEmpty) {
+          await prefs.setString(
+            'email',
+            emailUsuario,
+          );
+        }
       }
 
       return data;
@@ -323,10 +608,16 @@ class AuthService {
   // ==========================================================
 
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs =
+        await SharedPreferences.getInstance();
 
     await prefs.remove('token');
     await prefs.remove('usuario');
+    await prefs.remove('email');
+
+    debugPrint(
+      '🚪 FOODJET: sessão encerrada.',
+    );
   }
 
   // ==========================================================
@@ -341,7 +632,8 @@ class AuthService {
     }
 
     try {
-      final decoded = jsonDecode(response.body);
+      final decoded =
+          jsonDecode(response.body);
 
       if (decoded is Map<String, dynamic>) {
         return decoded;

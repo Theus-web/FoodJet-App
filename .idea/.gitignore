@@ -1,3 +1,15 @@
-# Default ignored files
-/shelf/
-/workspace.xml
+node_modules/
+
+.env
+.env.*
+!.env.example
+
+*.log
+
+foodjet-backup.json
+
+uploads/temp/
+dist/
+coverage/
+
+.idea/
