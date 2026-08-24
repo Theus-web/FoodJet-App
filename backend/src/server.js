@@ -1,5 +1,23 @@
 require("dotenv").config();
 
+console.log("========================================");
+console.log("🔐 MERCADO PAGO");
+console.log(
+  "TOKEN CARREGADO:",
+  process.env.MERCADOPAGO_ACCESS_TOKEN
+    ? "SIM"
+    : "NÃO"
+);
+console.log(
+  "TIPO:",
+  process.env.MERCADOPAGO_ACCESS_TOKEN?.startsWith("TEST-")
+    ? "TESTE"
+    : process.env.MERCADOPAGO_ACCESS_TOKEN?.startsWith("APP_USR-")
+      ? "PRODUÇÃO"
+      : "DESCONHECIDO"
+);
+console.log("========================================");
+
 const http = require("http");
 const app = require("./app");
 
@@ -21,6 +39,14 @@ console.log("🔥 ROTAS DE PROMOÇÃO CARREGADAS");
 app.use(
  "/api/promocoes",
  promotionRoutes
+);
+
+const mercadoPagoWebhookRoutes =
+  require("./routes/mercadoPagoWebhook");
+
+app.use(
+  "/api/mercadopago",
+  mercadoPagoWebhookRoutes
 );
 
 // ============================================================

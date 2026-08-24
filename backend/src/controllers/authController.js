@@ -1,3 +1,4 @@
+
 const bcrypt = require("bcryptjs");
 
 const User = require("../models/user");
@@ -6,7 +7,8 @@ const Token = require("../services/tokenService");
 const Email = require("../services/emailService");
 
 // ============================================================
-// CADASTRO COMPLETO DO RESTAURANTE
+// CADASTRO
+// CLIENTE OU RESTAURANTE
 // ============================================================
 
 exports.register = async (req, res) => {
@@ -30,47 +32,31 @@ exports.register = async (req, res) => {
             banco,
             agencia,
             conta,
-            pix
+            pix,
+            tipo
         } = req.body;
 
         // ====================================================
-        // VALIDAÇÕES
+        // NORMALIZAÇÃO DO TIPO
         // ====================================================
 
-        if (!nome || !email || !senha || !telefone) {
+        const tipoNormalizado = String(tipo || "CLIENTE")
+            .trim()
+            .toUpperCase();
+
+        // ====================================================
+        // VALIDAÇÕES BÁSICAS
+        // ====================================================
+
+        if (!nome || !email || !senha) {
             return res.status(400).json({
-                erro: "Nome, email, senha e telefone são obrigatórios"
+                erro: "Nome, email e senha são obrigatórios"
             });
         }
 
-        if (!cnpj) {
+        if (String(nome).trim().length < 3) {
             return res.status(400).json({
-                erro: "CNPJ é obrigatório"
-            });
-        }
-
-        if (!responsavel || !cpf) {
-            return res.status(400).json({
-                erro: "Responsável e CPF são obrigatórios"
-            });
-        }
-
-        if (
-            !cep ||
-            !rua ||
-            !numero ||
-            !bairro ||
-            !cidade ||
-            !estado
-        ) {
-            return res.status(400).json({
-                erro: "O endereço completo é obrigatório"
-            });
-        }
-
-        if (!banco || !agencia || !conta || !pix) {
-            return res.status(400).json({
-                erro: "Os dados de recebimento são obrigatórios"
+                erro: "O nome deve ter pelo menos 3 caracteres"
             });
         }
 
@@ -80,19 +66,26 @@ exports.register = async (req, res) => {
             });
         }
 
-        // ====================================================
-        // NORMALIZAÇÃO
-        // ====================================================
-
         const emailNormalizado = String(email)
             .trim()
             .toLowerCase();
 
-        const cnpjNormalizado = String(cnpj)
-            .replace(/\D/g, "");
+        // ====================================================
+        // VALIDAÇÃO SIMPLES DO EMAIL
+        // ====================================================
+
+        const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+            emailNormalizado
+        );
+
+        if (!emailValido) {
+            return res.status(400).json({
+                erro: "Informe um email válido"
+            });
+        }
 
         // ====================================================
-        // VERIFICAR EMAIL
+        // VERIFICAR EMAIL EXISTENTE
         // ====================================================
 
         const usuarioExistente =
@@ -105,186 +98,437 @@ exports.register = async (req, res) => {
         }
 
         // ====================================================
-        // VERIFICAR CNPJ
+        // CLIENTE
         // ====================================================
 
-        const restaurantes = await Restaurant.listar();
+        if (tipoNormalizado === "CLIENTE") {
 
-        const cnpjExistente = restaurantes.find(
-            (restaurante) =>
-                String(restaurante.cnpj || "")
-                    .replace(/\D/g, "") === cnpjNormalizado
-        );
+            const agora = Date.now();
 
-        if (cnpjExistente) {
-            return res.status(409).json({
-                erro: "Este CNPJ já está cadastrado"
+            const usuarioId = `user_${agora}`;
+
+            const senhaHash = await bcrypt.hash(
+                String(senha),
+                10
+            );
+
+            const usuario = {
+                id: usuarioId,
+
+                nome: String(nome).trim(),
+
+                email: emailNormalizado,
+
+                telefone: telefone
+                    ? String(telefone).trim()
+                    : "",
+
+                cpf: cpf
+                    ? String(cpf).trim()
+                    : "",
+
+                senha: senhaHash,
+
+                tipo: "CLIENTE",
+
+                restauranteId: null,
+
+                endereco: null,
+
+                criadoEm: new Date().toISOString(),
+
+                atualizadoEm: new Date().toISOString()
+            };
+
+            // =================================================
+            // SALVAR CLIENTE
+            // =================================================
+
+            await User.criar(usuario);
+
+            console.log("");
+            console.log(
+                "=========================================="
+            );
+            console.log(
+                "👤 FOODJET - CLIENTE CADASTRADO"
+            );
+            console.log(
+                "=========================================="
+            );
+            console.log(
+                "🆔 ID:",
+                usuario.id
+            );
+            console.log(
+                "👤 NOME:",
+                usuario.nome
+            );
+            console.log(
+                "📧 EMAIL:",
+                usuario.email
+            );
+            console.log(
+                "👤 TIPO:",
+                usuario.tipo
+            );
+            console.log(
+                "=========================================="
+            );
+
+            return res.status(201).json({
+                sucesso: true,
+
+                mensagem: "Conta criada com sucesso",
+
+                usuario: {
+                    id: usuario.id,
+
+                    nome: usuario.nome,
+
+                    email: usuario.email,
+
+                    telefone: usuario.telefone,
+
+                    cpf: usuario.cpf,
+
+                    tipo: usuario.tipo,
+
+                    restauranteId: null
+                }
             });
         }
-
-        // ====================================================
-        // IDS
-        // ====================================================
-
-        const agora = Date.now();
-
-        const restauranteId = `rest_${agora}`;
-        const usuarioId = `user_${agora}`;
-
-        // ====================================================
-        // HASH DA SENHA
-        // ====================================================
-
-        const senhaHash = await bcrypt.hash(senha, 10);
 
         // ====================================================
         // RESTAURANTE
         // ====================================================
 
-        const restaurante = {
-            id: restauranteId,
+        if (tipoNormalizado === "RESTAURANTE") {
 
-            nome: String(nome).trim(),
+            // =================================================
+            // VALIDAÇÕES ESPECÍFICAS DO RESTAURANTE
+            // =================================================
 
-            cnpj: String(cnpj).trim(),
-
-            categoria: categoria
-                ? String(categoria).trim()
-                : "Restaurante",
-
-            email: emailNormalizado,
-
-            telefone: String(telefone).trim(),
-
-            responsavel: String(responsavel).trim(),
-
-            cpf: String(cpf).trim(),
-
-            endereco: {
-                cep: String(cep).trim(),
-
-                rua: String(rua).trim(),
-
-                numero: String(numero).trim(),
-
-                complemento: complemento
-                    ? String(complemento).trim()
-                    : "",
-
-                bairro: String(bairro).trim(),
-
-                cidade: String(cidade).trim(),
-
-                estado: String(estado).trim()
-            },
-
-            pagamento: {
-                banco: String(banco).trim(),
-
-                agencia: String(agencia).trim(),
-
-                conta: String(conta).trim(),
-
-                pix: String(pix).trim()
-            },
-
-            status: "FECHADO",
-
-            online: false,
-
-            aberto: false,
-
-            criadoEm: new Date().toISOString(),
-
-            atualizadoEm: new Date().toISOString()
-        };
-
-        // ====================================================
-        // SALVAR RESTAURANTE
-        // ====================================================
-
-        await Restaurant.criar(restaurante);
-
-        // ====================================================
-        // USUÁRIO DO RESTAURANTE
-        // ====================================================
-
-        const usuario = {
-            id: usuarioId,
-
-            nome: String(responsavel).trim(),
-
-            email: emailNormalizado,
-
-            telefone: String(telefone).trim(),
-
-            cpf: String(cpf).trim(),
-
-            senha: senhaHash,
-
-            tipo: "RESTAURANTE",
-
-            restauranteId: restauranteId,
-
-            criadoEm: new Date().toISOString(),
-
-            atualizadoEm: new Date().toISOString()
-        };
-
-        // ====================================================
-        // SALVAR USUÁRIO
-        // ====================================================
-
-        await User.criar(usuario);
-
-        // ====================================================
-        // RESPOSTA
-        // ====================================================
-
-        return res.status(201).json({
-            sucesso: true,
-
-            mensagem: "Restaurante criado com sucesso",
-
-            usuario: {
-                id: usuario.id,
-
-                nome: usuario.nome,
-
-                email: usuario.email,
-
-                telefone: usuario.telefone,
-
-                tipo: usuario.tipo,
-
-                restauranteId: usuario.restauranteId
-            },
-
-            restaurante: {
-                id: restaurante.id,
-
-                nome: restaurante.nome,
-
-                cnpj: restaurante.cnpj,
-
-                categoria: restaurante.categoria,
-
-                status: restaurante.status,
-
-                online: restaurante.online
+            if (!telefone) {
+                return res.status(400).json({
+                    erro: "Telefone é obrigatório"
+                });
             }
+
+            if (!cnpj) {
+                return res.status(400).json({
+                    erro: "CNPJ é obrigatório"
+                });
+            }
+
+            if (!responsavel || !cpf) {
+                return res.status(400).json({
+                    erro: "Responsável e CPF são obrigatórios"
+                });
+            }
+
+            if (
+                !cep ||
+                !rua ||
+                !numero ||
+                !bairro ||
+                !cidade ||
+                !estado
+            ) {
+                return res.status(400).json({
+                    erro: "O endereço completo é obrigatório"
+                });
+            }
+
+            if (
+                !banco ||
+                !agencia ||
+                !conta ||
+                !pix
+            ) {
+                return res.status(400).json({
+                    erro:
+                        "Os dados de recebimento são obrigatórios"
+                });
+            }
+
+            // =================================================
+            // NORMALIZAR CNPJ
+            // =================================================
+
+            const cnpjNormalizado = String(cnpj)
+                .replace(/\D/g, "");
+
+            if (!cnpjNormalizado) {
+                return res.status(400).json({
+                    erro: "CNPJ inválido"
+                });
+            }
+
+            // =================================================
+            // VERIFICAR CNPJ
+            // =================================================
+
+            const restaurantes =
+                await Restaurant.listar();
+
+            const cnpjExistente =
+                restaurantes.find(
+                    (restaurante) =>
+                        String(restaurante.cnpj || "")
+                            .replace(/\D/g, "") ===
+                        cnpjNormalizado
+                );
+
+            if (cnpjExistente) {
+                return res.status(409).json({
+                    erro: "Este CNPJ já está cadastrado"
+                });
+            }
+
+            // =================================================
+            // IDS
+            // =================================================
+
+            const agora = Date.now();
+
+            const restauranteId =
+                `rest_${agora}`;
+
+            const usuarioId =
+                `user_${agora}`;
+
+            // =================================================
+            // HASH DA SENHA
+            // =================================================
+
+            const senhaHash =
+                await bcrypt.hash(
+                    String(senha),
+                    10
+                );
+
+            // =================================================
+            // RESTAURANTE
+            // =================================================
+
+            const restaurante = {
+                id: restauranteId,
+
+                nome: String(nome).trim(),
+
+                cnpj: String(cnpj).trim(),
+
+                categoria: categoria
+                    ? String(categoria).trim()
+                    : "Restaurante",
+
+                email: emailNormalizado,
+
+                telefone: String(telefone).trim(),
+
+                responsavel:
+                    String(responsavel).trim(),
+
+                cpf: String(cpf).trim(),
+
+                endereco: {
+                    cep: String(cep).trim(),
+
+                    rua: String(rua).trim(),
+
+                    numero: String(numero).trim(),
+
+                    complemento: complemento
+                        ? String(complemento).trim()
+                        : "",
+
+                    bairro:
+                        String(bairro).trim(),
+
+                    cidade:
+                        String(cidade).trim(),
+
+                    estado:
+                        String(estado).trim()
+                },
+
+                pagamento: {
+                    banco:
+                        String(banco).trim(),
+
+                    agencia:
+                        String(agencia).trim(),
+
+                    conta:
+                        String(conta).trim(),
+
+                    pix:
+                        String(pix).trim()
+                },
+
+                status: "FECHADO",
+
+                online: false,
+
+                aberto: false,
+
+                criadoEm:
+                    new Date().toISOString(),
+
+                atualizadoEm:
+                    new Date().toISOString()
+            };
+
+            // =================================================
+            // SALVAR RESTAURANTE
+            // =================================================
+
+            await Restaurant.criar(
+                restaurante
+            );
+
+            // =================================================
+            // USUÁRIO DO RESTAURANTE
+            // =================================================
+
+            const usuario = {
+                id: usuarioId,
+
+                nome:
+                    String(responsavel).trim(),
+
+                email:
+                    emailNormalizado,
+
+                telefone:
+                    String(telefone).trim(),
+
+                cpf:
+                    String(cpf).trim(),
+
+                senha:
+                    senhaHash,
+
+                tipo:
+                    "RESTAURANTE",
+
+                restauranteId:
+                    restauranteId,
+
+                criadoEm:
+                    new Date().toISOString(),
+
+                atualizadoEm:
+                    new Date().toISOString()
+            };
+
+            // =================================================
+            // SALVAR USUÁRIO
+            // =================================================
+
+            await User.criar(usuario);
+
+            console.log("");
+            console.log(
+                "=========================================="
+            );
+            console.log(
+                "🏪 FOODJET - RESTAURANTE CADASTRADO"
+            );
+            console.log(
+                "=========================================="
+            );
+            console.log(
+                "🆔 USUÁRIO:",
+                usuario.id
+            );
+            console.log(
+                "🏪 RESTAURANTE:",
+                restaurante.id
+            );
+            console.log(
+                "📧 EMAIL:",
+                usuario.email
+            );
+            console.log(
+                "=========================================="
+            );
+
+            // =================================================
+            // RESPOSTA
+            // =================================================
+
+            return res.status(201).json({
+                sucesso: true,
+
+                mensagem:
+                    "Restaurante criado com sucesso",
+
+                usuario: {
+                    id:
+                        usuario.id,
+
+                    nome:
+                        usuario.nome,
+
+                    email:
+                        usuario.email,
+
+                    telefone:
+                        usuario.telefone,
+
+                    tipo:
+                        usuario.tipo,
+
+                    restauranteId:
+                        usuario.restauranteId
+                },
+
+                restaurante: {
+                    id:
+                        restaurante.id,
+
+                    nome:
+                        restaurante.nome,
+
+                    cnpj:
+                        restaurante.cnpj,
+
+                    categoria:
+                        restaurante.categoria,
+
+                    status:
+                        restaurante.status,
+
+                    online:
+                        restaurante.online
+                }
+            });
+        }
+
+        // ====================================================
+        // TIPO INVÁLIDO
+        // ====================================================
+
+        return res.status(400).json({
+            erro:
+                "Tipo de usuário inválido. Use CLIENTE ou RESTAURANTE."
         });
 
     } catch (error) {
+
         console.error(
             "ERRO NO CADASTRO:",
             error
         );
 
         return res.status(500).json({
-            erro: "Erro interno ao cadastrar restaurante",
+            erro:
+                "Erro interno ao cadastrar usuário",
 
-            detalhe: error.message
+            detalhe:
+                error.message
         });
     }
 };
@@ -300,65 +544,56 @@ exports.login = async (req, res) => {
             senha
         } = req.body;
 
-        // ====================================================
-        // VALIDAÇÃO
-        // ====================================================
-
         if (!email || !senha) {
             return res.status(400).json({
-                erro: "Email e senha são obrigatórios"
+                erro:
+                    "Email e senha são obrigatórios"
             });
         }
 
-        // ====================================================
-        // NORMALIZAR EMAIL
-        // ====================================================
-
-        const emailNormalizado = String(email)
-            .trim()
-            .toLowerCase();
-
-        // ====================================================
-        // BUSCAR USUÁRIO
-        // ====================================================
+        const emailNormalizado =
+            String(email)
+                .trim()
+                .toLowerCase();
 
         const usuario =
-            await User.buscarPorEmail(emailNormalizado);
+            await User.buscarPorEmail(
+                emailNormalizado
+            );
 
         if (!usuario) {
             return res.status(401).json({
-                erro: "Email ou senha incorretos"
+                erro:
+                    "Email ou senha incorretos"
             });
         }
 
-        // ====================================================
-        // VALIDAR SENHA
-        // ====================================================
-
-        const senhaValida = await bcrypt.compare(
-            senha,
-            usuario.senha
-        );
+        const senhaValida =
+            await bcrypt.compare(
+                String(senha),
+                usuario.senha
+            );
 
         if (!senhaValida) {
             return res.status(401).json({
-                erro: "Email ou senha incorretos"
+                erro:
+                    "Email ou senha incorretos"
             });
         }
 
         // ====================================================
-        // VERIFICAR RESTAURANTE
+        // RESTAURANTE
         // ====================================================
 
         let restaurante = null;
 
-        const tipoUsuario = String(
-            usuario.tipo || ""
-        )
-            .trim()
-            .toUpperCase();
+        const tipoUsuario =
+            String(usuario.tipo || "")
+                .trim()
+                .toUpperCase();
 
         if (tipoUsuario === "RESTAURANTE") {
+
             if (!usuario.restauranteId) {
                 return res.status(403).json({
                     erro:
@@ -380,75 +615,129 @@ exports.login = async (req, res) => {
         }
 
         // ====================================================
-        // CRIAR TOKEN
+        // TOKEN
         // ====================================================
 
-        const token = Token.criarToken({
-            id: usuario.id,
+        const token =
+            Token.criarToken({
+                id:
+                    usuario.id,
 
-            nome: usuario.nome,
+                nome:
+                    usuario.nome,
 
-            email: usuario.email,
+                email:
+                    usuario.email,
 
-            tipo: usuario.tipo,
+                tipo:
+                    usuario.tipo,
 
-            restauranteId: usuario.restauranteId
-        });
+                restauranteId:
+                    usuario.restauranteId
+            });
 
         // ====================================================
         // RESPOSTA
         // ====================================================
 
+        console.log("");
+        console.log(
+            "=========================================="
+        );
+        console.log(
+            "🔐 FOODJET - LOGIN"
+        );
+        console.log(
+            "=========================================="
+        );
+        console.log(
+            "👤 USUÁRIO:",
+            usuario.nome
+        );
+        console.log(
+            "📧 EMAIL:",
+            usuario.email
+        );
+        console.log(
+            "👤 TIPO:",
+            usuario.tipo
+        );
+        console.log(
+            "🆔 ID:",
+            usuario.id
+        );
+        console.log(
+            "=========================================="
+        );
+
         return res.status(200).json({
             sucesso: true,
 
-            mensagem: "Login realizado com sucesso",
+            mensagem:
+                "Login realizado com sucesso",
 
             token,
 
             usuario: {
-                id: usuario.id,
+                id:
+                    usuario.id,
 
-                nome: usuario.nome,
+                nome:
+                    usuario.nome,
 
-                email: usuario.email,
+                email:
+                    usuario.email,
 
-                telefone: usuario.telefone,
+                telefone:
+                    usuario.telefone,
 
-                cpf: usuario.cpf,
+                cpf:
+                    usuario.cpf,
 
-                tipo: usuario.tipo,
+                tipo:
+                    usuario.tipo,
 
-                restauranteId: usuario.restauranteId
+                restauranteId:
+                    usuario.restauranteId
             },
 
-            restaurante: restaurante
-                ? {
-                    id: restaurante.id,
+            restaurante:
+                restaurante
+                    ? {
+                        id:
+                            restaurante.id,
 
-                    nome: restaurante.nome,
+                        nome:
+                            restaurante.nome,
 
-                    categoria: restaurante.categoria,
+                        categoria:
+                            restaurante.categoria,
 
-                    status: restaurante.status,
+                        status:
+                            restaurante.status,
 
-                    online: restaurante.online,
+                        online:
+                            restaurante.online,
 
-                    aberto: restaurante.aberto
-                }
-                : null
+                        aberto:
+                            restaurante.aberto
+                    }
+                    : null
         });
 
     } catch (error) {
+
         console.error(
             "ERRO NO LOGIN:",
             error
         );
 
         return res.status(500).json({
-            erro: "Erro interno no login",
+            erro:
+                "Erro interno no login",
 
-            detalhe: error.message
+            detalhe:
+                error.message
         });
     }
 };
@@ -462,6 +751,7 @@ exports.validarCodigoRecuperacao = async (
     res
 ) => {
     try {
+
         const {
             email,
             codigo
@@ -469,7 +759,8 @@ exports.validarCodigoRecuperacao = async (
 
         if (!email || !codigo) {
             return res.status(400).json({
-                erro: "Email e código são obrigatórios"
+                erro:
+                    "Email e código são obrigatórios"
             });
         }
 
@@ -481,26 +772,31 @@ exports.validarCodigoRecuperacao = async (
 
         if (!usuario) {
             return res.status(400).json({
-                erro: "Código inválido ou expirado"
+                erro:
+                    "Código inválido ou expirado"
             });
         }
 
         return res.status(200).json({
             sucesso: true,
 
-            mensagem: "Código validado com sucesso",
+            mensagem:
+                "Código validado com sucesso",
 
-            usuarioId: usuario.id
+            usuarioId:
+                usuario.id
         });
 
     } catch (error) {
+
         console.error(
             "ERRO AO VALIDAR CÓDIGO:",
             error
         );
 
         return res.status(500).json({
-            erro: "Erro interno ao validar código"
+            erro:
+                "Erro interno ao validar código"
         });
     }
 };
@@ -514,13 +810,18 @@ exports.redefinirSenha = async (
     res
 ) => {
     try {
+
         const {
             email,
             codigo,
             novaSenha
         } = req.body;
 
-        if (!email || !codigo || !novaSenha) {
+        if (
+            !email ||
+            !codigo ||
+            !novaSenha
+        ) {
             return res.status(400).json({
                 erro:
                     "Email, código e nova senha são obrigatórios"
@@ -542,13 +843,14 @@ exports.redefinirSenha = async (
 
         if (!usuario) {
             return res.status(400).json({
-                erro: "Código inválido ou expirado"
+                erro:
+                    "Código inválido ou expirado"
             });
         }
 
         const novaSenhaHash =
             await bcrypt.hash(
-                novaSenha,
+                String(novaSenha),
                 10
             );
 
@@ -564,10 +866,12 @@ exports.redefinirSenha = async (
         return res.status(200).json({
             sucesso: true,
 
-            mensagem: "Senha redefinida com sucesso"
+            mensagem:
+                "Senha redefinida com sucesso"
         });
 
     } catch (error) {
+
         console.error(
             "ERRO AO REDEFINIR SENHA:",
             error
@@ -589,6 +893,7 @@ exports.alterarSenha = async (
     res
 ) => {
     try {
+
         const {
             senhaAtual,
             novaSenha
@@ -613,7 +918,8 @@ exports.alterarSenha = async (
 
         if (!usuarioId) {
             return res.status(401).json({
-                erro: "Usuário não autenticado"
+                erro:
+                    "Usuário não autenticado"
             });
         }
 
@@ -624,25 +930,27 @@ exports.alterarSenha = async (
 
         if (!usuario) {
             return res.status(404).json({
-                erro: "Usuário não encontrado"
+                erro:
+                    "Usuário não encontrado"
             });
         }
 
         const senhaValida =
             await bcrypt.compare(
-                senhaAtual,
+                String(senhaAtual),
                 usuario.senha
             );
 
         if (!senhaValida) {
             return res.status(400).json({
-                erro: "Senha atual incorreta"
+                erro:
+                    "Senha atual incorreta"
             });
         }
 
         const novaSenhaHash =
             await bcrypt.hash(
-                novaSenha,
+                String(novaSenha),
                 10
             );
 
@@ -654,10 +962,12 @@ exports.alterarSenha = async (
         return res.status(200).json({
             sucesso: true,
 
-            mensagem: "Senha alterada com sucesso"
+            mensagem:
+                "Senha alterada com sucesso"
         });
 
     } catch (error) {
+
         console.error(
             "ERRO AO ALTERAR SENHA:",
             error
@@ -679,12 +989,14 @@ exports.perfil = async (
     res
 ) => {
     try {
+
         const usuarioId =
             req.usuario?.id;
 
         if (!usuarioId) {
             return res.status(401).json({
-                erro: "Usuário não autenticado"
+                erro:
+                    "Usuário não autenticado"
             });
         }
 
@@ -695,43 +1007,52 @@ exports.perfil = async (
 
         if (!usuario) {
             return res.status(404).json({
-                erro: "Usuário não encontrado"
+                erro:
+                    "Usuário não encontrado"
             });
         }
 
-        // ====================================================
-        // NÃO ENVIAR SENHA
-        // ====================================================
-
         const usuarioSeguro = {
-            id: usuario.id,
+            id:
+                usuario.id,
 
-            nome: usuario.nome,
+            nome:
+                usuario.nome,
 
-            email: usuario.email,
+            email:
+                usuario.email,
 
-            telefone: usuario.telefone,
+            telefone:
+                usuario.telefone,
 
-            cpf: usuario.cpf,
+            cpf:
+                usuario.cpf,
 
-            tipo: usuario.tipo,
+            tipo:
+                usuario.tipo,
 
-            restauranteId: usuario.restauranteId,
+            restauranteId:
+                usuario.restauranteId,
 
-            endereco: usuario.endereco || null,
+            endereco:
+                usuario.endereco || null,
 
-            criadoEm: usuario.criadoEm,
+            criadoEm:
+                usuario.criadoEm,
 
-            atualizadoEm: usuario.atualizadoEm
+            atualizadoEm:
+                usuario.atualizadoEm
         };
 
         return res.status(200).json({
             sucesso: true,
 
-            usuario: usuarioSeguro
+            usuario:
+                usuarioSeguro
         });
 
     } catch (error) {
+
         console.error(
             "ERRO AO BUSCAR PERFIL:",
             error
@@ -753,12 +1074,14 @@ exports.atualizarPerfil = async (
     res
 ) => {
     try {
+
         const usuarioId =
             req.usuario?.id;
 
         if (!usuarioId) {
             return res.status(401).json({
-                erro: "Usuário não autenticado"
+                erro:
+                    "Usuário não autenticado"
             });
         }
 
@@ -769,11 +1092,8 @@ exports.atualizarPerfil = async (
             cpf
         } = req.body;
 
-        // ====================================================
-        // VERIFICAR EMAIL
-        // ====================================================
-
         if (email) {
+
             const emailNormalizado =
                 String(email)
                     .trim()
@@ -809,7 +1129,8 @@ exports.atualizarPerfil = async (
 
         if (!usuarioAtualizado) {
             return res.status(404).json({
-                erro: "Usuário não encontrado"
+                erro:
+                    "Usuário não encontrado"
             });
         }
 
@@ -844,6 +1165,7 @@ exports.atualizarPerfil = async (
         });
 
     } catch (error) {
+
         console.error(
             "ERRO AO ATUALIZAR PERFIL:",
             error
@@ -865,29 +1187,38 @@ exports.atualizarEndereco = async (
     res
 ) => {
     try {
+
         const usuarioId =
             req.usuario?.id;
 
         if (!usuarioId) {
             return res.status(401).json({
-                erro: "Usuário não autenticado"
+                erro:
+                    "Usuário não autenticado"
             });
         }
 
         const endereco = {
-            cep: req.body.cep,
+            cep:
+                req.body.cep,
 
-            rua: req.body.rua,
+            rua:
+                req.body.rua,
 
-            numero: req.body.numero,
+            numero:
+                req.body.numero,
 
-            bairro: req.body.bairro,
+            bairro:
+                req.body.bairro,
 
-            complemento: req.body.complemento,
+            complemento:
+                req.body.complemento,
 
-            cidade: req.body.cidade,
+            cidade:
+                req.body.cidade,
 
-            estado: req.body.estado
+            estado:
+                req.body.estado
         };
 
         const usuarioAtualizado =
@@ -898,7 +1229,8 @@ exports.atualizarEndereco = async (
 
         if (!usuarioAtualizado) {
             return res.status(404).json({
-                erro: "Usuário não encontrado"
+                erro:
+                    "Usuário não encontrado"
             });
         }
 
@@ -913,6 +1245,7 @@ exports.atualizarEndereco = async (
         });
 
     } catch (error) {
+
         console.error(
             "ERRO AO ATUALIZAR ENDEREÇO:",
             error
@@ -934,6 +1267,7 @@ exports.solicitarRecuperacao = async (
     res
 ) => {
     try {
+
         console.log("");
         console.log(
             "=========================================="
@@ -957,7 +1291,8 @@ exports.solicitarRecuperacao = async (
 
         if (!email) {
             return res.status(400).json({
-                erro: "Informe seu email"
+                erro:
+                    "Informe seu email"
             });
         }
 
@@ -971,13 +1306,15 @@ exports.solicitarRecuperacao = async (
             );
 
         if (!usuario) {
+
             console.log(
                 "❌ Usuário não encontrado:",
                 email
             );
 
             return res.status(404).json({
-                erro: "Email não encontrado"
+                erro:
+                    "Email não encontrado"
             });
         }
 
@@ -1048,7 +1385,9 @@ exports.solicitarRecuperacao = async (
         });
 
     } catch (error) {
+
         console.error("");
+
         console.error(
             "❌❌❌ ERRO AO ENVIAR EMAIL ❌❌❌"
         );
@@ -1083,20 +1422,20 @@ exports.excluirConta = async (
     res
 ) => {
     try {
+
         console.log("");
-        console.log(
-            "=========================================="
-        );
-        console.log(
-            "🗑️ FOODJET - EXCLUSÃO DE CONTA"
-        );
+
         console.log(
             "=========================================="
         );
 
-        // ====================================================
-        // USUÁRIO AUTENTICADO
-        // ====================================================
+        console.log(
+            "🗑️ FOODJET - EXCLUSÃO DE CONTA"
+        );
+
+        console.log(
+            "=========================================="
+        );
 
         const usuarioId =
             req.usuario?.id;
@@ -1112,10 +1451,6 @@ exports.excluirConta = async (
                     "Usuário não autenticado"
             });
         }
-
-        // ====================================================
-        // BUSCAR USUÁRIO
-        // ====================================================
 
         const usuario =
             await User.buscarPorId(
@@ -1134,10 +1469,6 @@ exports.excluirConta = async (
             usuario.email
         );
 
-        // ====================================================
-        // VERIFICAR TIPO
-        // ====================================================
-
         const tipoUsuario =
             String(usuario.tipo || "")
                 .trim()
@@ -1154,10 +1485,6 @@ exports.excluirConta = async (
                     "Somente clientes podem excluir a conta."
             });
         }
-
-        // ====================================================
-        // EXCLUIR USUÁRIO
-        // ====================================================
 
         const excluido =
             await User.excluir(
@@ -1188,7 +1515,9 @@ exports.excluirConta = async (
         });
 
     } catch (error) {
+
         console.error("");
+
         console.error(
             "❌ ERRO AO EXCLUIR CONTA"
         );
@@ -1208,3 +1537,4 @@ exports.excluirConta = async (
         });
     }
 };
+
