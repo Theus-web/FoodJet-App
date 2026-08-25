@@ -1112,5 +1112,5 @@ exports.webhook = async (
 // ============================================================
 
 module.exports = {
-  webhook,
+  webhook: exports.webhook,
 };
