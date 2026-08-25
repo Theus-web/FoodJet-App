@@ -5,14 +5,12 @@
  *
  * PRODUÇÃO
  *
- * Responsável por:
- *
- * - Receber Webhooks do Mercado Pago
- * - Validar assinatura oficial
- * - Consultar Order
- * - Identificar pagamento
- * - Atualizar pedido FoodJet
- * - Notificar restaurante via Socket.IO
+ * - Recebe Webhooks do Mercado Pago
+ * - Valida assinatura HMAC
+ * - Consulta Order
+ * - Identifica pagamento
+ * - Atualiza pedido FoodJet
+ * - Notifica restaurante via Socket.IO
  *
  * ============================================================
  */
@@ -22,6 +20,7 @@ require("dotenv").config({
 });
 
 const express = require("express");
+const crypto = require("crypto");
 
 const {
   WebhookSignatureValidator,
@@ -33,10 +32,6 @@ const {
   consultarOrder,
 } = require("../services/mercadoPagoService");
 
-// ============================================================
-// ROUTER
-// ============================================================
-
 const router = express.Router();
 
 // ============================================================
@@ -47,28 +42,73 @@ const WEBHOOK_SECRET = String(
   process.env.MERCADOPAGO_WEBHOOK_SECRET || ""
 ).trim();
 
-// ============================================================
-// LOG INICIAL
-// ============================================================
-
 console.log("========================================");
 console.log("🔔 FOODJET - MERCADO PAGO WEBHOOK");
 console.log("========================================");
 
 console.log(
   "WEBHOOK SECRET:",
-  WEBHOOK_SECRET
-    ? "CONFIGURADO"
-    : "NÃO CONFIGURADO"
+  WEBHOOK_SECRET ? "CONFIGURADO" : "NÃO CONFIGURADO"
 );
 
 console.log("========================================");
 
 // ============================================================
-// VALIDAR ASSINATURA
+// PARSEAR X-SIGNATURE
 // ============================================================
 
-function validarAssinatura(req) {
+function extrairAssinatura(xSignature) {
+  const resultado = {
+    ts: null,
+    v1: null,
+  };
+
+  if (!xSignature) {
+    return resultado;
+  }
+
+  const partes = String(xSignature).split(",");
+
+  for (const parte of partes) {
+    const indice = parte.indexOf("=");
+
+    if (indice === -1) {
+      continue;
+    }
+
+    const chave = parte
+      .substring(0, indice)
+      .trim();
+
+    const valor = parte
+      .substring(indice + 1)
+      .trim();
+
+    if (chave === "ts") {
+      resultado.ts = valor;
+    }
+
+    if (chave === "v1") {
+      resultado.v1 = valor;
+    }
+  }
+
+  return resultado;
+}
+
+// ============================================================
+// VALIDAÇÃO MANUAL HMAC
+// ============================================================
+//
+// O Mercado Pago utiliza:
+//
+// id:<data.id>;request-id:<x-request-id>;ts:<ts>;
+//
+// HMAC-SHA256 usando o Webhook Secret.
+//
+// ============================================================
+
+function validarAssinaturaManual(req) {
   if (!WEBHOOK_SECRET) {
     console.error(
       "❌ MERCADOPAGO_WEBHOOK_SECRET NÃO CONFIGURADO"
@@ -83,121 +123,186 @@ function validarAssinatura(req) {
   const xRequestId =
     req.headers["x-request-id"];
 
+  // IMPORTANTE:
+  // O Mercado Pago envia o data.id na QUERY.
   const dataId =
-    req.query?.["data.id"] ||
-    req.body?.data?.id;
+    req.query?.["data.id"];
 
   console.log("========================================");
-  console.log("🔐 VALIDANDO ASSINATURA WEBHOOK");
+  console.log("🔐 VALIDAÇÃO MANUAL HMAC");
   console.log("========================================");
 
   console.log(
     "X-SIGNATURE:",
-    xSignature
-      ? "RECEBIDO"
-      : "NÃO RECEBIDO"
+    xSignature ? "RECEBIDO" : "NÃO RECEBIDO"
   );
 
   console.log(
     "X-REQUEST-ID:",
-    xRequestId
-      ? "RECEBIDO"
-      : "NÃO RECEBIDO"
+    xRequestId ? "RECEBIDO" : "NÃO RECEBIDO"
   );
 
   console.log(
-    "DATA.ID:",
+    "DATA.ID QUERY:",
     dataId || "NÃO RECEBIDO"
   );
 
-  // ----------------------------------------------------------
-  // VALIDAÇÃO BÁSICA
-  // ----------------------------------------------------------
-
   if (!xSignature) {
-    console.error(
-      "❌ X-SIGNATURE NÃO RECEBIDO"
-    );
-
+    console.error("❌ X-SIGNATURE AUSENTE");
     return false;
   }
 
   if (!xRequestId) {
-    console.error(
-      "❌ X-REQUEST-ID NÃO RECEBIDO"
-    );
-
+    console.error("❌ X-REQUEST-ID AUSENTE");
     return false;
   }
 
   if (!dataId) {
+    console.error("❌ DATA.ID AUSENTE NA QUERY");
+    return false;
+  }
+
+  const {
+    ts,
+    v1,
+  } = extrairAssinatura(xSignature);
+
+  console.log(
+    "TIMESTAMP:",
+    ts || "NÃO ENCONTRADO"
+  );
+
+  console.log(
+    "V1:",
+    v1 ? "RECEBIDO" : "NÃO RECEBIDO"
+  );
+
+  if (!ts || !v1) {
     console.error(
-      "❌ DATA.ID NÃO RECEBIDO"
+      "❌ TS OU V1 AUSENTE"
     );
 
     return false;
   }
 
-  // ----------------------------------------------------------
-  // EXTRAIR TS E V1
-  // ----------------------------------------------------------
+  // ==========================================================
+  // MANIFESTO OFICIAL
+  // ==========================================================
 
-  let timestamp = null;
-  let assinatura = null;
-
-  const partes =
-    String(xSignature).split(",");
-
-  for (const parte of partes) {
-    const indice =
-      parte.indexOf("=");
-
-    if (indice === -1) {
-      continue;
-    }
-
-    const chave =
-      parte
-        .substring(0, indice)
-        .trim();
-
-    const valor =
-      parte
-        .substring(indice + 1)
-        .trim();
-
-    if (chave === "ts") {
-      timestamp = valor;
-    }
-
-    if (chave === "v1") {
-      assinatura = valor;
-    }
-  }
+  const manifest =
+    `id:${dataId};request-id:${xRequestId};ts:${ts};`;
 
   console.log(
-    "TIMESTAMP:",
-    timestamp || "NÃO ENCONTRADO"
+    "MANIFEST:",
+    manifest
+  );
+
+  // ==========================================================
+  // HMAC SHA256
+  // ==========================================================
+
+  const hashCalculado =
+    crypto
+      .createHmac(
+        "sha256",
+        WEBHOOK_SECRET
+      )
+      .update(manifest)
+      .digest("hex");
+
+  console.log(
+    "HASH CALCULADO:",
+    hashCalculado
   );
 
   console.log(
     "HASH RECEBIDO:",
-    assinatura
-      ? "SIM"
-      : "NÃO"
+    v1
   );
 
-  if (!timestamp || !assinatura) {
+  // ==========================================================
+  // COMPARAÇÃO SEGURA
+  // ==========================================================
+
+  const hashBuffer =
+    Buffer.from(
+      hashCalculado,
+      "hex"
+    );
+
+  const recebidoBuffer =
+    Buffer.from(
+      v1,
+      "hex"
+    );
+
+  if (
+    hashBuffer.length !==
+    recebidoBuffer.length
+  ) {
     console.error(
-      "❌ TS OU V1 NÃO ENCONTRADO"
+      "❌ TAMANHO DOS HASHES DIFERENTE"
     );
 
     return false;
   }
 
-  // ----------------------------------------------------------
-  // VALIDAÇÃO OFICIAL SDK
-  // ----------------------------------------------------------
+  const valido =
+    crypto.timingSafeEqual(
+      hashBuffer,
+      recebidoBuffer
+    );
+
+  if (!valido) {
+    console.error(
+      "❌ ASSINATURA HMAC INVÁLIDA"
+    );
+
+    return false;
+  }
+
+  console.log("========================================");
+  console.log(
+    "✅ ASSINATURA HMAC VALIDADA"
+  );
+  console.log(
+    "✅ WEBHOOK AUTÊNTICO"
+  );
+  console.log("========================================");
+
+  return true;
+}
+
+// ============================================================
+// VALIDAÇÃO SDK + FALLBACK MANUAL
+// ============================================================
+
+function validarAssinatura(req) {
+  const xSignature =
+    req.headers["x-signature"];
+
+  const xRequestId =
+    req.headers["x-request-id"];
+
+  // SOMENTE QUERY
+  const dataId =
+    req.query?.["data.id"];
+
+  if (
+    !xSignature ||
+    !xRequestId ||
+    !dataId
+  ) {
+    console.error(
+      "❌ HEADERS/DATA.ID NECESSÁRIOS AUSENTES"
+    );
+
+    return false;
+  }
+
+  // ==========================================================
+  // PRIMEIRA TENTATIVA: SDK OFICIAL
+  // ==========================================================
 
   try {
     WebhookSignatureValidator.validate({
@@ -209,50 +314,37 @@ function validarAssinatura(req) {
 
     console.log("========================================");
     console.log(
-      "✅ ASSINATURA WEBHOOK VALIDADA"
-    );
-    console.log(
-      "✅ SDK OFICIAL MERCADO PAGO"
+      "✅ ASSINATURA VALIDADA PELO SDK MERCADO PAGO"
     );
     console.log("========================================");
 
     return true;
 
   } catch (erro) {
-    console.error("========================================");
-    console.error(
-      "❌ ASSINATURA WEBHOOK INVÁLIDA"
+
+    console.warn(
+      "⚠️ SDK REJEITOU A ASSINATURA."
     );
 
-    console.error(
-      "❌ O SDK DO MERCADO PAGO REJEITOU A ASSINATURA."
+    console.warn(
+      "⚠️ TENTANDO VALIDAÇÃO HMAC DIRETA..."
     );
 
-    console.error(
-      "⚠️ VERIFIQUE O MERCADOPAGO_WEBHOOK_SECRET."
-    );
-
-    console.error(
-      "⚠️ O SECRET PRECISA SER DA MESMA APLICAÇÃO."
-    );
-
-    console.error(
-      "⚠️ USE O SECRET DA APLICAÇÃO DE PRODUÇÃO."
-    );
-
-    console.error(
-      "ERRO:",
+    console.warn(
+      "ERRO SDK:",
       erro?.message || erro
     );
-
-    console.error("========================================");
-
-    return false;
   }
+
+  // ==========================================================
+  // SEGUNDA TENTATIVA: HMAC OFICIAL
+  // ==========================================================
+
+  return validarAssinaturaManual(req);
 }
 
 // ============================================================
-// LOCALIZAR PEDIDO FOODJET
+// LOCALIZAR PEDIDO
 // ============================================================
 
 async function localizarPedido(order) {
@@ -270,10 +362,6 @@ async function localizarPedido(order) {
     return null;
   }
 
-  // ----------------------------------------------------------
-  // REFERÊNCIA EXATA
-  // ----------------------------------------------------------
-
   let pedido =
     pedidos.find(
       (item) =>
@@ -281,11 +369,8 @@ async function localizarPedido(order) {
         String(referencia)
     );
 
-  // ----------------------------------------------------------
-  // FOODJET-123
-  // ----------------------------------------------------------
-
   if (!pedido) {
+
     const referenciaString =
       String(referencia);
 
@@ -295,6 +380,7 @@ async function localizarPedido(order) {
       );
 
     if (match) {
+
       pedido =
         pedidos.find(
           (item) =>
@@ -368,20 +454,12 @@ function notificarRestaurante(
   const sala =
     `restaurante_${pedido.restauranteId}`;
 
-  // ----------------------------------------------------------
-  // PAGAMENTO APROVADO
-  // ----------------------------------------------------------
-
   global.io
     .to(sala)
     .emit(
       "pagamento_aprovado",
       pedido
     );
-
-  // ----------------------------------------------------------
-  // NOVO PEDIDO
-  // ----------------------------------------------------------
 
   global.io
     .to(sala)
@@ -414,10 +492,11 @@ function notificarRestaurante(
 }
 
 // ============================================================
-// WEBHOOK PRINCIPAL
+// WEBHOOK
 // ============================================================
 
 async function webhook(req, res) {
+
   console.log("========================================");
   console.log(
     "🔔 FOODJET - MERCADO PAGO WEBHOOK"
@@ -438,13 +517,10 @@ async function webhook(req, res) {
     req.body?.action ||
     null;
 
+  // IMPORTANTE:
+  // Para assinatura usamos SEMPRE req.query["data.id"].
   const dataId =
     req.query?.["data.id"] ||
-    req.body?.data?.id ||
-    null;
-
-  const externalReference =
-    req.query?.["data.external_reference"] ||
     null;
 
   console.log(
@@ -460,11 +536,6 @@ async function webhook(req, res) {
   console.log(
     "🆔 DATA ID:",
     dataId
-  );
-
-  console.log(
-    "🔗 EXTERNAL REFERENCE:",
-    externalReference
   );
 
   console.log(
@@ -488,9 +559,11 @@ async function webhook(req, res) {
 
     if (!assinaturaValida) {
 
+      console.error("========================================");
       console.error(
         "❌ WEBHOOK REJEITADO POR ASSINATURA"
       );
+      console.error("========================================");
 
       return res
         .status(401)
@@ -502,7 +575,7 @@ async function webhook(req, res) {
     }
 
     // ========================================================
-    // TIPO DO EVENTO
+    // TIPO
     // ========================================================
 
     if (tipo !== "order") {
@@ -521,7 +594,7 @@ async function webhook(req, res) {
     }
 
     // ========================================================
-    // ORDER ID
+    // DATA ID
     // ========================================================
 
     if (!dataId) {
@@ -539,6 +612,10 @@ async function webhook(req, res) {
         });
     }
 
+    // ========================================================
+    // CONSULTAR ORDER
+    // ========================================================
+
     console.log("========================================");
     console.log(
       "🔎 CONSULTANDO ORDER"
@@ -550,10 +627,6 @@ async function webhook(req, res) {
     );
 
     console.log("========================================");
-
-    // ========================================================
-    // CONSULTAR ORDER
-    // ========================================================
 
     const order =
       await consultarOrder(
@@ -617,8 +690,7 @@ async function webhook(req, res) {
 
     console.log(
       "🆔 PAYMENT ID:",
-      payment?.id ||
-      "NÃO INFORMADO"
+      payment?.id || "NÃO INFORMADO"
     );
 
     console.log(
@@ -657,9 +729,6 @@ async function webhook(req, res) {
         "EXTERNAL REFERENCE:",
         order.external_reference
       );
-
-      // Evento é legítimo.
-      // Não retornar 401.
 
       return res
         .status(200)
@@ -728,7 +797,7 @@ async function webhook(req, res) {
       }
 
       // ------------------------------------------------------
-      // PAGAMENTO
+      // ATUALIZAR PAGAMENTO
       // ------------------------------------------------------
 
       pedido.pagamentoStatus =
@@ -814,7 +883,7 @@ async function webhook(req, res) {
       console.log("========================================");
 
       // ------------------------------------------------------
-      // SOCKET.IO
+      // SOCKET
       // ------------------------------------------------------
 
       notificarRestaurante(
@@ -1036,7 +1105,7 @@ router.post(
 );
 
 // ============================================================
-// LOG DA ROTA
+// LOG
 // ============================================================
 
 console.log(
