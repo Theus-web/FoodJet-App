@@ -1,4 +1,6 @@
-require("dotenv").config();
+require("dotenv").config({
+  override: true,
+});
 
 const http = require("http");
 const app = require("./app");
@@ -45,18 +47,18 @@ console.log(
 console.log("========================================");
 
 // ============================================================
-// ROTAS
+// ROTAS ESPECIAIS
 // ============================================================
 
-const promotionRoutes =
-  require("./routes/promotion");
-
+// PAGAMENTOS
 const paymentRoutes =
   require("./routes/paymentRoutes");
 
+// FINANCEIRO
 const financeRoutes =
   require("./routes/finance");
 
+// WEBHOOK MERCADO PAGO
 const mercadoPagoWebhookRoutes =
   require("./routes/mercadoPagoWebhook");
 
@@ -69,17 +71,8 @@ app.use(
   paymentRoutes
 );
 
-// ============================================================
-// PROMOÇÕES
-// ============================================================
-
-app.use(
-  "/api/promocoes",
-  promotionRoutes
-);
-
 console.log(
-  "🔥 ROTAS DE PROMOÇÃO CARREGADAS"
+  "💳 ROTA /api/pagamentos REGISTRADA"
 );
 
 // ============================================================
@@ -89,6 +82,10 @@ console.log(
 app.use(
   "/api/finance",
   financeRoutes
+);
+
+console.log(
+  "💰 ROTA /api/finance REGISTRADA"
 );
 
 // ============================================================
@@ -123,12 +120,14 @@ const io =
   new Server(server, {
     cors: {
       origin: "*",
+
       methods: [
         "GET",
         "POST",
         "PUT",
         "PATCH",
         "DELETE",
+        "OPTIONS",
       ],
     },
   });
@@ -218,9 +217,9 @@ async function iniciarServidor() {
       "========================================"
     );
 
-    // --------------------------------------------------------
+    // ========================================================
     // VALIDAR MERCADO PAGO
-    // --------------------------------------------------------
+    // ========================================================
 
     if (!mercadoPagoToken) {
 
@@ -235,9 +234,29 @@ async function iniciarServidor() {
       );
     }
 
-    // --------------------------------------------------------
+    // ========================================================
+    // VALIDAR WEBHOOK SECRET
+    // ========================================================
+
+    const webhookSecret =
+      process.env.MERCADOPAGO_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+
+      console.warn(
+        "⚠️ MERCADOPAGO_WEBHOOK_SECRET NÃO CONFIGURADO"
+      );
+
+    } else {
+
+      console.log(
+        "✅ MERCADOPAGO_WEBHOOK_SECRET CONFIGURADO"
+      );
+    }
+
+    // ========================================================
     // BANCO
-    // --------------------------------------------------------
+    // ========================================================
 
     await conectar();
 
@@ -245,9 +264,9 @@ async function iniciarServidor() {
       "✅ Banco de dados conectado"
     );
 
-    // --------------------------------------------------------
+    // ========================================================
     // SERVIDOR
-    // --------------------------------------------------------
+    // ========================================================
 
     server.listen(
       PORT,
@@ -275,11 +294,15 @@ async function iniciarServidor() {
         );
 
         console.log(
-          "💳 MERCADO PAGO: CONFIGURADO"
+          mercadoPagoToken
+            ? "💳 MERCADO PAGO: CONFIGURADO"
+            : "💳 MERCADO PAGO: NÃO CONFIGURADO"
         );
 
         console.log(
-          "🔔 WEBHOOK: ATIVO"
+          webhookSecret
+            ? "🔔 WEBHOOK: ATIVO"
+            : "🔔 WEBHOOK: SECRET NÃO CONFIGURADO"
         );
 
         console.log(
