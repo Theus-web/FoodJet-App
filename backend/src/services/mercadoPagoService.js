@@ -1,100 +1,64 @@
-
 /**
  * ============================================================
  * FOODJET - MERCADO PAGO SERVICE
  * ============================================================
  *
- * PIX REAL - MERCADO PAGO ORDERS API
+ * PRODUÇÃO
  *
- * AMBIENTE:
- * - PRODUÇÃO
+ * Responsável por:
  *
- * ENDPOINT:
- * https://api.mercadopago.com/v1/orders
- *
- * RECURSOS:
- * - Criação de Order PIX REAL
- * - X-Idempotency-Key
- * - QR Code
- * - QR Code Base64
- * - Ticket URL
- * - Consulta da Order
- * - Cancelamento da Order
- *
- * IMPORTANTE:
- * - O Access Token fica SOMENTE no backend.
- * - Nunca coloque o Access Token no Flutter.
- * - Nunca envie o Access Token para o GitHub.
- * - O .env deve permanecer protegido.
+ * - Inicializar Mercado Pago
+ * - Criar Orders
+ * - Consultar Orders
+ * - Consultar pagamentos dentro da Order
+ * - Trabalhar exclusivamente com Access Token
  *
  * ============================================================
  */
 
-require("dotenv").config({ override: true });
+require("dotenv").config({
+  override: true,
+});
 
-const crypto = require("crypto");
+const {
+  MercadoPagoConfig,
+  Order,
+} = require("mercadopago");
 
 // ============================================================
 // CONFIGURAÇÃO
 // ============================================================
 
 const ACCESS_TOKEN =
-  process.env.MERCADOPAGO_ACCESS_TOKEN?.trim();
+  String(
+    process.env.MERCADOPAGO_ACCESS_TOKEN || ""
+  ).trim();
 
-const ENVIRONMENT =
-  process.env.MERCADOPAGO_ENVIRONMENT?.trim().toLowerCase() ||
-  "production";
+const AMBIENTE =
+  String(
+    process.env.MERCADOPAGO_ENV || "production"
+  ).trim();
 
-const API_URL =
-  "https://api.mercadopago.com/v1/orders";
-
-// ============================================================
-// LOG INICIAL
-// ============================================================
-
-console.log("========================================");
-console.log("🔐 MERCADO PAGO - FOODJET");
-console.log("========================================");
-
-console.log(
-  "TOKEN CARREGADO:",
-  ACCESS_TOKEN ? "SIM" : "NÃO"
-);
-
-console.log(
-  "AMBIENTE:",
-  ENVIRONMENT
-);
-
-console.log(
-  "API:",
-  API_URL
-);
-
-console.log("========================================");
-
-// ============================================================
-// VALIDAÇÃO DE AMBIENTE
-// ============================================================
-
-if (ENVIRONMENT !== "production") {
-  console.error("❌ AMBIENTE INVÁLIDO");
-  console.error(
-    "O Mercado Pago Service do FoodJet está configurado exclusivamente para PRODUÇÃO."
+const TIMEOUT =
+  Number(
+    process.env.MERCADOPAGO_TIMEOUT || 10000
   );
 
-  throw new Error(
-    "MERCADOPAGO_ENVIRONMENT deve ser 'production'."
-  );
-}
-
 // ============================================================
-// VALIDAÇÃO DO TOKEN
+// VALIDAÇÃO
 // ============================================================
 
 if (!ACCESS_TOKEN) {
   console.error(
-    "❌ MERCADOPAGO_ACCESS_TOKEN NÃO CONFIGURADO NO .ENV"
+    "========================================"
+  );
+
+  console.error(
+    "❌ MERCADOPAGO_ACCESS_TOKEN NÃO CONFIGURADO"
+  );
+
+  console.error(
+    "========================================"
   );
 
   throw new Error(
@@ -103,698 +67,331 @@ if (!ACCESS_TOKEN) {
 }
 
 // ============================================================
-// IDEMPOTENCY KEY
+// IDENTIFICAR TIPO DO TOKEN
 // ============================================================
 
-function gerarIdempotencyKey() {
-  return crypto.randomUUID();
+const tokenEhProducao =
+  ACCESS_TOKEN.startsWith(
+    "APP_USR-"
+  );
+
+const tokenEhTeste =
+  ACCESS_TOKEN.startsWith(
+    "TEST-"
+  );
+
+console.log(
+  "========================================"
+);
+
+console.log(
+  "🔐 MERCADO PAGO - FOODJET"
+);
+
+console.log(
+  "========================================"
+);
+
+console.log(
+  "TOKEN CARREGADO: SIM"
+);
+
+console.log(
+  "AMBIENTE:",
+  AMBIENTE
+);
+
+if (tokenEhProducao) {
+  console.log(
+    "TIPO DO TOKEN: ✅ PRODUÇÃO"
+  );
+} else if (tokenEhTeste) {
+  console.log(
+    "TIPO DO TOKEN: ⚠️ TESTE"
+  );
+} else {
+  console.log(
+    "TIPO DO TOKEN: ⚠️ DESCONHECIDO"
+  );
 }
 
-// ============================================================
-// NORMALIZAR VALOR
-// ============================================================
+console.log(
+  "API: https://api.mercadopago.com/v1/orders"
+);
 
-function normalizarValor(valor) {
-  const valorNumerico = Number(valor);
-
-  if (
-    !Number.isFinite(valorNumerico) ||
-    valorNumerico <= 0
-  ) {
-    throw new Error(
-      `Valor inválido para PIX: ${valor}`
-    );
-  }
-
-  return valorNumerico;
-}
+console.log(
+  "========================================"
+);
 
 // ============================================================
-// VALIDAR E-MAIL REAL
+// CLIENTE MERCADO PAGO
 // ============================================================
 
-function validarEmail(email) {
-  if (!email || typeof email !== "string") {
-    throw new Error(
-      "E-mail do pagador não informado."
-    );
-  }
+const mercadoPagoClient =
+  new MercadoPagoConfig({
+    accessToken:
+      ACCESS_TOKEN,
 
-  const emailNormalizado =
-    email.trim().toLowerCase();
-
-  // Validação simples para evitar envio
-  // de e-mail obviamente inválido.
-
-  const emailValido =
-    /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-      emailNormalizado
-    );
-
-  if (!emailValido) {
-    throw new Error(
-      "E-mail do pagador inválido."
-    );
-  }
-
-  return emailNormalizado;
-}
-
-// ============================================================
-// VALIDAR REFERÊNCIA
-// ============================================================
-
-function validarReferencia(referencia) {
-  if (
-    !referencia ||
-    typeof referencia !== "string"
-  ) {
-    throw new Error(
-      "Referência externa não informada."
-    );
-  }
-
-  const referenciaNormalizada =
-    referencia.trim();
-
-  if (!referenciaNormalizada) {
-    throw new Error(
-      "Referência externa inválida."
-    );
-  }
-
-  // A documentação da Orders API limita
-  // external_reference a 64 caracteres.
-
-  if (referenciaNormalizada.length > 64) {
-    throw new Error(
-      "A referência externa deve possuir no máximo 64 caracteres."
-    );
-  }
-
-  return referenciaNormalizada;
-}
-
-// ============================================================
-// CRIAR PIX REAL
-// ============================================================
-
-async function criarPix({
-  valor,
-  email,
-  referencia,
-  descricao,
-}) {
-  console.log("========================================");
-  console.log("💳 FOODJET - GERAR PIX REAL");
-  console.log("========================================");
-
-  // ----------------------------------------------------------
-  // TOKEN
-  // ----------------------------------------------------------
-
-  if (!ACCESS_TOKEN) {
-    throw new Error(
-      "MERCADOPAGO_ACCESS_TOKEN não configurado."
-    );
-  }
-
-  // ----------------------------------------------------------
-  // AMBIENTE
-  // ----------------------------------------------------------
-
-  if (ENVIRONMENT !== "production") {
-    throw new Error(
-      "FoodJet configurado para aceitar somente ambiente de produção."
-    );
-  }
-
-  // ----------------------------------------------------------
-  // VALOR
-  // ----------------------------------------------------------
-
-  const valorNumerico =
-    normalizarValor(valor);
-
-  // ----------------------------------------------------------
-  // E-MAIL REAL
-  // ----------------------------------------------------------
-
-  const emailNormalizado =
-    validarEmail(email);
-
-  // ----------------------------------------------------------
-  // REFERÊNCIA
-  // ----------------------------------------------------------
-
-  const referenciaFinal =
-    validarReferencia(
-      referencia ||
-      `FOODJET-${Date.now()}`
-    );
-
-  // ----------------------------------------------------------
-  // DESCRIÇÃO
-  // ----------------------------------------------------------
-
-  const descricaoFinal =
-    descricao ||
-    `Pedido FoodJet #${referenciaFinal}`;
-
-  // ----------------------------------------------------------
-  // IDEMPOTENCY
-  // ----------------------------------------------------------
-
-  const idempotencyKey =
-    gerarIdempotencyKey();
-
-  // ----------------------------------------------------------
-  // LOG
-  // ----------------------------------------------------------
-
-  console.log(
-    "💰 VALOR:",
-    valorNumerico.toFixed(2)
-  );
-
-  console.log(
-    "📧 PAGADOR:",
-    emailNormalizado
-  );
-
-  console.log(
-    "📦 REFERÊNCIA:",
-    referenciaFinal
-  );
-
-  console.log(
-    "📝 DESCRIÇÃO:",
-    descricaoFinal
-  );
-
-  console.log(
-    "🌎 AMBIENTE:",
-    "PRODUÇÃO"
-  );
-
-  console.log(
-    "🔑 IDEMPOTENCY KEY:",
-    idempotencyKey
-  );
-
-  console.log("========================================");
-
-  // ==========================================================
-  // PAYLOAD ORDERS API - PRODUÇÃO
-  // ==========================================================
-
-  const body = {
-    type: "online",
-
-    processing_mode: "automatic",
-
-    total_amount:
-      valorNumerico.toFixed(2),
-
-    external_reference:
-      referenciaFinal,
-
-    transactions: {
-      payments: [
-        {
-          amount:
-            valorNumerico.toFixed(2),
-
-          payment_method: {
-            id: "pix",
-            type: "bank_transfer",
-          },
-        },
-      ],
+    options: {
+      timeout:
+        TIMEOUT,
     },
+  });
 
-    // ========================================================
-    // PAYER REAL
-    // ========================================================
-    //
-    // NÃO existe:
-    // first_name: "APRO"
-    // last_name: "TESTE"
-    //
-    // Esses dados eram utilizados no ambiente de teste.
-    // ========================================================
+// ============================================================
+// CLIENTE ORDERS
+// ============================================================
 
-    payer: {
-      email:
-        emailNormalizado,
-    },
-  };
-
-  // ==========================================================
-  // LOG PAYLOAD
-  // ==========================================================
-
-  console.log(
-    "📤 PAYLOAD ORDERS - PRODUÇÃO:"
+const orderClient =
+  new Order(
+    mercadoPagoClient
   );
 
-  console.log(
-    JSON.stringify(
-      body,
-      null,
-      2
-    )
-  );
+// ============================================================
+// CRIAR ORDER
+// ============================================================
 
-  console.log("========================================");
-
-  // ==========================================================
-  // REQUISIÇÃO
-  // ==========================================================
-
-  let resposta;
-
+async function criarOrder(
+  dados,
+  idempotencyKey = null
+) {
   try {
-    resposta =
-      await fetch(
-        API_URL,
-        {
-          method: "POST",
-
-          headers: {
-            Authorization:
-              `Bearer ${ACCESS_TOKEN}`,
-
-            "Content-Type":
-              "application/json",
-
-            "X-Idempotency-Key":
-              idempotencyKey,
-          },
-
-          body:
-            JSON.stringify(body),
-        }
+    if (!dados) {
+      throw new Error(
+        "Dados da Order não informados."
       );
+    }
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "💳 MERCADO PAGO - CRIAR ORDER"
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "💰 TOTAL:",
+      dados.total_amount
+    );
+
+    console.log(
+      "🔗 EXTERNAL REFERENCE:",
+      dados.external_reference
+    );
+
+    // --------------------------------------------------------
+    // REQUEST OPTIONS
+    // --------------------------------------------------------
+
+    const requestOptions = {};
+
+    if (idempotencyKey) {
+      requestOptions.idempotencyKey =
+        String(
+          idempotencyKey
+        );
+    }
+
+    // --------------------------------------------------------
+    // CRIAR
+    // --------------------------------------------------------
+
+    const resposta =
+      await orderClient.create({
+        body: dados,
+        requestOptions,
+      });
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "✅ ORDER CRIADA"
+    );
+
+    console.log(
+      "🆔 ORDER ID:",
+      resposta?.id
+    );
+
+    console.log(
+      "📊 STATUS:",
+      resposta?.status
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    return resposta;
+
   } catch (erro) {
     console.error(
       "========================================"
     );
 
     console.error(
-      "❌ ERRO DE CONEXÃO MERCADO PAGO"
+      "❌ ERRO AO CRIAR ORDER MERCADO PAGO"
     );
 
     console.error(
-      erro
-    );
-
-    console.error(
-      "========================================"
-    );
-
-    throw new Error(
-      `Falha de conexão com Mercado Pago: ${erro.message}`
-    );
-  }
-
-  // ==========================================================
-  // RESPOSTA
-  // ==========================================================
-
-  const texto =
-    await resposta.text();
-
-  let dados;
-
-  try {
-    dados =
-      texto
-        ? JSON.parse(texto)
-        : {};
-  } catch {
-    dados = {
-      raw: texto,
-    };
-  }
-
-  // ==========================================================
-  // ERRO
-  // ==========================================================
-
-  if (!resposta.ok) {
-    console.error(
-      "========================================"
-    );
-
-    console.error(
-      "❌ ERRO MERCADO PAGO - ORDERS API"
-    );
-
-    console.error(
-      "🌎 AMBIENTE: PRODUÇÃO"
+      "MENSAGEM:",
+      erro?.message
     );
 
     console.error(
       "STATUS:",
-      resposta.status
+      erro?.status ||
+      erro?.response?.status
     );
 
     console.error(
-      "RESPOSTA:"
-    );
-
-    console.error(
-      JSON.stringify(
-        dados,
-        null,
-        2
-      )
+      "DETALHES:",
+      erro?.response?.data ||
+      erro?.cause ||
+      ""
     );
 
     console.error(
       "========================================"
     );
 
-    const erro =
-      new Error(
-        dados?.message ||
-        dados?.error ||
-        "Mercado Pago API error"
-      );
-
-    erro.status =
-      resposta.status;
-
-    erro.causes =
-      dados?.errors ||
-      dados?.causes ||
-      [];
-
-    erro.response =
-      dados;
-
     throw erro;
   }
-
-  // ==========================================================
-  // ORDER CRIADA
-  // ==========================================================
-
-  console.log(
-    "========================================"
-  );
-
-  console.log(
-    "✅ PIX REAL CRIADO COM SUCESSO"
-  );
-
-  console.log(
-    "========================================"
-  );
-
-  console.log(
-    "🆔 ORDER ID:",
-    dados.id
-  );
-
-  console.log(
-    "📊 ORDER STATUS:",
-    dados.status
-  );
-
-  console.log(
-    "📋 STATUS DETAIL:",
-    dados.status_detail
-  );
-
-  // ==========================================================
-  // PAGAMENTO
-  // ==========================================================
-
-  const payment =
-    dados?.transactions?.payments?.[0];
-
-  if (!payment) {
-    console.error(
-      "⚠️ transactions.payments[0] não retornado."
-    );
-
-    throw new Error(
-      "Pagamento PIX não retornado pela Orders API."
-    );
-  }
-
-  // ==========================================================
-  // PAYMENT METHOD
-  // ==========================================================
-
-  const paymentMethod =
-    payment.payment_method || {};
-
-  // ==========================================================
-  // PIX
-  // ==========================================================
-
-  const qrCode =
-    paymentMethod.qr_code ||
-    null;
-
-  const qrCodeBase64 =
-    paymentMethod.qr_code_base64 ||
-    null;
-
-  const ticketUrl =
-    paymentMethod.ticket_url ||
-    null;
-
-  // ==========================================================
-  // LOG PAGAMENTO
-  // ==========================================================
-
-  console.log(
-    "🆔 PAYMENT ID:",
-    payment.id
-  );
-
-  console.log(
-    "📊 PAYMENT STATUS:",
-    payment.status
-  );
-
-  console.log(
-    "📋 PAYMENT DETAIL:",
-    payment.status_detail
-  );
-
-  console.log(
-    "🔑 QR CODE:",
-    qrCode
-      ? "SIM"
-      : "NÃO"
-  );
-
-  console.log(
-    "🖼️ QR CODE BASE64:",
-    qrCodeBase64
-      ? "SIM"
-      : "NÃO"
-  );
-
-  console.log(
-    "🔗 TICKET URL:",
-    ticketUrl
-      ? "SIM"
-      : "NÃO"
-  );
-
-  console.log(
-    "⏰ EXPIRAÇÃO:",
-    payment.date_of_expiration ||
-    "não informado"
-  );
-
-  console.log(
-    "========================================"
-  );
-
-  // ==========================================================
-  // RETORNO FOODJET
-  // ==========================================================
-
-  return {
-    // --------------------------------------------------------
-    // ORDER
-    // --------------------------------------------------------
-
-    id:
-      dados.id,
-
-    order_id:
-      dados.id,
-
-    status:
-      dados.status,
-
-    status_detail:
-      dados.status_detail,
-
-    external_reference:
-      dados.external_reference,
-
-    total_amount:
-      dados.total_amount,
-
-    currency:
-      dados.currency,
-
-    // --------------------------------------------------------
-    // PAYMENT
-    // --------------------------------------------------------
-
-    payment_id:
-      payment.id,
-
-    payment_status:
-      payment.status,
-
-    payment_status_detail:
-      payment.status_detail,
-
-    payment_amount:
-      payment.amount,
-
-    // --------------------------------------------------------
-    // PIX
-    // --------------------------------------------------------
-
-    qr_code:
-      qrCode,
-
-    qr_code_base64:
-      qrCodeBase64,
-
-    ticket_url:
-      ticketUrl,
-
-    // --------------------------------------------------------
-    // EXPIRAÇÃO
-    // --------------------------------------------------------
-
-    date_of_expiration:
-      payment.date_of_expiration ||
-      null,
-
-    // --------------------------------------------------------
-    // PAYMENT METHOD
-    // --------------------------------------------------------
-
-    payment_method:
-      paymentMethod,
-
-    // --------------------------------------------------------
-    // TRANSACTIONS
-    // --------------------------------------------------------
-
-    transactions:
-      dados.transactions,
-
-    // --------------------------------------------------------
-    // DADOS COMPLETOS
-    // --------------------------------------------------------
-
-    raw:
-      dados,
-  };
 }
 
 // ============================================================
 // CONSULTAR ORDER
 // ============================================================
 
-async function consultarOrder(orderId) {
-  if (!ACCESS_TOKEN) {
-    throw new Error(
-      "MERCADOPAGO_ACCESS_TOKEN não configurado."
-    );
-  }
-
-  if (!orderId) {
-    throw new Error(
-      "orderId não informado."
-    );
-  }
-
-  console.log(
-    "========================================"
-  );
-
-  console.log(
-    "🔎 FOODJET - CONSULTAR ORDER"
-  );
-
-  console.log(
-    "🌎 AMBIENTE: PRODUÇÃO"
-  );
-
-  console.log(
-    "🆔 ORDER ID:",
-    orderId
-  );
-
-  console.log(
-    "========================================"
-  );
-
-  let resposta;
-
+async function consultarOrder(
+  orderId
+) {
   try {
-    resposta =
-      await fetch(
-        `${API_URL}/${encodeURIComponent(orderId)}`,
-        {
-          method: "GET",
-
-          headers: {
-            Authorization:
-              `Bearer ${ACCESS_TOKEN}`,
-
-            "Content-Type":
-              "application/json",
-          },
-        }
+    if (!orderId) {
+      throw new Error(
+        "Order ID não informado."
       );
+    }
+
+    const id =
+      String(
+        orderId
+      ).trim();
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "🔎 MERCADO PAGO - CONSULTAR ORDER"
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "🆔 ORDER ID:",
+      id
+    );
+
+    // --------------------------------------------------------
+    // GET /v1/orders/{order_id}
+    // --------------------------------------------------------
+
+    const resposta =
+      await orderClient.get({
+        id,
+      });
+
+    if (!resposta) {
+      throw new Error(
+        "Mercado Pago não retornou dados da Order."
+      );
+    }
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "✅ ORDER CONSULTADA"
+    );
+
+    console.log(
+      "🆔 ORDER ID:",
+      resposta?.id
+    );
+
+    console.log(
+      "📊 STATUS:",
+      resposta?.status
+    );
+
+    console.log(
+      "📋 STATUS DETAIL:",
+      resposta?.status_detail
+    );
+
+    console.log(
+      "🔗 EXTERNAL REFERENCE:",
+      resposta?.external_reference
+    );
+
+    // --------------------------------------------------------
+    // PAYMENT
+    // --------------------------------------------------------
+
+    const payment =
+      resposta
+        ?.transactions
+        ?.payments
+        ?.[0];
+
+    if (payment) {
+      console.log(
+        "----------------------------------------"
+      );
+
+      console.log(
+        "💳 PAYMENT"
+      );
+
+      console.log(
+        "🆔 PAYMENT ID:",
+        payment?.id
+      );
+
+      console.log(
+        "📊 PAYMENT STATUS:",
+        payment?.status
+      );
+
+      console.log(
+        "📋 PAYMENT DETAIL:",
+        payment?.status_detail
+      );
+
+      console.log(
+        "💰 PAYMENT AMOUNT:",
+        payment?.amount
+      );
+    }
+
+    console.log(
+      "========================================"
+    );
+
+    return resposta;
+
   } catch (erro) {
-    console.error(
-      "❌ ERRO AO CONSULTAR ORDER:"
-    );
-
-    console.error(
-      erro
-    );
-
-    throw new Error(
-      `Falha de conexão ao consultar Order: ${erro.message}`
-    );
-  }
-
-  const texto =
-    await resposta.text();
-
-  let dados;
-
-  try {
-    dados =
-      texto
-        ? JSON.parse(texto)
-        : {};
-  } catch {
-    dados = {
-      raw: texto,
-    };
-  }
-
-  if (!resposta.ok) {
     console.error(
       "========================================"
     );
@@ -804,270 +401,204 @@ async function consultarOrder(orderId) {
     );
 
     console.error(
-      "STATUS:",
-      resposta.status
+      "🆔 ORDER ID:",
+      orderId
     );
 
     console.error(
-      JSON.stringify(
-        dados,
-        null,
-        2
-      )
+      "MENSAGEM:",
+      erro?.message
+    );
+
+    console.error(
+      "STATUS:",
+      erro?.status ||
+      erro?.response?.status
+    );
+
+    console.error(
+      "DETALHES:",
+      erro?.response?.data ||
+      erro?.cause ||
+      ""
     );
 
     console.error(
       "========================================"
     );
 
-    const erro =
-      new Error(
-        dados?.message ||
-        dados?.error ||
-        "Erro ao consultar Order"
-      );
-
-    erro.status =
-      resposta.status;
-
-    erro.response =
-      dados;
-
-    erro.causes =
-      dados?.errors ||
-      dados?.causes ||
-      [];
-
     throw erro;
   }
+}
 
-  // ==========================================================
-  // EXTRAIR PAGAMENTO
-  // ==========================================================
+// ============================================================
+// EXTRAIR PAYMENT DA ORDER
+// ============================================================
 
+function obterPayment(
+  order
+) {
+  return (
+    order
+      ?.transactions
+      ?.payments
+      ?.[0] ||
+    null
+  );
+}
+
+// ============================================================
+// VERIFICAR PAGAMENTO APROVADO
+// ============================================================
+
+function pagamentoAprovado(
+  order
+) {
   const payment =
-    dados?.transactions?.payments?.[0] ||
-    null;
-
-  // ==========================================================
-  // LOG
-  // ==========================================================
-
-  console.log(
-    "========================================"
-  );
-
-  console.log(
-    "✅ ORDER CONSULTADA"
-  );
-
-  console.log(
-    "========================================"
-  );
-
-  console.log(
-    "🆔 ORDER ID:",
-    dados.id
-  );
-
-  console.log(
-    "📊 ORDER STATUS:",
-    dados.status
-  );
-
-  console.log(
-    "📋 ORDER DETAIL:",
-    dados.status_detail
-  );
-
-  if (payment) {
-    console.log(
-      "🆔 PAYMENT ID:",
-      payment.id
+    obterPayment(
+      order
     );
 
-    console.log(
-      "📊 PAYMENT STATUS:",
-      payment.status
-    );
-
-    console.log(
-      "📋 PAYMENT DETAIL:",
-      payment.status_detail
-    );
-  }
-
-  console.log(
-    "========================================"
+  return (
+    order?.status ===
+      "processed" &&
+    payment?.status ===
+      "processed" &&
+    payment?.status_detail ===
+      "accredited"
   );
-
-  return dados;
 }
 
 // ============================================================
-// CANCELAR ORDER
-// ============================================================
-//
-// Orders API atual:
-// POST /v1/orders/{order_id}/cancel
-//
+// VERIFICAR PAGAMENTO PENDENTE
 // ============================================================
 
-async function cancelarOrder(orderId) {
-  if (!ACCESS_TOKEN) {
-    throw new Error(
-      "MERCADOPAGO_ACCESS_TOKEN não configurado."
-    );
-  }
-
-  if (!orderId) {
-    throw new Error(
-      "orderId não informado."
-    );
-  }
-
-  console.log(
-    "========================================"
+function pagamentoPendente(
+  order
+) {
+  return (
+    order?.status ===
+      "action_required"
   );
-
-  console.log(
-    "❌ FOODJET - CANCELAR ORDER"
-  );
-
-  console.log(
-    "🌎 AMBIENTE: PRODUÇÃO"
-  );
-
-  console.log(
-    "🆔 ORDER ID:",
-    orderId
-  );
-
-  console.log(
-    "========================================"
-  );
-
-  const cancelUrl =
-    `${API_URL}/${encodeURIComponent(orderId)}/cancel`;
-
-  let resposta;
-
-  try {
-    resposta =
-      await fetch(
-        cancelUrl,
-        {
-          method: "POST",
-
-          headers: {
-            Authorization:
-              `Bearer ${ACCESS_TOKEN}`,
-
-            "Content-Type":
-              "application/json",
-
-            "X-Idempotency-Key":
-              gerarIdempotencyKey(),
-          },
-        }
-      );
-  } catch (erro) {
-    throw new Error(
-      `Falha de conexão ao cancelar Order: ${erro.message}`
-    );
-  }
-
-  const texto =
-    await resposta.text();
-
-  let dados;
-
-  try {
-    dados =
-      texto
-        ? JSON.parse(texto)
-        : {};
-  } catch {
-    dados = {
-      raw: texto,
-    };
-  }
-
-  if (!resposta.ok) {
-    console.error(
-      "========================================"
-    );
-
-    console.error(
-      "❌ ERRO AO CANCELAR ORDER"
-    );
-
-    console.error(
-      "STATUS:",
-      resposta.status
-    );
-
-    console.error(
-      JSON.stringify(
-        dados,
-        null,
-        2
-      )
-    );
-
-    console.error(
-      "========================================"
-    );
-
-    const erro =
-      new Error(
-        dados?.message ||
-        dados?.error ||
-        "Erro ao cancelar Order"
-      );
-
-    erro.status =
-      resposta.status;
-
-    erro.response =
-      dados;
-
-    erro.causes =
-      dados?.errors ||
-      dados?.causes ||
-      [];
-
-    throw erro;
-  }
-
-  console.log(
-    "========================================"
-  );
-
-  console.log(
-    "✅ ORDER CANCELADA"
-  );
-
-  console.log(
-    "🆔 ORDER ID:",
-    dados.id ||
-    orderId
-  );
-
-  console.log(
-    "========================================"
-  );
-
-  return dados;
 }
 
 // ============================================================
-// EXPORTS
+// VERIFICAR PAGAMENTO FALHOU
+// ============================================================
+
+function pagamentoFalhou(
+  order
+) {
+  return (
+    order?.status ===
+      "failed"
+  );
+}
+
+// ============================================================
+// VERIFICAR CANCELADO / EXPIRADO
+// ============================================================
+
+function pagamentoCancelado(
+  order
+) {
+  return (
+    order?.status ===
+      "cancelled" ||
+    order?.status ===
+      "expired"
+  );
+}
+
+// ============================================================
+// RESUMO DO PAGAMENTO
+// ============================================================
+
+function obterResumoPagamento(
+  order
+) {
+  const payment =
+    obterPayment(
+      order
+    );
+
+  return {
+    orderId:
+      order?.id ||
+      null,
+
+    orderStatus:
+      order?.status ||
+      null,
+
+    orderStatusDetail:
+      order?.status_detail ||
+      null,
+
+    externalReference:
+      order?.external_reference ||
+      null,
+
+    paymentId:
+      payment?.id ||
+      null,
+
+    paymentStatus:
+      payment?.status ||
+      null,
+
+    paymentStatusDetail:
+      payment?.status_detail ||
+      null,
+
+    paymentAmount:
+      payment?.amount ||
+      null,
+
+    aprovado:
+      pagamentoAprovado(
+        order
+      ),
+
+    pendente:
+      pagamentoPendente(
+        order
+      ),
+
+    falhou:
+      pagamentoFalhou(
+        order
+      ),
+
+    cancelado:
+      pagamentoCancelado(
+        order
+      ),
+  };
+}
+
+// ============================================================
+// EXPORTAÇÃO
 // ============================================================
 
 module.exports = {
-  criarPix,
-  consultarOrder,
-  cancelarOrder,
-};
+  criarOrder,
 
+  consultarOrder,
+
+  obterPayment,
+
+  pagamentoAprovado,
+
+  pagamentoPendente,
+
+  pagamentoFalhou,
+
+  pagamentoCancelado,
+
+  obterResumoPagamento,
+
+  mercadoPagoClient,
+
+  orderClient,
+};
