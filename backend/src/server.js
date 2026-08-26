@@ -21,6 +21,25 @@ const PORT = process.env.PORT || 3000;
 const mercadoPagoToken =
   process.env.MERCADOPAGO_ACCESS_TOKEN;
 
+const crypto = require("crypto");
+
+const secretFingerprint =
+  crypto
+    .createHash("sha256")
+    .update(
+      String(
+        process.env.MERCADOPAGO_WEBHOOK_SECRET || ""
+      ),
+      "utf8"
+    )
+    .digest("hex");
+
+console.log(
+  "🔐 WEBHOOK SECRET FINGERPRINT:",
+  secretFingerprint.substring(0, 8)
+);  
+
+
 console.log("========================================");
 console.log("🔐 FOODJET - MERCADO PAGO");
 console.log("========================================");
