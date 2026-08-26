@@ -1,6 +1,4 @@
-require("dotenv").config({
-  override: true,
-});
+require("dotenv").config();
 
 const http = require("http");
 const app = require("./app");

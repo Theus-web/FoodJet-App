@@ -17,9 +17,7 @@
  * ============================================================
  */
 
-require("dotenv").config({
-  override: true,
-});
+require("dotenv").config();
 
 const {
   MercadoPagoConfig,

@@ -1,3 +1,4 @@
+
 /**
  * ============================================================
  * FOODJET - MERCADO PAGO WEBHOOK
@@ -15,9 +16,7 @@
  * ============================================================
  */
 
-require("dotenv").config({
-  override: true,
-});
+require("dotenv").config();
 
 const express = require("express");
 const crypto = require("crypto");
@@ -54,7 +53,7 @@ console.log(
 console.log("========================================");
 
 // ============================================================
-// PARSEAR X-SIGNATURE
+// EXTRAIR X-SIGNATURE
 // ============================================================
 
 function extrairAssinatura(xSignature) {
@@ -78,7 +77,8 @@ function extrairAssinatura(xSignature) {
 
     const chave = parte
       .substring(0, indice)
-      .trim();
+      .trim()
+      .toLowerCase();
 
     const valor = parte
       .substring(indice + 1)
@@ -97,15 +97,60 @@ function extrairAssinatura(xSignature) {
 }
 
 // ============================================================
+// COMPARAÇÃO SEGURA
+// ============================================================
+
+function compararHashes(hashCalculado, hashRecebido) {
+  if (!hashCalculado || !hashRecebido) {
+    return false;
+  }
+
+  const calculado = String(hashCalculado)
+    .trim()
+    .toLowerCase();
+
+  const recebido = String(hashRecebido)
+    .trim()
+    .toLowerCase();
+
+  if (
+    !/^[a-f0-9]{64}$/.test(calculado) ||
+    !/^[a-f0-9]{64}$/.test(recebido)
+  ) {
+    return false;
+  }
+
+  const bufferCalculado =
+    Buffer.from(calculado, "hex");
+
+  const bufferRecebido =
+    Buffer.from(recebido, "hex");
+
+  if (
+    bufferCalculado.length !==
+    bufferRecebido.length
+  ) {
+    return false;
+  }
+
+  return crypto.timingSafeEqual(
+    bufferCalculado,
+    bufferRecebido
+  );
+}
+
+// ============================================================
 // VALIDAÇÃO MANUAL HMAC
 // ============================================================
 //
-// O Mercado Pago utiliza:
+// Mercado Pago:
 //
-// id:<data.id>;request-id:<x-request-id>;ts:<ts>;
+// HMAC-SHA256(
+//   secret,
+//   "id:<data.id>;request-id:<x-request-id>;ts:<ts>;"
+// )
 //
-// HMAC-SHA256 usando o Webhook Secret.
-//
+// O data.id usado na assinatura vem da QUERY.
 // ============================================================
 
 function validarAssinaturaManual(req) {
@@ -123,8 +168,6 @@ function validarAssinaturaManual(req) {
   const xRequestId =
     req.headers["x-request-id"];
 
-  // IMPORTANTE:
-  // O Mercado Pago envia o data.id na QUERY.
   const dataId =
     req.query?.["data.id"];
 
@@ -148,24 +191,35 @@ function validarAssinaturaManual(req) {
   );
 
   if (!xSignature) {
-    console.error("❌ X-SIGNATURE AUSENTE");
+    console.error(
+      "❌ X-SIGNATURE AUSENTE"
+    );
+
     return false;
   }
 
   if (!xRequestId) {
-    console.error("❌ X-REQUEST-ID AUSENTE");
+    console.error(
+      "❌ X-REQUEST-ID AUSENTE"
+    );
+
     return false;
   }
 
   if (!dataId) {
-    console.error("❌ DATA.ID AUSENTE NA QUERY");
+    console.error(
+      "❌ DATA.ID AUSENTE"
+    );
+
     return false;
   }
 
   const {
     ts,
     v1,
-  } = extrairAssinatura(xSignature);
+  } = extrairAssinatura(
+    xSignature
+  );
 
   console.log(
     "TIMESTAMP:",
@@ -186,11 +240,13 @@ function validarAssinaturaManual(req) {
   }
 
   // ==========================================================
-  // MANIFESTO OFICIAL
+  // MANIFEST
   // ==========================================================
 
   const manifest =
-    `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+    `id:${String(dataId)};` +
+    `request-id:${String(xRequestId)};` +
+    `ts:${String(ts)};`;
 
   console.log(
     "MANIFEST:",
@@ -207,7 +263,10 @@ function validarAssinaturaManual(req) {
         "sha256",
         WEBHOOK_SECRET
       )
-      .update(manifest)
+      .update(
+        manifest,
+        "utf8"
+      )
       .digest("hex");
 
   console.log(
@@ -221,36 +280,13 @@ function validarAssinaturaManual(req) {
   );
 
   // ==========================================================
-  // COMPARAÇÃO SEGURA
+  // COMPARAÇÃO
   // ==========================================================
 
-  const hashBuffer =
-    Buffer.from(
-      hashCalculado,
-      "hex"
-    );
-
-  const recebidoBuffer =
-    Buffer.from(
-      v1,
-      "hex"
-    );
-
-  if (
-    hashBuffer.length !==
-    recebidoBuffer.length
-  ) {
-    console.error(
-      "❌ TAMANHO DOS HASHES DIFERENTE"
-    );
-
-    return false;
-  }
-
   const valido =
-    crypto.timingSafeEqual(
-      hashBuffer,
-      recebidoBuffer
+    compararHashes(
+      hashCalculado,
+      v1
     );
 
   if (!valido) {
@@ -274,17 +310,24 @@ function validarAssinaturaManual(req) {
 }
 
 // ============================================================
-// VALIDAÇÃO SDK + FALLBACK MANUAL
+// VALIDAÇÃO SDK
 // ============================================================
 
 function validarAssinatura(req) {
+  if (!WEBHOOK_SECRET) {
+    console.error(
+      "❌ WEBHOOK SECRET NÃO CONFIGURADO"
+    );
+
+    return false;
+  }
+
   const xSignature =
     req.headers["x-signature"];
 
   const xRequestId =
     req.headers["x-request-id"];
 
-  // SOMENTE QUERY
   const dataId =
     req.query?.["data.id"];
 
@@ -294,14 +337,14 @@ function validarAssinatura(req) {
     !dataId
   ) {
     console.error(
-      "❌ HEADERS/DATA.ID NECESSÁRIOS AUSENTES"
+      "❌ DADOS NECESSÁRIOS PARA ASSINATURA AUSENTES"
     );
 
     return false;
   }
 
   // ==========================================================
-  // PRIMEIRA TENTATIVA: SDK OFICIAL
+  // SDK OFICIAL
   // ==========================================================
 
   try {
@@ -314,7 +357,10 @@ function validarAssinatura(req) {
 
     console.log("========================================");
     console.log(
-      "✅ ASSINATURA VALIDADA PELO SDK MERCADO PAGO"
+      "✅ ASSINATURA VALIDADA PELO SDK"
+    );
+    console.log(
+      "✅ MERCADO PAGO WEBHOOK AUTÊNTICO"
     );
     console.log("========================================");
 
@@ -327,17 +373,17 @@ function validarAssinatura(req) {
     );
 
     console.warn(
-      "⚠️ TENTANDO VALIDAÇÃO HMAC DIRETA..."
+      "ERRO SDK:",
+      erro?.message || erro
     );
 
     console.warn(
-      "ERRO SDK:",
-      erro?.message || erro
+      "⚠️ TENTANDO HMAC MANUAL."
     );
   }
 
   // ==========================================================
-  // SEGUNDA TENTATIVA: HMAC OFICIAL
+  // HMAC MANUAL
   // ==========================================================
 
   return validarAssinaturaManual(req);
@@ -370,7 +416,6 @@ async function localizarPedido(order) {
     );
 
   if (!pedido) {
-
     const referenciaString =
       String(referencia);
 
@@ -380,7 +425,6 @@ async function localizarPedido(order) {
       );
 
     if (match) {
-
       pedido =
         pedidos.find(
           (item) =>
@@ -416,8 +460,7 @@ async function salvarPedidoAtualizado(
     );
   }
 
-  pedidos[index] =
-    pedido;
+  pedidos[index] = pedido;
 
   const {
     db,
@@ -492,11 +535,10 @@ function notificarRestaurante(
 }
 
 // ============================================================
-// WEBHOOK
+// WEBHOOK PRINCIPAL
 // ============================================================
 
 async function webhook(req, res) {
-
   console.log("========================================");
   console.log(
     "🔔 FOODJET - MERCADO PAGO WEBHOOK"
@@ -517,10 +559,9 @@ async function webhook(req, res) {
     req.body?.action ||
     null;
 
-  // IMPORTANTE:
-  // Para assinatura usamos SEMPRE req.query["data.id"].
   const dataId =
     req.query?.["data.id"] ||
+    req.body?.data?.id ||
     null;
 
   console.log(
@@ -549,7 +590,6 @@ async function webhook(req, res) {
   );
 
   try {
-
     // ========================================================
     // VALIDAR ASSINATURA
     // ========================================================
@@ -558,12 +598,17 @@ async function webhook(req, res) {
       validarAssinatura(req);
 
     if (!assinaturaValida) {
+      console.error(
+        "========================================"
+      );
 
-      console.error("========================================");
       console.error(
         "❌ WEBHOOK REJEITADO POR ASSINATURA"
       );
-      console.error("========================================");
+
+      console.error(
+        "========================================"
+      );
 
       return res
         .status(401)
@@ -579,7 +624,6 @@ async function webhook(req, res) {
     // ========================================================
 
     if (tipo !== "order") {
-
       console.log(
         "ℹ️ EVENTO IGNORADO:",
         tipo
@@ -598,7 +642,6 @@ async function webhook(req, res) {
     // ========================================================
 
     if (!dataId) {
-
       console.error(
         "❌ ORDER ID NÃO INFORMADO"
       );
@@ -671,10 +714,7 @@ async function webhook(req, res) {
     // ========================================================
 
     const payment =
-      order
-        ?.transactions
-        ?.payments
-        ?.[0] ||
+      order?.transactions?.payments?.[0] ||
       null;
 
     const paymentStatus =
@@ -720,7 +760,6 @@ async function webhook(req, res) {
       );
 
     if (!pedido) {
-
       console.error(
         "⚠️ PEDIDO FOODJET NÃO ENCONTRADO"
       );
@@ -762,28 +801,22 @@ async function webhook(req, res) {
     // ========================================================
 
     const aprovado =
-      order.status ===
-        "processed" &&
-      paymentStatus ===
-        "processed" &&
-      paymentDetail ===
-        "accredited";
+      order.status === "processed" &&
+      paymentStatus === "processed" &&
+      paymentDetail === "accredited";
 
     if (aprovado) {
-
-      // ------------------------------------------------------
+      // ======================================================
       // IDEMPOTÊNCIA
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
-        pedido.pagamentoStatus ===
-          "APROVADO" &&
+        pedido.pagamentoStatus === "APROVADO" &&
         String(
           pedido.mercadoPagoOrderId
         ) ===
           String(order.id)
       ) {
-
         console.log(
           "ℹ️ PAGAMENTO JÁ PROCESSADO"
         );
@@ -796,9 +829,9 @@ async function webhook(req, res) {
           });
       }
 
-      // ------------------------------------------------------
+      // ======================================================
       // ATUALIZAR PAGAMENTO
-      // ------------------------------------------------------
+      // ======================================================
 
       pedido.pagamentoStatus =
         "APROVADO";
@@ -813,8 +846,7 @@ async function webhook(req, res) {
         order.id;
 
       pedido.mercadoPagoPaymentId =
-        payment?.id ||
-        null;
+        payment?.id || null;
 
       pedido.mercadoPagoOrderStatus =
         order.status;
@@ -828,9 +860,9 @@ async function webhook(req, res) {
       pedido.pagamentoAprovado =
         true;
 
-      // ------------------------------------------------------
+      // ======================================================
       // STATUS FOODJET
-      // ------------------------------------------------------
+      // ======================================================
 
       if (
         pedido.status ===
@@ -839,7 +871,6 @@ async function webhook(req, res) {
           "PAGAMENTO_PENDENTE" ||
         !pedido.status
       ) {
-
         pedido.status =
           "AGUARDANDO_RESTAURANTE";
       }
@@ -847,9 +878,9 @@ async function webhook(req, res) {
       pedido.atualizadoEm =
         new Date().toISOString();
 
-      // ------------------------------------------------------
+      // ======================================================
       // SALVAR
-      // ------------------------------------------------------
+      // ======================================================
 
       await salvarPedidoAtualizado(
         pedido
@@ -882,9 +913,9 @@ async function webhook(req, res) {
 
       console.log("========================================");
 
-      // ------------------------------------------------------
+      // ======================================================
       // SOCKET
-      // ------------------------------------------------------
+      // ======================================================
 
       notificarRestaurante(
         pedido
@@ -907,9 +938,8 @@ async function webhook(req, res) {
 
     if (
       order.status ===
-        "action_required"
+      "action_required"
     ) {
-
       pedido.pagamentoStatus =
         "PENDENTE";
 
@@ -963,9 +993,8 @@ async function webhook(req, res) {
 
     if (
       order.status ===
-        "failed"
+      "failed"
     ) {
-
       pedido.pagamentoStatus =
         "FALHOU";
 
@@ -1008,12 +1037,9 @@ async function webhook(req, res) {
     // ========================================================
 
     if (
-      order.status ===
-        "cancelled" ||
-      order.status ===
-        "expired"
+      order.status === "cancelled" ||
+      order.status === "expired"
     ) {
-
       pedido.pagamentoStatus =
         "CANCELADO";
 
@@ -1067,7 +1093,6 @@ async function webhook(req, res) {
       });
 
   } catch (erro) {
-
     console.error("========================================");
     console.error(
       "❌ ERRO NO WEBHOOK MERCADO PAGO"
@@ -1121,3 +1146,4 @@ console.log(
 // ============================================================
 
 module.exports = router;
+
