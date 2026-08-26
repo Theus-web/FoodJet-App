@@ -1,3 +1,6 @@
+# server.js — FoodJet Backend
+
+
 require("dotenv").config();
 
 const http = require("http");
@@ -61,7 +64,7 @@ const mercadoPagoWebhookRoutes =
   require("./routes/mercadoPagoWebhook");
 
 // ============================================================
-// PAGAMENTOS
+// ROTA DE PAGAMENTOS
 // ============================================================
 
 app.use(
@@ -74,7 +77,7 @@ console.log(
 );
 
 // ============================================================
-// FINANCEIRO
+// ROTA FINANCEIRA
 // ============================================================
 
 app.use(
@@ -87,20 +90,24 @@ console.log(
 );
 
 // ============================================================
-// MERCADO PAGO WEBHOOK
+// WEBHOOK MERCADO PAGO
+// ============================================================
+//
+// IMPORTANTE:
+// Esta é a ÚNICA vez que o webhook é registrado neste arquivo.
+//
+// A mensagem:
+// 🔔 WEBHOOK MERCADO PAGO CARREGADO
+// 📍 POST /api/mercadopago/webhook
+//
+// fica somente dentro de:
+// routes/mercadoPagoWebhook.js
+//
 // ============================================================
 
 app.use(
   "/api/mercadopago",
   mercadoPagoWebhookRoutes
-);
-
-console.log(
-  "🔔 WEBHOOK MERCADO PAGO CARREGADO"
-);
-
-console.log(
-  "📍 POST /api/mercadopago/webhook"
 );
 
 // ============================================================
@@ -336,3 +343,4 @@ async function iniciarServidor() {
 // ============================================================
 
 iniciarServidor();
+
