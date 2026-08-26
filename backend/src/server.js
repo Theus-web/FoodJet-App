@@ -1,4 +1,3 @@
-# server.js — FoodJet Backend
 
 
 require("dotenv").config();
