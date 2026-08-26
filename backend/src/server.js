@@ -1,5 +1,4 @@
 
-
 require("dotenv").config();
 
 const http = require("http");
@@ -63,7 +62,7 @@ const mercadoPagoWebhookRoutes =
   require("./routes/mercadoPagoWebhook");
 
 // ============================================================
-// ROTA DE PAGAMENTOS
+// PAGAMENTOS
 // ============================================================
 
 app.use(
@@ -76,7 +75,7 @@ console.log(
 );
 
 // ============================================================
-// ROTA FINANCEIRA
+// FINANCEIRO
 // ============================================================
 
 app.use(
@@ -89,19 +88,13 @@ console.log(
 );
 
 // ============================================================
-// WEBHOOK MERCADO PAGO
+// MERCADO PAGO WEBHOOK
 // ============================================================
 //
-// IMPORTANTE:
-// Esta é a ÚNICA vez que o webhook é registrado neste arquivo.
-//
-// A mensagem:
-// 🔔 WEBHOOK MERCADO PAGO CARREGADO
-// 📍 POST /api/mercadopago/webhook
-//
-// fica somente dentro de:
+// O log da rota já é feito dentro de:
 // routes/mercadoPagoWebhook.js
 //
+// Portanto não repetimos o log aqui.
 // ============================================================
 
 app.use(
@@ -243,7 +236,9 @@ async function iniciarServidor() {
     // ========================================================
 
     const webhookSecret =
-      process.env.MERCADOPAGO_WEBHOOK_SECRET;
+      String(
+        process.env.MERCADOPAGO_WEBHOOK_SECRET || ""
+      ).trim();
 
     if (!webhookSecret) {
 
@@ -326,7 +321,13 @@ async function iniciarServidor() {
     );
 
     console.error(
-      error
+      "MENSAGEM:",
+      error?.message
+    );
+
+    console.error(
+      "STACK:",
+      error?.stack
     );
 
     console.error(
