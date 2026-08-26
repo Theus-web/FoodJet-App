@@ -1,4 +1,3 @@
-
 require("dotenv").config();
 
 const http = require("http");
@@ -14,33 +13,44 @@ const { conectar } = require("./config/database");
 const PORT = process.env.PORT || 3000;
 
 // ============================================================
-// MERCADO PAGO
+// ASAAS
 // ============================================================
 
-const mercadoPagoToken =
-  process.env.MERCADOPAGO_ACCESS_TOKEN;
+const asaasApiKey =
+  process.env.ASAAS_API_KEY;
+
+const asaasEnvironment =
+  process.env.ASAAS_ENVIRONMENT || "production";
+
+const asaasWebhookToken =
+  process.env.ASAAS_WEBHOOK_TOKEN;
 
 console.log("========================================");
-console.log("🔐 FOODJET - MERCADO PAGO");
+console.log("🔐 FOODJET - ASAAS");
 console.log("========================================");
 
 console.log(
-  "TOKEN CARREGADO:",
-  mercadoPagoToken ? "SIM" : "NÃO"
+  "API KEY CARREGADA:",
+  asaasApiKey ? "SIM" : "NÃO"
 );
 
 console.log(
   "AMBIENTE:",
-  process.env.MERCADOPAGO_ENVIRONMENT || "production"
+  asaasEnvironment
 );
 
 console.log(
-  "TIPO DO TOKEN:",
-  mercadoPagoToken?.startsWith("TEST-")
-    ? "⚠️ TESTE"
-    : mercadoPagoToken?.startsWith("APP_USR-")
-      ? "✅ PRODUÇÃO"
-      : "❓ DESCONHECIDO"
+  "TIPO:",
+  asaasEnvironment === "production"
+    ? "✅ PRODUÇÃO"
+    : "⚠️ SANDBOX"
+);
+
+console.log(
+  "API:",
+  asaasEnvironment === "production"
+    ? "https://api.asaas.com"
+    : "https://api-sandbox.asaas.com"
 );
 
 console.log("========================================");
@@ -57,9 +67,9 @@ const paymentRoutes =
 const financeRoutes =
   require("./routes/finance");
 
-// WEBHOOK MERCADO PAGO
-const mercadoPagoWebhookRoutes =
-  require("./routes/mercadoPagoWebhook");
+// WEBHOOK ASAAS
+const asaasWebhookRoutes =
+  require("./routes/asaasWebhook");
 
 // ============================================================
 // PAGAMENTOS
@@ -88,18 +98,23 @@ console.log(
 );
 
 // ============================================================
-// MERCADO PAGO WEBHOOK
+// ASAAS WEBHOOK
 // ============================================================
 //
-// O log da rota já é feito dentro de:
-// routes/mercadoPagoWebhook.js
+// Endpoint:
+// POST /api/asaas/webhook
 //
-// Portanto não repetimos o log aqui.
+// O processamento da assinatura e dos eventos fica
+// dentro de routes/asaasWebhook.js
 // ============================================================
 
 app.use(
-  "/api/mercadopago",
-  mercadoPagoWebhookRoutes
+  "/api/asaas",
+  asaasWebhookRoutes
+);
+
+console.log(
+  "🔔 ROTA /api/asaas/webhook REGISTRADA"
 );
 
 // ============================================================
@@ -178,6 +193,64 @@ io.on(
     );
 
     // ========================================================
+    // ENTREGADOR ENTRA NA SALA
+    // ========================================================
+
+    socket.on(
+      "entrar_entregador",
+      (entregadorId) => {
+
+        if (!entregadorId) {
+
+          console.log(
+            "⚠️ Entregador tentou entrar sem ID"
+          );
+
+          return;
+        }
+
+        const sala =
+          `entregador_${entregadorId}`;
+
+        socket.join(sala);
+
+        console.log(
+          "🏍️ Entregador conectado na sala:",
+          sala
+        );
+      }
+    );
+
+    // ========================================================
+    // CLIENTE ENTRA NA SALA DO PEDIDO
+    // ========================================================
+
+    socket.on(
+      "entrar_pedido",
+      (pedidoId) => {
+
+        if (!pedidoId) {
+
+          console.log(
+            "⚠️ Cliente tentou entrar no pedido sem ID"
+          );
+
+          return;
+        }
+
+        const sala =
+          `pedido_${pedidoId}`;
+
+        socket.join(sala);
+
+        console.log(
+          "📦 Cliente conectado na sala:",
+          sala
+        );
+      }
+    );
+
+    // ========================================================
     // DESCONECTAR
     // ========================================================
 
@@ -215,41 +288,36 @@ async function iniciarServidor() {
     );
 
     // ========================================================
-    // VALIDAR MERCADO PAGO
+    // VALIDAR ASAAS
     // ========================================================
 
-    if (!mercadoPagoToken) {
+    if (!asaasApiKey) {
 
       console.warn(
-        "⚠️ MERCADOPAGO_ACCESS_TOKEN NÃO CONFIGURADO"
+        "⚠️ ASAAS_API_KEY NÃO CONFIGURADA"
       );
 
     } else {
 
       console.log(
-        "✅ MERCADOPAGO_ACCESS_TOKEN CONFIGURADO"
+        "✅ ASAAS_API_KEY CONFIGURADA"
       );
     }
 
     // ========================================================
-    // VALIDAR WEBHOOK SECRET
+    // VALIDAR WEBHOOK
     // ========================================================
 
-    const webhookSecret =
-      String(
-        process.env.MERCADOPAGO_WEBHOOK_SECRET || ""
-      ).trim();
-
-    if (!webhookSecret) {
+    if (!asaasWebhookToken) {
 
       console.warn(
-        "⚠️ MERCADOPAGO_WEBHOOK_SECRET NÃO CONFIGURADO"
+        "⚠️ ASAAS_WEBHOOK_TOKEN NÃO CONFIGURADO"
       );
 
     } else {
 
       console.log(
-        "✅ MERCADOPAGO_WEBHOOK_SECRET CONFIGURADO"
+        "✅ ASAAS_WEBHOOK_TOKEN CONFIGURADO"
       );
     }
 
@@ -293,15 +361,15 @@ async function iniciarServidor() {
         );
 
         console.log(
-          mercadoPagoToken
-            ? "💳 MERCADO PAGO: CONFIGURADO"
-            : "💳 MERCADO PAGO: NÃO CONFIGURADO"
+          asaasApiKey
+            ? "💳 ASAAS: CONFIGURADO"
+            : "💳 ASAAS: NÃO CONFIGURADO"
         );
 
         console.log(
-          webhookSecret
-            ? "🔔 WEBHOOK: ATIVO"
-            : "🔔 WEBHOOK: SECRET NÃO CONFIGURADO"
+          asaasWebhookToken
+            ? "🔔 WEBHOOK ASAAS: ATIVO"
+            : "🔔 WEBHOOK ASAAS: TOKEN NÃO CONFIGURADO"
         );
 
         console.log(
@@ -343,4 +411,3 @@ async function iniciarServidor() {
 // ============================================================
 
 iniciarServidor();
-

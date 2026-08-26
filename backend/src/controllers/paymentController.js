@@ -1,10 +1,11 @@
 const {
   criarPix,
-  consultarOrder,
-} = require("../services/mercadoPagoService");
+  consultarPagamento,
+  obterQrCodePix,
+} = require("../services/asaasService");
 
 // ============================================================
-// GERAR PIX
+// GERAR PIX ASAAS
 // ============================================================
 
 async function gerarPix(req, res) {
@@ -13,14 +14,16 @@ async function gerarPix(req, res) {
       valor,
       email,
       pedidoId,
+      nome,
+      cpfCnpj,
     } = req.body;
 
     console.log("========================================");
-    console.log("💳 FOODJET - GERAR PIX");
+    console.log("💳 FOODJET - GERAR PIX ASAAS");
     console.log("========================================");
     console.log("💰 VALOR:", valor);
     console.log("📧 EMAIL:", email);
-    console.log("🔖 REFERÊNCIA:", pedidoId);
+    console.log("🔖 PEDIDO:", pedidoId);
     console.log("👤 USUÁRIO:", req.usuario?.id);
     console.log("========================================");
 
@@ -59,7 +62,7 @@ async function gerarPix(req, res) {
       email.trim().toLowerCase();
 
     // ========================================================
-    // VALIDAR REFERÊNCIA
+    // VALIDAR PEDIDO
     // ========================================================
 
     if (
@@ -68,7 +71,7 @@ async function gerarPix(req, res) {
     ) {
       return res.status(400).json({
         sucesso: false,
-        erro: "Referência do pagamento obrigatória.",
+        erro: "ID do pedido obrigatório.",
       });
     }
 
@@ -76,383 +79,154 @@ async function gerarPix(req, res) {
       String(pedidoId).trim();
 
     // ========================================================
-    // CRIAR PIX
+    // CRIAR COBRANÇA PIX
     // ========================================================
 
     const pagamento =
       await criarPix({
         valor: Number(valor),
-
-        email:
-          emailNormalizado,
-
-        referencia:
-          referencia,
-
+        email: emailNormalizado,
+        referencia,
+        nome,
+        cpfCnpj,
         descricao:
           `Pedido FoodJet #${referencia}`,
       });
 
     // ========================================================
-    // IDs
+    // ID ASAAS
     // ========================================================
 
-    const orderId =
-      pagamento?.order_id ||
-      pagamento?.id ||
-      "";
+    const pagamentoId =
+      pagamento?.id || "";
 
-    const paymentId =
-      pagamento?.payment_id ||
-      "";
-
-    console.log("========================================");
-    console.log("✅ PAGAMENTO MERCADO PAGO CRIADO");
-    console.log("========================================");
-    console.log("🆔 ORDER ID:", orderId);
-    console.log("🆔 PAYMENT ID:", paymentId);
-    console.log("📊 STATUS:", pagamento?.status);
-    console.log(
-      "📋 STATUS DETALHE:",
-      pagamento?.status_detail
-    );
-    console.log(
-      "🔑 QR CODE:",
-      pagamento?.qr_code ? "SIM" : "NÃO"
-    );
-    console.log(
-      "🖼️ QR CODE BASE64:",
-      pagamento?.qr_code_base64 ? "SIM" : "NÃO"
-    );
-    console.log(
-      "🔗 TICKET URL:",
-      pagamento?.ticket_url ? "SIM" : "NÃO"
-    );
-    console.log("========================================");
-
-    // ========================================================
-    // VALIDAR ORDER ID
-    // ========================================================
-
-    if (!orderId) {
+    if (!pagamentoId) {
       console.error(
-        "❌ Mercado Pago não retornou ORDER ID."
+        "❌ Asaas não retornou o ID da cobrança."
       );
 
       return res.status(502).json({
         sucesso: false,
         erro:
-          "O Mercado Pago não retornou o ID da Order.",
+          "O Asaas não retornou o ID da cobrança.",
       });
     }
 
-    // ========================================================
-    // VALIDAR PIX
-    // ========================================================
-
-    const qrCode =
-      pagamento?.qr_code || "";
-
-    const qrCodeBase64 =
-      pagamento?.qr_code_base64 || "";
-
-    const ticketUrl =
-      pagamento?.ticket_url || "";
-
-    if (
-      !qrCode &&
-      !qrCodeBase64
-    ) {
-      console.error(
-        "❌ Mercado Pago não retornou QR Code."
-      );
-
-      return res.status(502).json({
-        sucesso: false,
-        erro:
-          "O Mercado Pago não retornou os dados do PIX.",
-      });
-    }
-
-    // ========================================================
-    // RESPOSTA PARA O FLUTTER
-    // ========================================================
-    //
-    // ATENÇÃO:
-    //
-    // pagamentoId = ORDER ID
-    //
-    // O Flutter utiliza esse ID para:
-    //
-    // GET /pagamentos/:pagamentoId
-    //
-    // que depois consulta:
-    //
-    // GET /v1/orders/:orderId
-    //
-    // ========================================================
-
-    return res.status(201).json({
-      sucesso: true,
-
-      // ORDER ID
-      pagamentoId:
-        orderId,
-
-      orderId:
-        orderId,
-
-      // PAYMENT ID separado
-      paymentId:
-        paymentId,
-
-      status:
-        pagamento?.status,
-
-      statusDetalhe:
-        pagamento?.status_detail,
-
-      externalReference:
-        pagamento?.external_reference,
-
-      totalAmount:
-        pagamento?.total_amount,
-
-      pix: {
-        qrCode:
-          qrCode,
-
-        qrCodeBase64:
-          qrCodeBase64,
-
-        ticketUrl:
-          ticketUrl,
-
-        expiracao:
-          pagamento?.date_of_expiration || "",
-      },
-    });
-
-  } catch (erro) {
-    console.error(
-      "========================================"
-    );
-
-    console.error(
-      "❌ ERRO MERCADO PAGO PIX"
-    );
-
-    console.error(
-      "========================================"
-    );
-
-    console.error(
-      "STATUS:",
-      erro?.status
-    );
-
-    console.error(
-      "ERRO:",
-      erro?.message
-    );
-
-    console.error(
-      "CAUSAS:",
-      erro?.causes
-    );
-
-    console.error(
-      "RESPOSTA:",
-      erro?.response
-    );
-
-    console.error(
-      "========================================"
-    );
-
-    return res.status(
-      erro?.status >= 400 &&
-      erro?.status < 600
-        ? erro.status
-        : 500
-    ).json({
-      sucesso: false,
-
-      erro:
-        erro?.message ||
-        "Não foi possível iniciar o pagamento.",
-
-      causas:
-        erro?.causes || [],
-    });
-  }
-}
-
-// ============================================================
-// CONSULTAR ORDER
-// ============================================================
-
-async function consultar(req, res) {
-  try {
-    const {
-      pagamentoId,
-    } = req.params;
-
     console.log("========================================");
-    console.log(
-      "🔎 FOODJET - CONSULTAR ORDER"
-    );
-    console.log(
-      "🆔 ORDER ID:",
-      pagamentoId
-    );
+    console.log("✅ COBRANÇA ASAAS CRIADA");
     console.log("========================================");
-
-    // ========================================================
-    // VALIDAR ID
-    // ========================================================
-
-    if (
-      !pagamentoId ||
-      !String(pagamentoId).trim()
-    ) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "ID da Order obrigatório.",
-      });
-    }
-
-    const orderId =
-      String(pagamentoId).trim();
-
-    // ========================================================
-    // CONSULTAR MERCADO PAGO
-    // ========================================================
-
-    console.log("========================================");
-    console.log("🔎 CONSULTANDO ORDER");
-    console.log(
-      "🆔 ORDER ID:",
-      orderId
-    );
-    console.log("========================================");
-
-    const pagamento =
-      await consultarOrder(orderId);
-
-    // ========================================================
-    // LOCALIZAR PAYMENT
-    // ========================================================
-
-    const payment =
-      pagamento
-        ?.transactions
-        ?.payments
-        ?.[
-          0
-        ] || {};
-
-    // ========================================================
-    // STATUS
-    // ========================================================
-
-    const status =
-      payment?.status ||
-      pagamento?.status ||
-      "";
-
-    const statusDetalhe =
-      payment?.status_detail ||
-      pagamento?.status_detail ||
-      "";
-
-    // ========================================================
-    // LOG
-    // ========================================================
-
-    console.log("========================================");
-    console.log("✅ ORDER CONSULTADA");
-    console.log("========================================");
-    console.log(
-      "🆔 ORDER ID:",
-      pagamento?.id || orderId
-    );
     console.log(
       "🆔 PAYMENT ID:",
-      payment?.id || ""
+      pagamentoId
     );
     console.log(
       "📊 STATUS:",
-      status
+      pagamento?.status
     );
     console.log(
-      "📋 STATUS DETALHE:",
-      statusDetalhe
+      "💰 VALOR:",
+      pagamento?.value
+    );
+    console.log(
+      "📅 VENCIMENTO:",
+      pagamento?.dueDate
+    );
+    console.log(
+      "🔖 REFERÊNCIA:",
+      pagamento?.externalReference
     );
     console.log("========================================");
+
+    // ========================================================
+    // OBTER QR CODE PIX
+    // ========================================================
+
+    let pix = null;
+
+    try {
+
+      pix =
+        await obterQrCodePix(
+          pagamentoId
+        );
+
+    } catch (qrErro) {
+
+      console.error(
+        "⚠️ ERRO AO OBTER QR CODE PIX:"
+      );
+
+      console.error(
+        qrErro?.message
+      );
+
+      /*
+       * A cobrança já foi criada.
+       *
+       * Não criamos outra cobrança.
+       *
+       * O Flutter poderá tentar consultar novamente.
+       */
+
+      pix = null;
+    }
 
     // ========================================================
     // RESPOSTA
     // ========================================================
 
-    return res.json({
+    return res.status(201).json({
       sucesso: true,
 
-      // ORDER
-      pagamentoId:
-        pagamento?.id ||
-        orderId,
+      pagamentoId,
 
-      orderId:
-        pagamento?.id ||
-        orderId,
-
-      // PAYMENT
       paymentId:
-        payment?.id || "",
+        pagamentoId,
 
       status:
-        status,
+        pagamento?.status || "",
 
       statusDetalhe:
-        statusDetalhe,
-
-      totalAmount:
-        pagamento?.total_amount,
+        pagamento?.status || "",
 
       externalReference:
-        pagamento?.external_reference,
+        pagamento?.externalReference ||
+        referencia,
 
-      // PIX
+      totalAmount:
+        pagamento?.value ||
+        Number(valor),
+
+      billingType:
+        pagamento?.billingType ||
+        "PIX",
+
       pix: {
         qrCode:
-          payment
-            ?.payment_method
-            ?.qr_code ||
+          pix?.payload ||
           "",
 
         qrCodeBase64:
-          payment
-            ?.payment_method
-            ?.qr_code_base64 ||
+          pix?.encodedImage ||
           "",
 
         ticketUrl:
-          payment
-            ?.payment_method
-            ?.ticket_url ||
+          "",
+
+        expiracao:
+          pix?.expirationDate ||
           "",
       },
     });
 
   } catch (erro) {
+
     console.error(
       "========================================"
     );
 
     console.error(
-      "❌ ERRO CONSULTANDO ORDER"
+      "❌ ERRO ASAAS PIX"
     );
 
     console.error(
@@ -470,9 +244,11 @@ async function consultar(req, res) {
     );
 
     console.error(
-      "CAUSAS:",
+      "DETALHES:",
       JSON.stringify(
-        erro?.causes || [],
+        erro?.response?.data ||
+        erro?.causes ||
+        [],
         null,
         2
       )
@@ -492,11 +268,211 @@ async function consultar(req, res) {
 
       erro:
         erro?.message ||
+        "Não foi possível iniciar o pagamento PIX.",
+
+      causas:
+        erro?.response?.data ||
+        erro?.causes ||
+        [],
+    });
+  }
+}
+
+// ============================================================
+// CONSULTAR PAGAMENTO ASAAS
+// ============================================================
+
+async function consultar(req, res) {
+
+  try {
+
+    const {
+      pagamentoId,
+    } = req.params;
+
+    console.log("========================================");
+    console.log(
+      "🔎 FOODJET - CONSULTAR PAGAMENTO ASAAS"
+    );
+    console.log(
+      "🆔 PAYMENT ID:",
+      pagamentoId
+    );
+    console.log("========================================");
+
+    // ========================================================
+    // VALIDAR ID
+    // ========================================================
+
+    if (
+      !pagamentoId ||
+      !String(pagamentoId).trim()
+    ) {
+
+      return res.status(400).json({
+        sucesso: false,
+        erro:
+          "ID do pagamento obrigatório.",
+      });
+
+    }
+
+    const id =
+      String(pagamentoId).trim();
+
+    // ========================================================
+    // CONSULTAR ASAAS
+    // ========================================================
+
+    const pagamento =
+      await consultarPagamento(id);
+
+    // ========================================================
+    // STATUS
+    // ========================================================
+
+    const status =
+      pagamento?.status || "";
+
+    // ========================================================
+    // LOG
+    // ========================================================
+
+    console.log("========================================");
+    console.log(
+      "✅ PAGAMENTO ASAAS CONSULTADO"
+    );
+    console.log("========================================");
+
+    console.log(
+      "🆔 PAYMENT ID:",
+      pagamento?.id || id
+    );
+
+    console.log(
+      "📊 STATUS:",
+      status
+    );
+
+    console.log(
+      "💰 VALOR:",
+      pagamento?.value
+    );
+
+    console.log(
+      "🔖 REFERÊNCIA:",
+      pagamento?.externalReference
+    );
+
+    console.log("========================================");
+
+    // ========================================================
+    // RESPOSTA
+    // ========================================================
+
+    return res.json({
+
+      sucesso: true,
+
+      pagamentoId:
+        pagamento?.id ||
+        id,
+
+      orderId:
+        pagamento?.id ||
+        id,
+
+      paymentId:
+        pagamento?.id ||
+        id,
+
+      status,
+
+      statusDetalhe:
+        status,
+
+      totalAmount:
+        pagamento?.value,
+
+      externalReference:
+        pagamento?.externalReference,
+
+      billingType:
+        pagamento?.billingType ||
+        "PIX",
+
+      pix: {
+        qrCode: "",
+
+        qrCodeBase64: "",
+
+        ticketUrl: "",
+
+        expiracao:
+          pagamento?.dueDate ||
+          "",
+      },
+
+    });
+
+  } catch (erro) {
+
+    console.error(
+      "========================================"
+    );
+
+    console.error(
+      "❌ ERRO CONSULTANDO ASAAS"
+    );
+
+    console.error(
+      "========================================"
+    );
+
+    console.error(
+      "STATUS:",
+      erro?.status
+    );
+
+    console.error(
+      "ERRO:",
+      erro?.message
+    );
+
+    console.error(
+      "DETALHES:",
+      JSON.stringify(
+        erro?.response?.data ||
+        erro?.causes ||
+        [],
+        null,
+        2
+      )
+    );
+
+    console.error(
+      "========================================"
+    );
+
+    return res.status(
+      erro?.status >= 400 &&
+      erro?.status < 600
+        ? erro.status
+        : 500
+    ).json({
+
+      sucesso: false,
+
+      erro:
+        erro?.message ||
         "Erro ao consultar pagamento.",
 
       causas:
-        erro?.causes || [],
+        erro?.response?.data ||
+        erro?.causes ||
+        [],
     });
+
   }
 }
 
