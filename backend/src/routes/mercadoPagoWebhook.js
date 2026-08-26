@@ -50,6 +50,21 @@ console.log(
   WEBHOOK_SECRET ? "CONFIGURADO" : "NÃO CONFIGURADO"
 );
 
+console.log(
+  "SECRET LENGTH:",
+  WEBHOOK_SECRET.length
+);
+
+console.log(
+  "SECRET INICIO:",
+  WEBHOOK_SECRET.substring(0, 8)
+);
+
+console.log(
+  "SECRET FINAL:",
+  WEBHOOK_SECRET.slice(-8)
+);
+
 console.log("========================================");
 
 // ============================================================
