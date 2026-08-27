@@ -92,10 +92,20 @@ async function criarCliente({
   );
 
   // ==========================================================
-  // TENTAR LOCALIZAR CLIENTE PELO CPF/CNPJ
+  // NORMALIZAR CPF/CNPJ
   // ==========================================================
 
-  if (cpfCnpj) {
+  const documento =
+    cpfCnpj
+      ? String(cpfCnpj)
+          .replace(/\D/g, "")
+      : "";
+
+  // ==========================================================
+  // PROCURAR CLIENTE PELO CPF/CNPJ
+  // ==========================================================
+
+  if (documento) {
 
     try {
 
@@ -105,8 +115,7 @@ async function criarCliente({
           {
             params: {
               cpfCnpj:
-                String(cpfCnpj)
-                  .replace(/\D/g, ""),
+                documento,
             },
           }
         );
@@ -133,48 +142,80 @@ async function criarCliente({
     } catch (erro) {
 
       console.warn(
-        "⚠️ Não foi possível localizar cliente:",
-        erro?.message
+        "⚠️ NÃO FOI POSSÍVEL LOCALIZAR CLIENTE:"
       );
 
+      console.warn(
+        erro?.response?.data ||
+        erro?.message
+      );
     }
+  }
 
+  // ==========================================================
+  // VALIDAR CPF/CNPJ
+  // ==========================================================
+
+  if (!documento) {
+
+    throw new Error(
+      "CPF ou CNPJ do cliente é obrigatório para criar a cobrança PIX."
+    );
   }
 
   // ==========================================================
   // CRIAR CLIENTE
   // ==========================================================
 
-  const response =
-    await api.post(
-      "/v3/customers",
-      {
+  try {
 
-        name:
-          nome ||
-          "Cliente FoodJet",
+    const response =
+      await api.post(
+        "/v3/customers",
+        {
 
-        email:
-          email,
+          name:
+            nome ||
+            "Cliente FoodJet",
 
-        cpfCnpj:
-          cpfCnpj
-            ? String(cpfCnpj)
-                .replace(/\D/g, "")
-            : undefined,
+          email:
+            String(email)
+              .trim()
+              .toLowerCase(),
 
-        notificationDisabled:
-          true,
+          cpfCnpj:
+            documento,
 
-      }
+          notificationDisabled:
+            true,
+
+        }
+      );
+
+    console.log(
+      "✅ CLIENTE ASAAS CRIADO:",
+      response.data.id
     );
 
-  console.log(
-    "✅ CLIENTE ASAAS CRIADO:",
-    response.data.id
-  );
+    return response.data;
 
-  return response.data;
+  } catch (erro) {
+
+    console.error(
+      "❌ ERRO CRIANDO CLIENTE ASAAS:"
+    );
+
+    console.error(
+      JSON.stringify(
+        erro?.response?.data ||
+        {},
+        null,
+        2
+      )
+    );
+
+    throw erro;
+  }
 }
 
 // ============================================================
@@ -216,10 +257,17 @@ async function criarPix({
     referencia
   );
 
+  console.log(
+    "🪪 CPF/CNPJ:",
+    cpfCnpj
+      ? "INFORMADO"
+      : "NÃO INFORMADO"
+  );
+
   console.log("========================================");
 
   // ==========================================================
-  // VALIDAR
+  // VALIDAR VALOR
   // ==========================================================
 
   if (
@@ -232,8 +280,11 @@ async function criarPix({
     throw new Error(
       "Valor inválido para pagamento."
     );
-
   }
+
+  // ==========================================================
+  // VALIDAR EMAIL
+  // ==========================================================
 
   if (
     !email ||
@@ -243,8 +294,11 @@ async function criarPix({
     throw new Error(
       "E-mail obrigatório."
     );
-
   }
+
+  // ==========================================================
+  // VALIDAR REFERÊNCIA
+  // ==========================================================
 
   if (
     !referencia ||
@@ -254,7 +308,6 @@ async function criarPix({
     throw new Error(
       "Referência obrigatória."
     );
-
   }
 
   // ==========================================================
@@ -302,64 +355,90 @@ async function criarPix({
   // CRIAR COBRANÇA
   // ==========================================================
 
-  const response =
-    await api.post(
-      "/v3/payments",
-      {
+  try {
 
-        customer:
-          cliente.id,
+    const response =
+      await api.post(
+        "/v3/payments",
+        {
 
-        billingType:
-          "PIX",
+          customer:
+            cliente.id,
 
-        value:
-          Number(
-            Number(valor).toFixed(2)
-          ),
+          billingType:
+            "PIX",
 
-        dueDate,
+          value:
+            Number(
+              Number(valor).toFixed(2)
+            ),
 
-        description:
-          descricao ||
-          `Pedido FoodJet #${referencia}`,
+          dueDate,
 
-        externalReference:
-          String(referencia),
+          description:
+            descricao ||
+            `Pedido FoodJet #${referencia}`,
 
-        postalService:
-          false,
+          externalReference:
+            String(referencia),
 
-      }
+          postalService:
+            false,
+
+        }
+      );
+
+    console.log("========================================");
+    console.log("✅ COBRANÇA ASAAS CRIADA");
+    console.log("========================================");
+
+    console.log(
+      "🆔 ID:",
+      response.data?.id
     );
 
-  console.log("========================================");
-  console.log("✅ COBRANÇA ASAAS CRIADA");
-  console.log("========================================");
+    console.log(
+      "📊 STATUS:",
+      response.data?.status
+    );
 
-  console.log(
-    "🆔 ID:",
-    response.data?.id
-  );
+    console.log(
+      "💰 VALOR:",
+      response.data?.value
+    );
 
-  console.log(
-    "📊 STATUS:",
-    response.data?.status
-  );
+    console.log(
+      "🔖 REFERÊNCIA:",
+      response.data?.externalReference
+    );
 
-  console.log(
-    "💰 VALOR:",
-    response.data?.value
-  );
+    console.log("========================================");
 
-  console.log(
-    "🔖 REFERÊNCIA:",
-    response.data?.externalReference
-  );
+    return response.data;
 
-  console.log("========================================");
+  } catch (erro) {
 
-  return response.data;
+    console.error(
+      "❌ ERRO CRIANDO COBRANÇA ASAAS:"
+    );
+
+    console.error(
+      "STATUS:",
+      erro?.response?.status
+    );
+
+    console.error(
+      "DETALHES:",
+      JSON.stringify(
+        erro?.response?.data ||
+        {},
+        null,
+        2
+      )
+    );
+
+    throw erro;
+  }
 }
 
 // ============================================================
@@ -374,33 +453,193 @@ async function obterQrCodePix(
   console.log("📱 ASAAS - OBTER QR CODE PIX");
   console.log("========================================");
 
-  console.log(
-    "🆔 PAYMENT ID:",
-    pagamentoId
-  );
+  // ==========================================================
+  // VALIDAR ID
+  // ==========================================================
 
   if (
-    !pagamentoId
+    !pagamentoId ||
+    !String(pagamentoId).trim()
   ) {
 
     throw new Error(
       "ID do pagamento obrigatório."
     );
-
   }
 
-  const response =
-    await api.get(
-      `/v3/payments/${encodeURIComponent(
-        pagamentoId
-      )}/pixQrCode`
-    );
+  const id =
+    String(pagamentoId).trim();
 
   console.log(
-    "✅ QR CODE PIX OBTIDO"
+    "🆔 PAYMENT ID:",
+    id
   );
 
-  return response.data;
+  const endpoint =
+    `/v3/payments/${encodeURIComponent(
+      id
+    )}/pixQrCode`;
+
+  console.log(
+    "🌐 ENDPOINT:",
+    endpoint
+  );
+
+  console.log("========================================");
+
+  // ==========================================================
+  // IMPORTANTE:
+  // GET SEM BODY
+  // ==========================================================
+
+  try {
+
+    const response =
+      await api.request({
+
+        method:
+          "GET",
+
+        url:
+          endpoint,
+
+        headers: {
+
+          Accept:
+            "application/json",
+
+          access_token:
+            ASAAS_API_KEY,
+
+        },
+
+        // Não enviar data/body aqui.
+      });
+
+    console.log("========================================");
+    console.log("✅ QR CODE PIX OBTIDO");
+    console.log("========================================");
+
+    console.log(
+      "🆔 PAYMENT ID:",
+      id
+    );
+
+    console.log(
+      "📱 PAYLOAD:",
+      response.data?.payload
+        ? "SIM"
+        : "NÃO"
+    );
+
+    console.log(
+      "🖼️ BASE64:",
+      response.data?.encodedImage
+        ? "SIM"
+        : "NÃO"
+    );
+
+    console.log(
+      "⏰ EXPIRAÇÃO:",
+      response.data?.expirationDate ||
+      ""
+    );
+
+    console.log("========================================");
+
+    return response.data;
+
+  } catch (erro) {
+
+    console.error("========================================");
+    console.error(
+      "❌ ERRO AO OBTER QR CODE PIX ASAAS"
+    );
+    console.error("========================================");
+
+    console.error(
+      "🆔 PAYMENT ID:",
+      id
+    );
+
+    console.error(
+      "HTTP STATUS:",
+      erro?.response?.status
+    );
+
+    console.error(
+      "MENSAGEM:",
+      erro?.message
+    );
+
+    console.error(
+      "RESPOSTA ASAAS:"
+    );
+
+    console.error(
+      JSON.stringify(
+        erro?.response?.data ||
+        {},
+        null,
+        2
+      )
+    );
+
+    console.error("========================================");
+
+    const detalhes =
+      erro?.response?.data;
+
+    let mensagemErro =
+      "Erro ao obter QR Code PIX no Asaas.";
+
+    if (
+      detalhes?.errors &&
+      Array.isArray(
+        detalhes.errors
+      )
+    ) {
+
+      mensagemErro =
+        detalhes.errors
+          .map(
+            erroItem =>
+              erroItem?.description ||
+              erroItem?.message ||
+              JSON.stringify(
+                erroItem
+              )
+          )
+          .join(" | ");
+
+    } else if (
+      detalhes?.message
+    ) {
+
+      mensagemErro =
+        detalhes.message;
+
+    } else if (
+      typeof detalhes === "string"
+    ) {
+
+      mensagemErro =
+        detalhes;
+    }
+
+    const novoErro =
+      new Error(
+        mensagemErro
+      );
+
+    novoErro.status =
+      erro?.response?.status;
+
+    novoErro.response =
+      erro?.response;
+
+    throw novoErro;
+  }
 }
 
 // ============================================================
@@ -415,34 +654,89 @@ async function consultarPagamento(
   console.log("🔎 ASAAS - CONSULTAR PAGAMENTO");
   console.log("========================================");
 
-  console.log(
-    "🆔 PAYMENT ID:",
-    pagamentoId
-  );
-
   if (
-    !pagamentoId
+    !pagamentoId ||
+    !String(pagamentoId).trim()
   ) {
 
     throw new Error(
       "ID do pagamento obrigatório."
     );
-
   }
 
-  const response =
-    await api.get(
-      `/v3/payments/${encodeURIComponent(
-        pagamentoId
-      )}`
-    );
+  const id =
+    String(pagamentoId).trim();
 
   console.log(
-    "📊 STATUS:",
-    response.data?.status
+    "🆔 PAYMENT ID:",
+    id
   );
 
-  return response.data;
+  try {
+
+    const response =
+      await api.request({
+
+        method:
+          "GET",
+
+        url:
+          `/v3/payments/${encodeURIComponent(
+            id
+          )}`,
+
+        headers: {
+
+          Accept:
+            "application/json",
+
+          access_token:
+            ASAAS_API_KEY,
+
+        },
+
+      });
+
+    console.log(
+      "📊 STATUS:",
+      response.data?.status
+    );
+
+    console.log(
+      "💰 VALOR:",
+      response.data?.value
+    );
+
+    console.log(
+      "🔖 REFERÊNCIA:",
+      response.data?.externalReference
+    );
+
+    return response.data;
+
+  } catch (erro) {
+
+    console.error(
+      "❌ ERRO CONSULTANDO PAGAMENTO ASAAS:"
+    );
+
+    console.error(
+      "STATUS:",
+      erro?.response?.status
+    );
+
+    console.error(
+      "DETALHES:",
+      JSON.stringify(
+        erro?.response?.data ||
+        {},
+        null,
+        2
+      )
+    );
+
+    throw erro;
+  }
 }
 
 // ============================================================
