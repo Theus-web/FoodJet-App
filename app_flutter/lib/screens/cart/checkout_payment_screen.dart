@@ -54,9 +54,15 @@ class _CheckoutPaymentScreenState
 
   bool verificandoPagamento = false;
 
+  bool pagamentoConfirmado = false;
+
   String? emailUsuario;
 
+  String? cpfCnpjUsuario;
+
   String? pagamentoId;
+
+  String? referenciaPedido;
 
   String qrCode = '';
 
@@ -75,7 +81,7 @@ class _CheckoutPaymentScreenState
             ? widget.pagamento
             : 'PIX';
 
-    carregarEmail();
+    carregarDadosUsuario();
   }
 
   @override
@@ -85,17 +91,18 @@ class _CheckoutPaymentScreenState
   }
 
   // ============================================================
-  // E-MAIL DO USUÁRIO
+  // DADOS DO USUÁRIO
   // ============================================================
 
-  Future<void> carregarEmail() async {
+  Future<void> carregarDadosUsuario() async {
     final prefs =
         await SharedPreferences.getInstance();
 
+    String? email;
+    String? cpfCnpj;
+
     final usuarioJson =
         prefs.getString('usuario');
-
-    String? email;
 
     if (usuarioJson != null &&
         usuarioJson.isNotEmpty) {
@@ -106,26 +113,46 @@ class _CheckoutPaymentScreenState
         if (usuario is Map) {
           email =
               usuario['email']?.toString();
+
+          cpfCnpj =
+              usuario['cpfCnpj']?.toString() ??
+              usuario['cpf_cnpj']?.toString() ??
+              usuario['cpf']?.toString() ??
+              usuario['documento']?.toString();
         }
       } catch (e) {
         debugPrint(
-          'Erro lendo usuário: $e',
+          '⚠️ Erro lendo usuário: $e',
         );
       }
     }
 
-    if (email == null || email.isEmpty) {
-      email = prefs.getString('email');
-    }
+    email ??=
+        prefs.getString('email');
+
+    cpfCnpj ??=
+        prefs.getString('cpfCnpj');
+
+    cpfCnpj ??=
+        prefs.getString('cpf');
+
+    cpfCnpj ??=
+        prefs.getString('documento');
 
     if (!mounted) return;
 
     setState(() {
       emailUsuario = email;
+      cpfCnpjUsuario = cpfCnpj;
     });
 
     debugPrint(
-      '📧 EMAIL DO CLIENTE: $email',
+      '📧 EMAIL DO CLIENTE: $emailUsuario',
+    );
+
+    debugPrint(
+      '🪪 CPF/CNPJ DO CLIENTE: '
+      '${cpfCnpjUsuario != null && cpfCnpjUsuario!.isNotEmpty ? "CONFIGURADO" : "NÃO CONFIGURADO"}',
     );
   }
 
@@ -149,17 +176,60 @@ class _CheckoutPaymentScreenState
   }
 
   // ============================================================
+  // NORMALIZAR CPF/CNPJ
+  // ============================================================
+
+  String limparDocumento(String valor) {
+    return valor.replaceAll(
+      RegExp(r'\D'),
+      '',
+    );
+  }
+
+  // ============================================================
   // GERAR PIX
   // ============================================================
 
   Future<void> gerarPix() async {
     if (processando) return;
 
+    if (pagamentoGerado) {
+      mensagem(
+        'O PIX já foi gerado. Aguardando confirmação.',
+      );
+      return;
+    }
+
     final email = emailUsuario;
 
-    if (email == null || email.trim().isEmpty) {
+    if (email == null ||
+        email.trim().isEmpty) {
       mensagem(
         'Não encontramos o e-mail da sua conta. Faça login novamente.',
+        erro: true,
+      );
+      return;
+    }
+
+    final documento =
+        cpfCnpjUsuario == null
+            ? ''
+            : limparDocumento(
+                cpfCnpjUsuario!,
+              );
+
+    if (documento.isEmpty) {
+      mensagem(
+        'Seu CPF/CNPJ não está cadastrado. Atualize seus dados da conta para continuar.',
+        erro: true,
+      );
+      return;
+    }
+
+    if (documento.length != 11 &&
+        documento.length != 14) {
+      mensagem(
+        'O CPF/CNPJ cadastrado é inválido.',
         erro: true,
       );
       return;
@@ -204,15 +274,10 @@ class _CheckoutPaymentScreenState
         );
       }
 
-      /*
-       * Não criamos o pedido aqui.
-       *
-       * O backend utiliza uma referência temporária
-       * para o pagamento.
-       */
-
       final referencia =
           'FOODJET-${DateTime.now().millisecondsSinceEpoch}';
+
+      referenciaPedido = referencia;
 
       final url = Uri.parse(
         '${Api.baseUrl}/pagamentos/pix',
@@ -223,11 +288,15 @@ class _CheckoutPaymentScreenState
       );
 
       debugPrint(
-        '💳 GERANDO PIX MERCADO PAGO',
+        '💳 FOODJET - GERANDO PIX ASAAS',
       );
 
       debugPrint(
         '📧 EMAIL: $email',
+      );
+
+      debugPrint(
+        '🪪 CPF/CNPJ: CONFIGURADO',
       );
 
       debugPrint(
@@ -257,17 +326,23 @@ class _CheckoutPaymentScreenState
           'valor': widget.total,
           'email': email.trim(),
           'pedidoId': referencia,
+
+          'nome':
+              await obterNomeUsuario(),
+
+          'cpfCnpj':
+              documento,
         }),
       ).timeout(
-        const Duration(seconds: 20),
+        const Duration(seconds: 30),
       );
 
       debugPrint(
-        'STATUS PIX: ${resposta.statusCode}',
+        '📡 STATUS PIX: ${resposta.statusCode}',
       );
 
       debugPrint(
-        'RESPOSTA PIX: ${resposta.body}',
+        '📡 RESPOSTA PIX: ${resposta.body}',
       );
 
       if (!mounted) return;
@@ -278,7 +353,8 @@ class _CheckoutPaymentScreenState
         final decoded =
             jsonDecode(resposta.body);
 
-        if (decoded is Map<String, dynamic>) {
+        if (decoded
+            is Map<String, dynamic>) {
           dados = decoded;
         }
       } catch (_) {}
@@ -288,7 +364,7 @@ class _CheckoutPaymentScreenState
         throw Exception(
           dados['erro']?.toString() ??
               dados['mensagem']?.toString() ??
-              'Não foi possível gerar o pagamento.',
+              'Não foi possível gerar o pagamento PIX.',
         );
       }
 
@@ -297,12 +373,13 @@ class _CheckoutPaymentScreenState
 
       if (pix is! Map) {
         throw Exception(
-          'O Mercado Pago não retornou os dados do PIX.',
+          'O Asaas não retornou os dados do PIX.',
         );
       }
 
       final id =
-          dados['pagamentoId']?.toString();
+          dados['pagamentoId']?.toString() ??
+          dados['paymentId']?.toString();
 
       final codigo =
           pix['qrCode']?.toString() ?? '';
@@ -316,14 +393,14 @@ class _CheckoutPaymentScreenState
       if (id == null ||
           id.isEmpty) {
         throw Exception(
-          'O pagamento não retornou um ID válido.',
+          'O Asaas não retornou um ID de pagamento válido.',
         );
       }
 
       if (codigo.isEmpty &&
           base64.isEmpty) {
         throw Exception(
-          'O Mercado Pago não retornou o QR Code.',
+          'O Asaas não retornou o QR Code PIX.',
         );
       }
 
@@ -335,6 +412,26 @@ class _CheckoutPaymentScreenState
         pagamentoGerado = true;
       });
 
+      debugPrint(
+        '========================================',
+      );
+
+      debugPrint(
+        '✅ PIX ASAAS GERADO',
+      );
+
+      debugPrint(
+        '🆔 PAYMENT ID ASAAS: $id',
+      );
+
+      debugPrint(
+        '🔖 REFERÊNCIA FOODJET: $referencia',
+      );
+
+      debugPrint(
+        '========================================',
+      );
+
       iniciarVerificacao();
 
       mensagem(
@@ -342,7 +439,7 @@ class _CheckoutPaymentScreenState
       );
     } catch (e) {
       debugPrint(
-        '❌ ERRO AO GERAR PIX: $e',
+        '❌ ERRO AO GERAR PIX ASAAS: $e',
       );
 
       if (!mounted) return;
@@ -364,7 +461,36 @@ class _CheckoutPaymentScreenState
   }
 
   // ============================================================
-  // CONSULTAR PAGAMENTO
+  // NOME DO USUÁRIO
+  // ============================================================
+
+  Future<String?> obterNomeUsuario() async {
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    final usuarioJson =
+        prefs.getString('usuario');
+
+    if (usuarioJson == null ||
+        usuarioJson.isEmpty) {
+      return null;
+    }
+
+    try {
+      final usuario =
+          jsonDecode(usuarioJson);
+
+      if (usuario is Map) {
+        return usuario['nome']?.toString() ??
+            usuario['name']?.toString();
+      }
+    } catch (_) {}
+
+    return null;
+  }
+
+  // ============================================================
+  // INICIAR VERIFICAÇÃO
   // ============================================================
 
   void iniciarVerificacao() {
@@ -376,14 +502,23 @@ class _CheckoutPaymentScreenState
         consultarPagamento();
       },
     );
+
+    consultarPagamento();
   }
+
+  // ============================================================
+  // CONSULTAR PAGAMENTO
+  // ============================================================
 
   Future<void> consultarPagamento() async {
     if (verificandoPagamento) return;
 
     final id = pagamentoId;
 
-    if (id == null || id.isEmpty) return;
+    if (id == null ||
+        id.isEmpty) {
+      return;
+    }
 
     verificandoPagamento = true;
 
@@ -396,8 +531,22 @@ class _CheckoutPaymentScreenState
         return;
       }
 
+      /*
+       * IMPORTANTE:
+       *
+       * Aqui usamos o ID REAL DO ASAAS.
+       *
+       * NÃO usamos:
+       *
+       * FOODJET-...
+       *
+       * nem:
+       *
+       * ORD...
+       */
+
       final url = Uri.parse(
-        '${Api.baseUrl}/pagamentos/$id',
+        '${Api.baseUrl}/pagamentos/${Uri.encodeComponent(id)}',
       );
 
       final resposta =
@@ -414,49 +563,78 @@ class _CheckoutPaymentScreenState
       );
 
       debugPrint(
-        '🔎 STATUS PAGAMENTO: ${resposta.body}',
+        '🔎 ASAAS STATUS: ${resposta.body}',
       );
 
       if (resposta.statusCode != 200) {
         return;
       }
 
-      final dados =
+      final decoded =
           jsonDecode(resposta.body);
 
-      final status =
-          dados['status']
-              ?.toString()
-              .toLowerCase();
+      if (decoded
+          is! Map<String, dynamic>) {
+        return;
+      }
 
-      if (status == 'approved') {
+      final status =
+          decoded['status']
+              ?.toString()
+              .toUpperCase();
+
+      debugPrint(
+        '📊 STATUS ASAAS: $status',
+      );
+
+      // ========================================================
+      // ASAAS PAGAMENTO CONFIRMADO
+      // ========================================================
+
+      if (status == 'RECEIVED' ||
+          status == 'CONFIRMED') {
         timer?.cancel();
 
         if (!mounted) return;
 
         setState(() {
           verificandoPagamento = false;
+          pagamentoConfirmado = true;
         });
+
+        mensagem(
+          'Pagamento confirmado! Finalizando pedido.',
+        );
 
         await confirmarPedidoDepoisDoPagamento();
 
         return;
       }
 
-      if (status == 'rejected' ||
-          status == 'cancelled') {
+      // ========================================================
+      // PAGAMENTO VENCIDO
+      // ========================================================
+
+      if (status == 'OVERDUE' ||
+          status == 'REFUNDED' ||
+          status == 'REFUND_REQUESTED' ||
+          status == 'CHARGEBACK_REQUESTED' ||
+          status == 'CHARGEBACK_DISPUTE' ||
+          status == 'AWAITING_CHARGEBACK_REVERSAL') {
         timer?.cancel();
 
         if (!mounted) return;
 
         mensagem(
-          'O pagamento não foi aprovado.',
+          'O pagamento PIX não está disponível.',
           erro: true,
         );
+
+        return;
       }
     } catch (e) {
       debugPrint(
-        '⚠️ Erro consultando pagamento: $e',
+        '⚠️ Erro consultando pagamento Asaas: $e',
       );
     } finally {
       verificandoPagamento = false;
@@ -472,10 +650,18 @@ class _CheckoutPaymentScreenState
     return widget.itens.map(
       (item) {
         return {
-          'produtoId': item.produtoId,
-          'nome': item.nome,
-          'preco': item.preco,
-          'quantidade': item.quantidade,
+          'produtoId':
+              item.produtoId,
+
+          'nome':
+              item.nome,
+
+          'preco':
+              item.preco,
+
+          'quantidade':
+              item.quantidade,
+
           'subtotal':
               item.preco *
                   item.quantidade,
@@ -491,6 +677,15 @@ class _CheckoutPaymentScreenState
   Future<void>
       confirmarPedidoDepoisDoPagamento() async {
     if (!mounted) return;
+
+    if (pagamentoId == null ||
+        pagamentoId!.isEmpty) {
+      mensagem(
+        'ID do pagamento não encontrado.',
+        erro: true,
+      );
+      return;
+    }
 
     setState(() {
       processando = true;
@@ -520,11 +715,20 @@ class _CheckoutPaymentScreenState
         'pagamento':
             metodoSelecionado,
 
+        /*
+         * ID REAL DO ASAAS
+         */
         'pagamentoId':
             pagamentoId,
 
+        /*
+         * Referência criada pelo FoodJet.
+         */
+        'externalReference':
+            referenciaPedido,
+
         'statusPagamento':
-            'approved',
+            'RECEIVED',
 
         'subtotal':
             widget.subtotal,
@@ -539,6 +743,26 @@ class _CheckoutPaymentScreenState
             widget.total,
       };
 
+      debugPrint(
+        '========================================',
+      );
+
+      debugPrint(
+        '📦 CRIANDO PEDIDO FOODJET',
+      );
+
+      debugPrint(
+        '💳 PAYMENT ID ASAAS: $pagamentoId',
+      );
+
+      debugPrint(
+        '🔖 REFERÊNCIA: $referenciaPedido',
+      );
+
+      debugPrint(
+        '========================================',
+      );
+
       final resposta =
           await http.post(
         Uri.parse(
@@ -547,8 +771,10 @@ class _CheckoutPaymentScreenState
         headers: {
           'Content-Type':
               'application/json',
+
           'Accept':
               'application/json',
+
           'Authorization':
               'Bearer $token',
         },
@@ -559,15 +785,30 @@ class _CheckoutPaymentScreenState
       );
 
       debugPrint(
-        '📦 RESPOSTA CRIAÇÃO PEDIDO: ${resposta.body}',
+        '📦 STATUS CRIAÇÃO PEDIDO: '
+        '${resposta.statusCode}',
+      );
+
+      debugPrint(
+        '📦 RESPOSTA PEDIDO: '
+        '${resposta.body}',
       );
 
       if (!mounted) return;
 
       if (resposta.statusCode != 200 &&
           resposta.statusCode != 201) {
-        final dados =
-            jsonDecode(resposta.body);
+        Map<String, dynamic> dados = {};
+
+        try {
+          final decoded =
+              jsonDecode(resposta.body);
+
+          if (decoded
+              is Map<String, dynamic>) {
+            dados = decoded;
+          }
+        } catch (_) {}
 
         throw Exception(
           dados['erro']?.toString() ??
@@ -589,7 +830,7 @@ class _CheckoutPaymentScreenState
 
       if (pedidoCriado is! Map) {
         throw Exception(
-          'Pedido criado sem retorno do ID.',
+          'Pedido criado sem retorno dos dados.',
         );
       }
 
@@ -620,15 +861,15 @@ class _CheckoutPaymentScreenState
       );
 
       debugPrint(
-        '✅ PAGAMENTO APROVADO',
+        '🎉 PAGAMENTO ASAAS CONFIRMADO',
       );
 
       debugPrint(
-        '✅ PEDIDO CRIADO',
+        '💳 PAYMENT ID: $pagamentoId',
       );
 
       debugPrint(
-        '🆔 PEDIDO: $pedidoId',
+        '📦 PEDIDO FOODJET: $pedidoId',
       );
 
       debugPrint(
@@ -640,7 +881,8 @@ class _CheckoutPaymentScreenState
         MaterialPageRoute(
           builder: (context) =>
               OrderTrackingScreen(
-            pedidoId: pedidoId,
+            pedidoId:
+                pedidoId,
           ),
         ),
       );
@@ -681,8 +923,12 @@ class _CheckoutPaymentScreenState
     final selecionado =
         metodoSelecionado == id;
 
+    final bloqueado =
+        pagamentoGerado ||
+        processando;
+
     return GestureDetector(
-      onTap: pagamentoGerado
+      onTap: bloqueado
           ? null
           : () {
               setState(() {
@@ -691,13 +937,17 @@ class _CheckoutPaymentScreenState
             },
       child: AnimatedContainer(
         duration:
-            const Duration(milliseconds: 200),
+            const Duration(
+          milliseconds: 200,
+        ),
         margin:
-            const EdgeInsets.only(bottom: 12),
+            const EdgeInsets.only(
+          bottom: 12,
+        ),
         padding:
             const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: pagamentoGerado
+          color: bloqueado
               ? Colors.grey.shade100
               : Colors.white,
           borderRadius:
@@ -712,7 +962,9 @@ class _CheckoutPaymentScreenState
           boxShadow: [
             BoxShadow(
               color: Colors.black
-                  .withValues(alpha: 0.035),
+                  .withValues(
+                alpha: 0.035,
+              ),
               blurRadius: 8,
               offset:
                   const Offset(0, 3),
@@ -731,9 +983,12 @@ class _CheckoutPaymentScreenState
                       )
                     : Colors.grey.shade100,
                 borderRadius:
-                    BorderRadius.circular(15),
+                    BorderRadius.circular(
+                  15,
+                ),
               ),
-              child: logo ??
+              child:
+                  logo ??
                   Icon(
                     icone,
                     color: laranja,
@@ -741,7 +996,9 @@ class _CheckoutPaymentScreenState
                   ),
             ),
 
-            const SizedBox(width: 14),
+            const SizedBox(
+              width: 14,
+            ),
 
             Expanded(
               child: Column(
@@ -757,10 +1014,15 @@ class _CheckoutPaymentScreenState
                           FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 4),
+
+                  const SizedBox(
+                    height: 4,
+                  ),
+
                   Text(
                     descricao,
-                    style: TextStyle(
+                    style:
+                        TextStyle(
                       color:
                           Colors.grey.shade600,
                       fontSize: 13,
@@ -797,7 +1059,8 @@ class _CheckoutPaymentScreenState
     ScaffoldMessenger.of(context)
         .showSnackBar(
       SnackBar(
-        content: Text(texto),
+        content:
+            Text(texto),
         backgroundColor:
             erro
                 ? Colors.red.shade700
@@ -807,7 +1070,9 @@ class _CheckoutPaymentScreenState
         shape:
             RoundedRectangleBorder(
           borderRadius:
-              BorderRadius.circular(12),
+              BorderRadius.circular(
+            12,
+          ),
         ),
       ),
     );
@@ -820,62 +1085,83 @@ class _CheckoutPaymentScreenState
   Widget areaPix() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
+      padding:
+          const EdgeInsets.all(20),
+      decoration:
+          BoxDecoration(
+        color:
+            Colors.white,
         borderRadius:
-            BorderRadius.circular(20),
+            BorderRadius.circular(
+          20,
+        ),
       ),
       child: Column(
         children: [
           const Icon(
             Icons.pix,
             size: 42,
-            color: Color(0xFF32BCAD),
+            color:
+                Color(0xFF32BCAD),
           ),
 
-          const SizedBox(height: 12),
+          const SizedBox(
+            height: 12,
+          ),
 
           const Text(
             'PIX gerado',
-            style: TextStyle(
+            style:
+                TextStyle(
               fontSize: 20,
               fontWeight:
                   FontWeight.bold,
             ),
           ),
 
-          const SizedBox(height: 6),
+          const SizedBox(
+            height: 6,
+          ),
 
           Text(
-            'Pague pelo aplicativo do seu banco.',
+            pagamentoConfirmado
+                ? 'Pagamento confirmado!'
+                : 'Pague pelo aplicativo do seu banco.',
             textAlign:
                 TextAlign.center,
-            style: TextStyle(
+            style:
+                TextStyle(
               color:
                   Colors.grey.shade600,
             ),
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(
+            height: 20,
+          ),
 
           if (qrCodeBase64.isNotEmpty)
             Container(
               width: 230,
               height: 230,
               padding:
-                  const EdgeInsets.all(12),
-              color: Colors.white,
-              child: Image.memory(
+                  const EdgeInsets.all(
+                12,
+              ),
+              color:
+                  Colors.white,
+              child:
+                  Image.memory(
                 base64Decode(
                   qrCodeBase64
-                      .contains(',')
+                          .contains(',')
                       ? qrCodeBase64
                           .split(',')
                           .last
                       : qrCodeBase64,
                 ),
-                fit: BoxFit.contain,
+                fit:
+                    BoxFit.contain,
                 errorBuilder:
                     (_, __, ___) {
                   return const Icon(
@@ -891,21 +1177,29 @@ class _CheckoutPaymentScreenState
               size: 200,
             ),
 
-          const SizedBox(height: 20),
+          const SizedBox(
+            height: 20,
+          ),
 
           if (qrCode.isNotEmpty)
             Container(
               padding:
-                  const EdgeInsets.all(12),
-              decoration: BoxDecoration(
+                  const EdgeInsets.all(
+                12,
+              ),
+              decoration:
+                  BoxDecoration(
                 color:
                     Colors.grey.shade100,
                 borderRadius:
-                    BorderRadius.circular(12),
+                    BorderRadius.circular(
+                  12,
+                ),
               ),
-              child: SelectableText(
+              child:
+                  SelectableText(
                 qrCode,
-                maxLines: 4,
+                maxLines: 6,
                 style:
                     const TextStyle(
                   fontSize: 11,
@@ -913,9 +1207,29 @@ class _CheckoutPaymentScreenState
               ),
             ),
 
-          const SizedBox(height: 15),
+          const SizedBox(
+            height: 15,
+          ),
 
-          if (verificandoPagamento)
+          if (pagamentoId != null)
+            Text(
+              'Pagamento: $pagamentoId',
+              textAlign:
+                  TextAlign.center,
+              style:
+                  TextStyle(
+                fontSize: 11,
+                color:
+                    Colors.grey.shade500,
+              ),
+            ),
+
+          const SizedBox(
+            height: 10,
+          ),
+
+          if (verificandoPagamento &&
+              !pagamentoConfirmado)
             const Column(
               children: [
                 SizedBox(
@@ -926,14 +1240,45 @@ class _CheckoutPaymentScreenState
                     strokeWidth: 3,
                   ),
                 ),
-                SizedBox(height: 10),
+
+                SizedBox(
+                  height: 10,
+                ),
+
                 Text(
                   'Aguardando confirmação do pagamento...',
                   textAlign:
                       TextAlign.center,
-                  style: TextStyle(
+                  style:
+                      TextStyle(
                     fontWeight:
                         FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+
+          if (pagamentoConfirmado)
+            const Row(
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.check_circle,
+                  color:
+                      Colors.green,
+                ),
+                SizedBox(
+                  width: 8,
+                ),
+                Text(
+                  'Pagamento confirmado',
+                  style:
+                      TextStyle(
+                    color:
+                        Colors.green,
+                    fontWeight:
+                        FontWeight.bold,
                   ),
                 ),
               ],
@@ -948,32 +1293,46 @@ class _CheckoutPaymentScreenState
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
-      backgroundColor: fundo,
+      backgroundColor:
+          fundo,
 
-      appBar: AppBar(
-        backgroundColor: laranja,
-        foregroundColor: Colors.white,
-        elevation: 0,
-        title: const Text(
+      appBar:
+          AppBar(
+        backgroundColor:
+            laranja,
+        foregroundColor:
+            Colors.white,
+        elevation:
+            0,
+        title:
+            const Text(
           'Pagamento',
-          style: TextStyle(
+          style:
+              TextStyle(
             fontWeight:
                 FontWeight.bold,
           ),
         ),
       ),
 
-      body: SafeArea(
-        child: Column(
+      body:
+          SafeArea(
+        child:
+            Column(
           children: [
             Expanded(
               child:
                   SingleChildScrollView(
                 padding:
-                    const EdgeInsets.all(20),
-                child: Column(
+                    const EdgeInsets.all(
+                  20,
+                ),
+                child:
+                    Column(
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
                   children: [
@@ -981,7 +1340,9 @@ class _CheckoutPaymentScreenState
                       width:
                           double.infinity,
                       padding:
-                          const EdgeInsets.all(20),
+                          const EdgeInsets.all(
+                        20,
+                      ),
                       decoration:
                           BoxDecoration(
                         gradient:
@@ -1004,7 +1365,8 @@ class _CheckoutPaymentScreenState
                           22,
                         ),
                       ),
-                      child: Column(
+                      child:
+                          Column(
                         crossAxisAlignment:
                             CrossAxisAlignment.start,
                         children: [
@@ -1098,17 +1460,21 @@ class _CheckoutPaymentScreenState
                     ),
 
                     opcao(
-                      id: 'PIX',
-                      icone: Icons.pix,
-                      titulo: 'PIX',
+                      id:
+                          'PIX',
+                      icone:
+                          Icons.pix,
+                      titulo:
+                          'PIX',
                       descricao:
                           'Pagamento instantâneo pelo seu banco.',
                     ),
 
                     opcao(
-                      id: 'MERCADO_PAGO',
-                      icone: Icons
-                          .account_balance_wallet_outlined,
+                      id:
+                          'MERCADO_PAGO',
+                      icone:
+                          Icons.account_balance_wallet_outlined,
                       titulo:
                           'Mercado Pago',
                       descricao:
@@ -1116,13 +1482,16 @@ class _CheckoutPaymentScreenState
                     ),
 
                     opcao(
-                      id: 'NUBANK',
+                      id:
+                          'NUBANK',
                       icone:
                           Icons.account_balance,
-                      titulo: 'Nubank',
+                      titulo:
+                          'Nubank',
                       descricao:
                           'Pague pelo aplicativo Nubank usando PIX.',
-                      logo: Container(
+                      logo:
+                          Container(
                         alignment:
                             Alignment.center,
                         child:
@@ -1134,7 +1503,8 @@ class _CheckoutPaymentScreenState
                                 Color(
                               0xFF820AD1,
                             ),
-                            fontSize: 22,
+                            fontSize:
+                                22,
                             fontWeight:
                                 FontWeight.bold,
                           ),
@@ -1143,19 +1513,23 @@ class _CheckoutPaymentScreenState
                     ),
 
                     opcao(
-                      id: 'CARTAO',
+                      id:
+                          'CARTAO',
                       icone:
                           Icons.credit_card,
-                      titulo: 'Cartão',
+                      titulo:
+                          'Cartão',
                       descricao:
                           'Pagamento com cartão.',
                     ),
 
                     opcao(
-                      id: 'DINHEIRO',
+                      id:
+                          'DINHEIRO',
                       icone:
                           Icons.payments_outlined,
-                      titulo: 'Dinheiro',
+                      titulo:
+                          'Dinheiro',
                       descricao:
                           'Pagar na entrega.',
                     ),
@@ -1183,14 +1557,19 @@ class _CheckoutPaymentScreenState
                 20,
                 20,
               ),
-              color: Colors.white,
-              child: SizedBox(
+              color:
+                  Colors.white,
+              child:
+                  SizedBox(
                 width:
                     double.infinity,
-                height: 56,
-                child: ElevatedButton(
+                height:
+                    56,
+                child:
+                    ElevatedButton(
                   onPressed:
-                      processando
+                      processando ||
+                              pagamentoGerado
                           ? null
                           : gerarPix,
                   style:
@@ -1201,7 +1580,8 @@ class _CheckoutPaymentScreenState
                         Colors.white,
                     disabledBackgroundColor:
                         Colors.grey.shade400,
-                    elevation: 0,
+                    elevation:
+                        0,
                     shape:
                         RoundedRectangleBorder(
                       borderRadius:
@@ -1210,44 +1590,49 @@ class _CheckoutPaymentScreenState
                       ),
                     ),
                   ),
-                  child: processando
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child:
-                              CircularProgressIndicator(
-                            strokeWidth: 3,
-                            valueColor:
-                                AlwaysStoppedAnimation<
-                                    Color>(
-                              Colors.white,
-                            ),
-                          ),
-                        )
-                      : Row(
-                          mainAxisAlignment:
-                              MainAxisAlignment
-                                  .center,
-                          children: [
-                            const Icon(
-                              Icons.lock_outline,
-                            ),
-                            const SizedBox(
-                              width: 8,
-                            ),
-                            Text(
-                              pagamentoGerado
-                                  ? 'AGUARDANDO PAGAMENTO'
-                                  : 'PAGAR ${formatarPreco(widget.total)}',
-                              style:
-                                  const TextStyle(
-                                fontSize: 16,
-                                fontWeight:
-                                    FontWeight.bold,
+                  child:
+                      processando
+                          ? const SizedBox(
+                              width:
+                                  24,
+                              height:
+                                  24,
+                              child:
+                                  CircularProgressIndicator(
+                                strokeWidth:
+                                    3,
+                                valueColor:
+                                    AlwaysStoppedAnimation<
+                                        Color>(
+                                  Colors.white,
+                                ),
                               ),
+                            )
+                          : Row(
+                              mainAxisAlignment:
+                                  MainAxisAlignment.center,
+                              children: [
+                                const Icon(
+                                  Icons.lock_outline,
+                                ),
+                                const SizedBox(
+                                  width:
+                                      8,
+                                ),
+                                Text(
+                                  pagamentoGerado
+                                      ? 'AGUARDANDO PAGAMENTO'
+                                      : 'PAGAR ${formatarPreco(widget.total)}',
+                                  style:
+                                      const TextStyle(
+                                    fontSize:
+                                        16,
+                                    fontWeight:
+                                        FontWeight.bold,
+                                  ),
+                                ),
+                              ],
                             ),
-                          ],
-                        ),
                 ),
               ),
             ),
