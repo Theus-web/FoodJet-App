@@ -1,7 +1,14 @@
-import 'package:flutter/material.dart';
 
+import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../config/api.dart';
 import 'cart_screen.dart';
-import 'order_review_screen.dart';
 
 class PaymentScreen extends StatefulWidget {
   final Map<String, String> endereco;
@@ -9,12 +16,20 @@ class PaymentScreen extends StatefulWidget {
   final double subtotal;
   final String restauranteId;
 
+  final double taxaEntrega;
+  final double taxaServico;
+
+  final String formaPagamento;
+
   const PaymentScreen({
     super.key,
     required this.endereco,
     required this.itens,
     required this.subtotal,
     required this.restauranteId,
+    this.taxaEntrega = 6.50,
+    this.taxaServico = 0.0,
+    this.formaPagamento = 'PIX',
   });
 
   @override
@@ -23,215 +38,23 @@ class PaymentScreen extends StatefulWidget {
 
 class _PaymentScreenState extends State<PaymentScreen> {
   static const Color laranja = Color(0xFFF97316);
-  static const Color fundo = Color(0xFFF6F7F9);
 
-  String pagamentoSelecionado = 'PIX';
+  double get total =>
+      widget.subtotal +
+      widget.taxaServico +
+      widget.taxaEntrega;
 
-  void continuar() {
-    if (widget.itens.isEmpty) {
-      _mensagem('Seu carrinho está vazio.', erro: true);
-      return;
-    }
+  @override
+  void initState() {
+    super.initState();
 
-    if (pagamentoSelecionado == 'PIX') {
-      _abrirCheckoutPix();
-      return;
-    }
-
-    if (pagamentoSelecionado == 'MERCADO_PAGO') {
-      _abrirCheckoutMercadoPago();
-      return;
-    }
-
-    if (pagamentoSelecionado == 'NUBANK') {
-      _abrirCheckoutNubank();
-      return;
-    }
-
-    _irParaRevisao();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _iniciarPagamento();
+    });
   }
 
-  void _irParaRevisao() {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OrderReviewScreen(
-          itens: widget.itens,
-          subtotal: widget.subtotal,
-          endereco: widget.endereco,
-          pagamento: pagamentoSelecionado,
-          restauranteId: widget.restauranteId,
-        ),
-      ),
-    );
-  }
-
-  void _abrirCheckoutPix() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) {
-        return _CheckoutModal(
-          titulo: 'Pagamento via PIX',
-          subtitulo: 'Rápido, seguro e instantâneo',
-          icone: Icons.pix,
-          iconeCor: const Color(0xFF00A884),
-          total: widget.subtotal,
-          tipo: 'PIX',
-          onContinuar: () {
-            Navigator.pop(context);
-            _irParaRevisao();
-          },
-        );
-      },
-    );
-  }
-
-  void _abrirCheckoutMercadoPago() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) {
-        return _CheckoutModal(
-          titulo: 'Mercado Pago',
-          subtitulo: 'Pague com sua conta Mercado Pago',
-          icone: Icons.account_balance_wallet,
-          iconeCor: const Color(0xFF009EE3),
-          total: widget.subtotal,
-          tipo: 'MERCADO_PAGO',
-          onContinuar: () {
-            Navigator.pop(context);
-            _irParaRevisao();
-          },
-        );
-      },
-    );
-  }
-
-  void _abrirCheckoutNubank() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) {
-        return _CheckoutModal(
-          titulo: 'Nubank',
-          subtitulo: 'Pague usando seu cartão ou conta Nubank',
-          icone: Icons.credit_card,
-          iconeCor: const Color(0xFF820AD1),
-          total: widget.subtotal,
-          tipo: 'NUBANK',
-          onContinuar: () {
-            Navigator.pop(context);
-            _irParaRevisao();
-          },
-        );
-      },
-    );
-  }
-
-  Widget _metodo({
-    required String valor,
-    required String titulo,
-    required String descricao,
-    required IconData icone,
-    required Color cor,
-  }) {
-    final selecionado = pagamentoSelecionado == valor;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          pagamentoSelecionado = valor;
-        });
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 220),
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
-          border: Border.all(
-            color: selecionado ? cor : Colors.grey.shade200,
-            width: selecionado ? 2 : 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.035),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 52,
-              height: 52,
-              decoration: BoxDecoration(
-                color: cor.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(15),
-              ),
-              child: Icon(
-                icone,
-                color: cor,
-                size: 27,
-              ),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    titulo,
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    descricao,
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 25,
-              height: 25,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: selecionado
-                      ? cor
-                      : Colors.grey.shade400,
-                  width: 2,
-                ),
-                color: selecionado
-                    ? cor
-                    : Colors.transparent,
-              ),
-              child: selecionado
-                  ? const Icon(
-                      Icons.check,
-                      size: 16,
-                      color: Colors.white,
-                    )
-                  : null,
-            ),
-          ],
-        ),
-      ),
-    );
+  String dinheiro(double valor) {
+    return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 
   void _mensagem(
@@ -252,408 +75,2622 @@ class _PaymentScreenState extends State<PaymentScreen> {
     );
   }
 
+  // ============================================================
+  // TOKEN PADRONIZADO
+  // ============================================================
+
+
+  // ============================================================
+  // INICIAR PAGAMENTO
+  // ============================================================
+
+  void _iniciarPagamento() {
+    if (!mounted) return;
+
+    if (widget.itens.isEmpty) {
+      _mensagem(
+        'Seu carrinho está vazio.',
+        erro: true,
+      );
+
+      Navigator.pop(context);
+      return;
+    }
+
+    if (widget.restauranteId.trim().isEmpty) {
+      _mensagem(
+        'Restaurante não identificado.',
+        erro: true,
+      );
+
+      Navigator.pop(context);
+      return;
+    }
+
+    if (total <= 0) {
+      _mensagem(
+        'O valor do pedido é inválido.',
+        erro: true,
+      );
+
+      Navigator.pop(context);
+      return;
+    }
+
+    final forma = widget.formaPagamento
+        .trim()
+        .toUpperCase();
+
+    debugPrint(
+      '💳 FORMA DE PAGAMENTO RECEBIDA: $forma',
+    );
+
+    // ==========================================================
+    // PIX
+    // ==========================================================
+
+    if (forma == 'PIX') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PixCheckoutPage(
+            total: total,
+            subtotal: widget.subtotal,
+            taxaEntrega: widget.taxaEntrega,
+            taxaServico: widget.taxaServico,
+            restauranteId: widget.restauranteId,
+            endereco: widget.endereco,
+            itens: widget.itens,
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    // ==========================================================
+    // CRÉDITO
+    // ==========================================================
+
+    if (forma == 'CREDITO' ||
+        forma == 'CRÉDITO' ||
+        forma == 'CREDIT_CARD') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CardPaymentPage(
+            formaPagamento: 'CREDITO',
+            total: total,
+            subtotal: widget.subtotal,
+            taxaEntrega: widget.taxaEntrega,
+            taxaServico: widget.taxaServico,
+            restauranteId: widget.restauranteId,
+            endereco: widget.endereco,
+            itens: widget.itens,
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    // ==========================================================
+    // DÉBITO
+    // ==========================================================
+
+    if (forma == 'DEBITO' ||
+        forma == 'DÉBITO' ||
+        forma == 'DEBIT_CARD') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CardPaymentPage(
+            formaPagamento: 'DEBITO',
+            total: total,
+            subtotal: widget.subtotal,
+            taxaEntrega: widget.taxaEntrega,
+            taxaServico: widget.taxaServico,
+            restauranteId: widget.restauranteId,
+            endereco: widget.endereco,
+            itens: widget.itens,
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    // ==========================================================
+    // DINHEIRO
+    // ==========================================================
+
+    if (forma == 'DINHEIRO') {
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CashPaymentPage(
+            total: total,
+            subtotal: widget.subtotal,
+            taxaEntrega: widget.taxaEntrega,
+            taxaServico: widget.taxaServico,
+            restauranteId: widget.restauranteId,
+            endereco: widget.endereco,
+            itens: widget.itens,
+          ),
+        ),
+      );
+
+      return;
+    }
+
+    _mensagem(
+      'Forma de pagamento inválida: $forma',
+      erro: true,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    return const Scaffold(
+      backgroundColor: Color(0xFFF7F7F7),
+      body: Center(
+        child: CircularProgressIndicator(
+          color: Color(0xFFF97316),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// PAGAMENTO COM CARTÃO
+// ============================================================================
+
+class CardPaymentPage extends StatefulWidget {
+  final String formaPagamento;
+  final double total;
+  final double subtotal;
+  final double taxaEntrega;
+  final double taxaServico;
+  final String restauranteId;
+  final Map<String, String> endereco;
+  final List<CartItem> itens;
+
+  const CardPaymentPage({
+    super.key,
+    required this.formaPagamento,
+    required this.total,
+    required this.subtotal,
+    required this.taxaEntrega,
+    required this.taxaServico,
+    required this.restauranteId,
+    required this.endereco,
+    required this.itens,
+  });
+
+  @override
+  State<CardPaymentPage> createState() =>
+      _CardPaymentPageState();
+}
+
+class _CardPaymentPageState
+    extends State<CardPaymentPage> {
+  static const Color laranja = Color(0xFFF97316);
+
+  final _formKey = GlobalKey<FormState>();
+
+  final numeroController =
+      TextEditingController();
+
+  final nomeController =
+      TextEditingController();
+
+  final validadeController =
+      TextEditingController();
+
+  final cvvController =
+      TextEditingController();
+
+  bool carregando = false;
+
+  @override
+  void dispose() {
+    numeroController.dispose();
+    nomeController.dispose();
+    validadeController.dispose();
+    cvvController.dispose();
+
+    super.dispose();
+  }
+
+  String dinheiro(double valor) {
+    return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
+  }
+
+  String get titulo {
+    if (widget.formaPagamento == 'CREDITO') {
+      return 'Cartão de crédito';
+    }
+
+    return 'Cartão de débito';
+  }
+
+  // ============================================================
+  // MESMO TOKEN DO PIX
+  // ============================================================
+
+  Future<String?> _obterToken() async {
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    const chaves = [
+      'token',
+      'jwt',
+      'access_token',
+      'auth_token',
+    ];
+
+    for (final chave in chaves) {
+      final valor =
+          prefs.getString(chave);
+
+      if (valor == null) {
+        continue;
+      }
+
+      var token =
+          valor.trim();
+
+      if (token.isEmpty) {
+        continue;
+      }
+
+      if (token
+          .toLowerCase()
+          .startsWith('bearer ')) {
+        token =
+            token.substring(7).trim();
+      }
+
+      if (token.isNotEmpty) {
+        debugPrint(
+          '🔐 TOKEN ENCONTRADO PARA PAGAMENTO: $chave',
+        );
+
+        return token;
+      }
+    }
+
+    debugPrint(
+      '❌ NENHUM TOKEN ENCONTRADO NO STORAGE',
+    );
+
+    return null;
+  }
+
+  void _mensagem(
+    String texto, {
+    bool erro = false,
+  }) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      SnackBar(
+        content: Text(texto),
+        backgroundColor:
+            erro
+                ? Colors.red.shade700
+                : laranja,
+        behavior:
+            SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // ============================================================
+  // PAGAR CARTÃO
+  // ============================================================
+
+  Future<void> _pagar() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
+    final token =
+        await _obterToken();
+
+    if (token == null) {
+      _mensagem(
+        'Sessão expirada. Faça login novamente.',
+        erro: true,
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      carregando = true;
+    });
+
+    try {
+      // ========================================================
+      // ENDPOINT CORRETO
+      // ========================================================
+
+      final String endpoint;
+
+      if (widget.formaPagamento == 'DEBITO') {
+        endpoint =
+            '/pagamentos/debito';
+      } else {
+        endpoint =
+            '/pagamentos/cartao';
+      }
+
+      final url = Uri.parse(
+        '${Api.baseUrl}$endpoint',
+      );
+
+      debugPrint(
+        '========================================',
+      );
+
+      debugPrint(
+        '💳 FOODJET PAGAMENTO',
+      );
+
+      debugPrint(
+        'FORMA: ${widget.formaPagamento}',
+      );
+
+      debugPrint(
+        'ENDPOINT: $endpoint',
+      );
+
+      debugPrint(
+        'TOKEN: ${token.isNotEmpty ? "SIM" : "NÃO"}',
+      );
+
+      debugPrint(
+        '========================================',
+      );
+
+      // ========================================================
+      // ITENS
+      // ========================================================
+
+      final itens =
+          widget.itens.map((item) {
+        return {
+          'produtoId':
+              item.nome,
+          'nome':
+              item.nome,
+          'quantidade':
+              item.quantidade,
+          'preco':
+              item.preco,
+          'valor':
+              item.preco *
+                  item.quantidade,
+        };
+      }).toList();
+
+      // ========================================================
+      // BODY
+      // ========================================================
+
+      final body = {
+        'valor':
+            double.parse(
+          widget.total
+              .toStringAsFixed(2),
+        ),
+
+        'total':
+            double.parse(
+          widget.total
+              .toStringAsFixed(2),
+        ),
+
+        'subtotal':
+            double.parse(
+          widget.subtotal
+              .toStringAsFixed(2),
+        ),
+
+        'taxaEntrega':
+            double.parse(
+          widget.taxaEntrega
+              .toStringAsFixed(2),
+        ),
+
+        'taxaServico':
+            double.parse(
+          widget.taxaServico
+              .toStringAsFixed(2),
+        ),
+
+        'restauranteId':
+            widget.restauranteId,
+
+        'formaPagamento':
+            widget.formaPagamento,
+
+        'endereco':
+            widget.endereco,
+
+        'itens':
+            itens,
+
+        // Para o débito o Asaas não processa
+        // os dados diretamente pela API.
+        //
+        // Para crédito, o backend pode usar
+        // os dados conforme sua implementação.
+        'cartao': {
+          'numero':
+              numeroController.text
+                  .replaceAll(
+                    ' ',
+                    '',
+                  ),
+
+          'nome':
+              nomeController.text
+                  .trim(),
+
+          'validade':
+              validadeController.text
+                  .trim(),
+
+          'cvv':
+              cvvController.text
+                  .trim(),
+        },
+      };
+
+      // ========================================================
+      // POST COM BEARER
+      // ========================================================
+
+      final response =
+          await http.post(
+        url,
+
+        headers: {
+          'Content-Type':
+              'application/json',
+
+          // MESMO PADRÃO DO PIX
+          'Authorization':
+              'Bearer $token',
+        },
+
+        body:
+            jsonEncode(body),
+      ).timeout(
+        const Duration(
+          seconds: 60,
+        ),
+      );
+
+      debugPrint(
+        '💳 HTTP: ${response.statusCode}',
+      );
+
+      debugPrint(
+        '💳 BODY: ${response.body}',
+      );
+
+      dynamic dados;
+
+      try {
+        dados =
+            jsonDecode(
+          response.body,
+        );
+      } catch (_) {
+        throw Exception(
+          'Resposta inválida do servidor.',
+        );
+      }
+
+      // ========================================================
+      // ERRO HTTP
+      // ========================================================
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        String mensagem =
+            'Não foi possível processar o pagamento.';
+
+        if (dados is Map) {
+          mensagem =
+              dados['erro']
+                      ?.toString() ??
+                  dados['message']
+                      ?.toString() ??
+                  dados['error']
+                      ?.toString() ??
+                  mensagem;
+        }
+
+        throw Exception(
+          mensagem,
+        );
+      }
+
+      // ========================================================
+      // ERRO DE NEGÓCIO
+      // ========================================================
+
+      if (dados is Map &&
+          dados['sucesso'] == false) {
+        throw Exception(
+          dados['erro']
+                  ?.toString() ??
+              'Pagamento não aprovado.',
+        );
+      }
+
+      // ========================================================
+      // DÉBITO
+      // ========================================================
+
+      if (widget.formaPagamento ==
+          'DEBITO') {
+        final invoiceUrl =
+            dados is Map
+                ? dados['invoiceUrl']
+                    ?.toString()
+                : null;
+
+        if (invoiceUrl != null &&
+            invoiceUrl.isNotEmpty) {
+          _mensagem(
+            'Cobrança criada. Continue o pagamento pela fatura do Asaas.',
+          );
+
+          await Future.delayed(
+            const Duration(
+              milliseconds: 700,
+            ),
+          );
+
+          if (!mounted) return;
+
+          // Não abrimos URL automaticamente
+          // para evitar depender de pacote externo.
+          //
+          // Exibe a URL para o usuário copiar.
+          await showDialog(
+            context: context,
+            builder: (_) {
+              return AlertDialog(
+                title:
+                    const Text(
+                  'Pagamento com débito',
+                ),
+                content:
+                    SelectableText(
+                  invoiceUrl,
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () {
+                      Clipboard.setData(
+                        ClipboardData(
+                          text:
+                              invoiceUrl,
+                        ),
+                      );
+
+                      Navigator.pop(
+                        context,
+                      );
+
+                      _mensagem(
+                        'Link da fatura copiado.',
+                      );
+                    },
+                    child:
+                        const Text(
+                      'COPIAR LINK',
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pop(
+                        context,
+                      );
+                    },
+                    child:
+                        const Text(
+                      'FECHAR',
+                    ),
+                  ),
+                ],
+              );
+            },
+          );
+
+          return;
+        }
+      }
+
+      // ========================================================
+      // SUCESSO
+      // ========================================================
+
+      if (!mounted) return;
+
+      _mensagem(
+        widget.formaPagamento ==
+                'CREDITO'
+            ? 'Pagamento com cartão de crédito enviado para processamento.'
+            : 'Pagamento enviado para processamento.',
+      );
+
+      await Future.delayed(
+        const Duration(
+          milliseconds: 800,
+        ),
+      );
+
+      if (!mounted) return;
+
+      Navigator.pop(context);
+
+    } catch (e) {
+      debugPrint(
+        '❌ ERRO CARTÃO/DÉBITO: $e',
+      );
+
+      if (!mounted) return;
+
+      _mensagem(
+        e.toString()
+            .replaceFirst(
+          'Exception: ',
+          '',
+        ),
+        erro: true,
+      );
+
+    } finally {
+      if (mounted) {
+        setState(() {
+          carregando = false;
+        });
+      }
+    }
+  }
+
+  InputDecoration _decoracao(
+    String label,
+    IconData icon,
+  ) {
+    return InputDecoration(
+      labelText: label,
+      prefixIcon:
+          Icon(icon),
+      filled: true,
+      fillColor:
+          Colors.white,
+      border:
+          OutlineInputBorder(
+        borderRadius:
+            BorderRadius.circular(
+          14,
+        ),
+        borderSide:
+            BorderSide.none,
+      ),
+    );
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
-      backgroundColor: fundo,
+      backgroundColor:
+          const Color(0xFFF7F7F7),
+
       appBar: AppBar(
-        backgroundColor: laranja,
-        foregroundColor: Colors.white,
+        backgroundColor:
+            Colors.white,
+        foregroundColor:
+            Colors.black87,
         elevation: 0,
-        title: const Text(
-          'Pagamento',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
+        title: Text(
+          titulo,
+          style:
+              const TextStyle(
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
       ),
+
       body: SafeArea(
-        child: Column(
-          children: [
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(
-                  20,
-                  22,
-                  20,
-                  20,
-                ),
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Escolha como pagar',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+        child: Form(
+          key: _formKey,
+
+          child:
+              SingleChildScrollView(
+            padding:
+                const EdgeInsets.all(
+              18,
+            ),
+
+            child: Column(
+              children: [
+                Container(
+                  width:
+                      double.infinity,
+
+                  padding:
+                      const EdgeInsets.all(
+                    16,
+                  ),
+
+                  decoration:
+                      BoxDecoration(
+                    color:
+                        Colors.white,
+                    borderRadius:
+                        BorderRadius.circular(
+                      16,
+                    ),
+                  ),
+
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.credit_card,
+                        color:
+                            laranja,
+                        size: 30,
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Tenha uma experiência rápida e segura.',
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 14,
+
+                      const SizedBox(
+                        width: 12,
                       ),
-                    ),
-                    const SizedBox(height: 24),
 
-                    _tituloSecao('Pagamento instantâneo'),
+                      Expanded(
+                        child:
+                            Column(
+                          crossAxisAlignment:
+                              CrossAxisAlignment.start,
 
-                    _metodo(
-                      valor: 'PIX',
-                      titulo: 'PIX',
-                      descricao:
-                          'Pagamento instantâneo',
-                      icone: Icons.pix,
-                      cor: const Color(0xFF00A884),
-                    ),
-
-                    _metodo(
-                      valor: 'MERCADO_PAGO',
-                      titulo: 'Mercado Pago',
-                      descricao:
-                          'Pague com Mercado Pago',
-                      icone:
-                          Icons.account_balance_wallet,
-                      cor: const Color(0xFF009EE3),
-                    ),
-
-                    _metodo(
-                      valor: 'NUBANK',
-                      titulo: 'Nubank',
-                      descricao:
-                          'Cartão ou conta Nubank',
-                      icone: Icons.credit_card,
-                      cor: const Color(0xFF820AD1),
-                    ),
-
-                    const SizedBox(height: 8),
-
-                    _tituloSecao('Pagamento na entrega'),
-
-                    _metodo(
-                      valor: 'CARTAO',
-                      titulo: 'Cartão na entrega',
-                      descricao:
-                          'Pague ao receber seu pedido',
-                      icone:
-                          Icons.credit_card_outlined,
-                      cor: laranja,
-                    ),
-
-                    _metodo(
-                      valor: 'DINHEIRO',
-                      titulo: 'Dinheiro',
-                      descricao:
-                          'Pague em dinheiro ao receber',
-                      icone:
-                          Icons.payments_outlined,
-                      cor: Colors.green,
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    Container(
-                      padding: const EdgeInsets.all(15),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius:
-                            BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.verified_user_outlined,
-                            color: laranja,
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'Seus dados de pagamento são protegidos e utilizados somente para este pedido.',
-                              style: TextStyle(
-                                color:
-                                    Colors.grey.shade700,
-                                fontSize: 12,
+                          children: [
+                            Text(
+                              titulo,
+                              style:
+                                  const TextStyle(
+                                fontSize:
+                                    17,
+                                fontWeight:
+                                    FontWeight.bold,
                               ),
                             ),
+
+                            const SizedBox(
+                              height: 4,
+                            ),
+
+                            Text(
+                              'Total: ${dinheiro(widget.total)}',
+                              style:
+                                  TextStyle(
+                                color:
+                                    Colors.grey.shade600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 18,
+                ),
+
+                TextFormField(
+                  controller:
+                      numeroController,
+
+                  keyboardType:
+                      TextInputType.number,
+
+                  inputFormatters: [
+                    FilteringTextInputFormatter
+                        .digitsOnly,
+
+                    LengthLimitingTextInputFormatter(
+                      16,
+                    ),
+                  ],
+
+                  decoration:
+                      _decoracao(
+                    'Número do cartão',
+                    Icons.credit_card,
+                  ),
+
+                  validator: (
+                    value,
+                  ) {
+                    final numero =
+                        value
+                                ?.replaceAll(
+                              ' ',
+                              '',
+                            ) ??
+                            '';
+
+                    if (numero.length <
+                        13) {
+                      return 'Digite o número do cartão';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(
+                  height: 14,
+                ),
+
+                TextFormField(
+                  controller:
+                      nomeController,
+
+                  textCapitalization:
+                      TextCapitalization
+                          .words,
+
+                  decoration:
+                      _decoracao(
+                    'Nome no cartão',
+                    Icons.person_outline,
+                  ),
+
+                  validator: (
+                    value,
+                  ) {
+                    if (value ==
+                            null ||
+                        value
+                            .trim()
+                            .isEmpty) {
+                      return 'Digite o nome do cartão';
+                    }
+
+                    return null;
+                  },
+                ),
+
+                const SizedBox(
+                  height: 14,
+                ),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child:
+                          TextFormField(
+                        controller:
+                            validadeController,
+
+                        keyboardType:
+                            TextInputType
+                                .number,
+
+                        inputFormatters: [
+                          FilteringTextInputFormatter
+                              .digitsOnly,
+
+                           LengthLimitingTextInputFormatter(
+                            4,
                           ),
                         ],
+
+                        decoration:
+                            _decoracao(
+                          'Validade',
+                          Icons.date_range,
+                        ),
+
+                        validator:
+                            (value) {
+                          if (value ==
+                                  null ||
+                              value.length !=
+                                  4) {
+                            return 'MM/AA';
+                          }
+
+                          return null;
+                        },
+                      ),
+                    ),
+
+                    const SizedBox(
+                      width: 12,
+                    ),
+
+                    Expanded(
+                      child:
+                          TextFormField(
+                        controller:
+                            cvvController,
+
+                        keyboardType:
+                            TextInputType
+                                .number,
+
+                        obscureText:
+                            true,
+
+                        inputFormatters: [
+                          FilteringTextInputFormatter
+                              .digitsOnly,
+
+                           LengthLimitingTextInputFormatter(
+                            4,
+                          ),
+                        ],
+
+                        decoration:
+                            _decoracao(
+                          'CVV',
+                          Icons.lock_outline,
+                        ),
+
+                        validator:
+                            (value) {
+                          if (value ==
+                                  null ||
+                              value.length <
+                                  3) {
+                            return 'CVV inválido';
+                          }
+
+                          return null;
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(
+                  height: 22,
+                ),
+
+                Container(
+                  width:
+                      double.infinity,
+
+                  padding:
+                      const EdgeInsets.all(
+                    14,
+                  ),
+
+                  decoration:
+                      BoxDecoration(
+                    color:
+                        const Color(
+                      0xFFEFFAF4,
+                    ),
+
+                    borderRadius:
+                        BorderRadius.circular(
+                      14,
+                    ),
+                  ),
+
+                  child: const Row(
+                    children: [
+                      Icon(
+                        Icons
+                            .verified_user_outlined,
+                        color:
+                            Colors.green,
+                      ),
+
+                      SizedBox(
+                        width: 9,
+                      ),
+
+                      Expanded(
+                        child:
+                            Text(
+                          'Pagamento processado com segurança.',
+                          style:
+                              TextStyle(
+                            fontSize:
+                                12,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 22,
+                ),
+
+                SizedBox(
+                  width:
+                      double.infinity,
+
+                  height: 56,
+
+                  child:
+                      ElevatedButton(
+                    onPressed:
+                        carregando
+                            ? null
+                            : _pagar,
+
+                    style:
+                        ElevatedButton
+                            .styleFrom(
+                      backgroundColor:
+                          laranja,
+
+                      foregroundColor:
+                          Colors.white,
+
+                      elevation: 0,
+
+                      shape:
+                          RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(
+                          16,
+                        ),
+                      ),
+                    ),
+
+                    child:
+                        carregando
+                            ? const SizedBox(
+                                width:
+                                    24,
+                                height:
+                                    24,
+                                child:
+                                    CircularProgressIndicator(
+                                  color:
+                                      Colors.white,
+                                  strokeWidth:
+                                      2.5,
+                                ),
+                              )
+                            : Text(
+                                'PAGAR ${dinheiro(widget.total)}',
+                                style:
+                                    const TextStyle(
+                                  fontWeight:
+                                      FontWeight.w800,
+                                  fontSize:
+                                      15,
+                                ),
+                              ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// PAGAMENTO EM DINHEIRO
+// ============================================================================
+
+class CashPaymentPage extends StatefulWidget {
+  final double total;
+  final double subtotal;
+  final double taxaEntrega;
+  final double taxaServico;
+  final String restauranteId;
+  final Map<String, String> endereco;
+  final List<CartItem> itens;
+
+  const CashPaymentPage({
+    super.key,
+    required this.total,
+    required this.subtotal,
+    required this.taxaEntrega,
+    required this.taxaServico,
+    required this.restauranteId,
+    required this.endereco,
+    required this.itens,
+  });
+
+  @override
+  State<CashPaymentPage> createState() =>
+      _CashPaymentPageState();
+}
+
+class _CashPaymentPageState
+    extends State<CashPaymentPage> {
+  static const Color laranja =
+      Color(0xFFF97316);
+
+  bool carregando = false;
+
+  String dinheiro(double valor) {
+    return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
+  }
+
+  // ============================================================
+  // MESMO TOKEN
+  // ============================================================
+
+  Future<String?> _obterToken() async {
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    const chaves = [
+      'token',
+      'jwt',
+      'access_token',
+      'auth_token',
+    ];
+
+    for (final chave in chaves) {
+      final valor =
+          prefs.getString(chave);
+
+      if (valor == null) {
+        continue;
+      }
+
+      var token =
+          valor.trim();
+
+      if (token.isEmpty) {
+        continue;
+      }
+
+      if (token
+          .toLowerCase()
+          .startsWith('bearer ')) {
+        token =
+            token.substring(7).trim();
+      }
+
+      if (token.isNotEmpty) {
+        debugPrint(
+          '🔐 TOKEN ENCONTRADO PARA PAGAMENTO: $chave',
+        );
+
+        return token;
+      }
+    }
+
+    debugPrint(
+      '❌ NENHUM TOKEN ENCONTRADO NO STORAGE',
+    );
+
+    return null;
+  }
+
+  void _mensagem(
+    String texto, {
+    bool erro = false,
+  }) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      SnackBar(
+        content: Text(texto),
+        backgroundColor:
+            erro
+                ? Colors.red.shade700
+                : laranja,
+        behavior:
+            SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _confirmarPedido() async {
+    final token =
+        await _obterToken();
+
+    if (token == null) {
+      _mensagem(
+        'Sessão expirada. Faça login novamente.',
+        erro: true,
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      carregando = true;
+    });
+
+    try {
+      final url = Uri.parse(
+        '${Api.baseUrl}/pedidos',
+      );
+
+      final itens =
+          widget.itens.map((item) {
+        return {
+          'produtoId':
+              item.nome,
+          'nome':
+              item.nome,
+          'quantidade':
+              item.quantidade,
+          'preco':
+              item.preco,
+          'valor':
+              item.preco *
+                  item.quantidade,
+        };
+      }).toList();
+
+      final body = {
+        'restauranteId':
+            widget.restauranteId,
+
+        'formaPagamento':
+            'DINHEIRO',
+
+        'pagamento':
+            'DINHEIRO',
+
+        'statusPagamento':
+            'PENDING',
+
+        'subtotal':
+            widget.subtotal,
+
+        'taxaEntrega':
+            widget.taxaEntrega,
+
+        'taxaServico':
+            widget.taxaServico,
+
+        'total':
+            widget.total,
+
+        'endereco':
+            widget.endereco,
+
+        'itens':
+            itens,
+      };
+
+      final response =
+          await http.post(
+        url,
+
+        headers: {
+          'Content-Type':
+              'application/json',
+
+          'Authorization':
+              'Bearer $token',
+        },
+
+        body:
+            jsonEncode(body),
+      ).timeout(
+        const Duration(
+          seconds: 30,
+        ),
+      );
+
+      debugPrint(
+        '💵 HTTP: ${response.statusCode}',
+      );
+
+      debugPrint(
+        '💵 BODY: ${response.body}',
+      );
+
+      final dados =
+          jsonDecode(
+        response.body,
+      );
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        throw Exception(
+          dados is Map
+              ? dados['erro']
+                      ?.toString() ??
+                  dados['message']
+                      ?.toString() ??
+                  'Não foi possível criar o pedido.'
+              : 'Não foi possível criar o pedido.',
+        );
+      }
+
+      if (dados is Map &&
+          dados['sucesso'] == false) {
+        throw Exception(
+          dados['erro']
+                  ?.toString() ??
+              'Não foi possível criar o pedido.',
+        );
+      }
+
+      if (!mounted) return;
+
+      _mensagem(
+        'Pedido confirmado! Pagamento em dinheiro na entrega.',
+      );
+
+      await Future.delayed(
+        const Duration(
+          milliseconds: 900,
+        ),
+      );
+
+      if (!mounted) return;
+
+      Navigator.popUntil(
+        context,
+        (route) => route.isFirst,
+      );
+
+    } catch (e) {
+      debugPrint(
+        '❌ ERRO DINHEIRO: $e',
+      );
+
+      if (!mounted) return;
+
+      _mensagem(
+        e.toString()
+            .replaceFirst(
+          'Exception: ',
+          '',
+        ),
+        erro: true,
+      );
+
+    } finally {
+      if (mounted) {
+        setState(() {
+          carregando = false;
+        });
+      }
+    }
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return Scaffold(
+      backgroundColor:
+          const Color(0xFFF7F7F7),
+
+      appBar: AppBar(
+        backgroundColor:
+            Colors.white,
+        foregroundColor:
+            Colors.black87,
+        elevation: 0,
+        title:
+            const Text(
+          'Pagamento em dinheiro',
+          style:
+              TextStyle(
+            fontWeight:
+                FontWeight.bold,
+          ),
+        ),
+      ),
+
+      body: SafeArea(
+        child: Padding(
+          padding:
+              const EdgeInsets.all(
+            18,
+          ),
+
+          child: Column(
+            children: [
+              Container(
+                width:
+                    double.infinity,
+
+                padding:
+                    const EdgeInsets.all(
+                  20,
+                ),
+
+                decoration:
+                    BoxDecoration(
+                  color:
+                      Colors.white,
+                  borderRadius:
+                      BorderRadius.circular(
+                    18,
+                  ),
+                ),
+
+                child: Column(
+                  children: [
+                    Container(
+                      width: 72,
+                      height: 72,
+
+                      decoration:
+                          const BoxDecoration(
+                        color:
+                            Color(0xFFFFE8D8),
+                        shape:
+                            BoxShape.circle,
+                      ),
+
+                      child:
+                          const Icon(
+                        Icons
+                            .payments_outlined,
+                        color:
+                            laranja,
+                        size: 38,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 18,
+                    ),
+
+                    const Text(
+                      'Pagamento em dinheiro',
+                      style:
+                          TextStyle(
+                        fontSize:
+                            19,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 8,
+                    ),
+
+                    Text(
+                      'Você pagará ao entregador quando receber seu pedido.',
+                      textAlign:
+                          TextAlign.center,
+                      style:
+                          TextStyle(
+                        color:
+                            Colors.grey.shade600,
+                        fontSize:
+                            13,
+                        height:
+                            1.4,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 18,
+                    ),
+
+                    Text(
+                      'Total: ${dinheiro(widget.total)}',
+                      style:
+                          const TextStyle(
+                        color:
+                            laranja,
+                        fontSize:
+                            22,
+                        fontWeight:
+                            FontWeight.w900,
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
 
-            Container(
-              padding: const EdgeInsets.fromLTRB(
-                20,
-                12,
-                20,
-                18,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(
-                      alpha: 0.08,
-                    ),
-                    blurRadius: 15,
-                    offset: const Offset(0, -4),
-                  ),
-                ],
-              ),
-              child: SizedBox(
-                width: double.infinity,
+              const Spacer(),
+
+              SizedBox(
+                width:
+                    double.infinity,
+
                 height: 56,
-                child: ElevatedButton(
-                  onPressed: continuar,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: laranja,
-                    foregroundColor: Colors.white,
+
+                child:
+                    ElevatedButton(
+                  onPressed:
+                      carregando
+                          ? null
+                          : _confirmarPedido,
+
+                  style:
+                      ElevatedButton
+                          .styleFrom(
+                    backgroundColor:
+                        laranja,
+
+                    foregroundColor:
+                        Colors.white,
+
                     elevation: 0,
-                    shape: RoundedRectangleBorder(
+
+                    shape:
+                        RoundedRectangleBorder(
                       borderRadius:
-                          BorderRadius.circular(16),
+                          BorderRadius.circular(
+                        16,
+                      ),
                     ),
                   ),
-                  child: Row(
-                    mainAxisAlignment:
-                        MainAxisAlignment.center,
-                    children: const [
-                      Text(
-                        'CONTINUAR',
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      SizedBox(width: 8),
-                      Icon(Icons.arrow_forward),
-                    ],
-                  ),
+
+                  child:
+                      carregando
+                          ? const SizedBox(
+                              width:
+                                  24,
+                              height:
+                                  24,
+                              child:
+                                  CircularProgressIndicator(
+                                color:
+                                    Colors.white,
+                                strokeWidth:
+                                    2.5,
+                              ),
+                            )
+                          : const Text(
+                              'CONFIRMAR PEDIDO',
+                              style:
+                                  TextStyle(
+                                fontSize:
+                                    16,
+                                fontWeight:
+                                    FontWeight.w800,
+                              ),
+                            ),
                 ),
               ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _tituloSecao(String texto) {
-    return Padding(
-      padding: const EdgeInsets.only(
-        bottom: 10,
-        top: 4,
-      ),
-      child: Text(
-        texto,
-        style: const TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.bold,
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-// ============================================================
-// CHECKOUT MODAL
-// ============================================================
+// ============================================================================
+// PIX CHECKOUT ASAAS
+// ============================================================================
 
-class _CheckoutModal extends StatelessWidget {
-  final String titulo;
-  final String subtitulo;
-  final IconData icone;
-  final Color iconeCor;
+class PixCheckoutPage extends StatefulWidget {
   final double total;
-  final String tipo;
-  final VoidCallback onContinuar;
+  final double subtotal;
+  final double taxaEntrega;
+  final double taxaServico;
+  final String restauranteId;
+  final Map<String, String> endereco;
+  final List<CartItem> itens;
 
-  const _CheckoutModal({
-    required this.titulo,
-    required this.subtitulo,
-    required this.icone,
-    required this.iconeCor,
+  const PixCheckoutPage({
+    super.key,
     required this.total,
-    required this.tipo,
-    required this.onContinuar,
+    required this.subtotal,
+    required this.taxaEntrega,
+    required this.taxaServico,
+    required this.restauranteId,
+    required this.endereco,
+    required this.itens,
   });
 
-  String preco(double valor) {
-    return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
+  @override
+  State<PixCheckoutPage> createState() =>
+      _PixCheckoutPageState();
+}
+
+class _PixCheckoutPageState
+    extends State<PixCheckoutPage> {
+  static const Color laranja =
+      Color(0xFFF97316);
+
+  static const Color verdePix =
+      Color(0xFF00A884);
+
+  bool carregando = true;
+  bool erro = false;
+
+  String mensagemErro = '';
+
+  String? pagamentoId;
+  String? pixPayload;
+  String? encodedImage;
+  String? expirationDate;
+
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+
+    _gerarPix();
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(
-        20,
-        12,
-        20,
-        25,
-      ),
-      decoration: const BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.vertical(
-          top: Radius.circular(28),
+  void dispose() {
+    _timer?.cancel();
+
+    super.dispose();
+  }
+
+  String dinheiro(double valor) {
+    return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
+  }
+
+  // ============================================================
+  // TOKEN
+  // ============================================================
+
+  Future<String?> _obterToken() async {
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    const chaves = [
+      'token',
+      'jwt',
+      'access_token',
+      'auth_token',
+    ];
+
+    for (final chave in chaves) {
+      final valor =
+          prefs.getString(chave);
+
+      if (valor == null) {
+        continue;
+      }
+
+      var token =
+          valor.trim();
+
+      if (token.isEmpty) {
+        continue;
+      }
+
+      if (token
+          .toLowerCase()
+          .startsWith('bearer ')) {
+        token =
+            token.substring(7).trim();
+      }
+
+      if (token.isNotEmpty) {
+        debugPrint(
+          '🔐 TOKEN ENCONTRADO PARA PIX: $chave',
+        );
+
+        return token;
+      }
+    }
+
+    debugPrint(
+      '❌ NENHUM TOKEN ENCONTRADO NO STORAGE',
+    );
+
+    return null;
+  }
+
+  // ============================================================
+  // GERAR PIX
+  // ============================================================
+
+  Future<void> _gerarPix() async {
+    if (!mounted) return;
+
+    setState(() {
+      carregando = true;
+      erro = false;
+      mensagemErro = '';
+    });
+
+    try {
+      final token =
+          await _obterToken();
+
+      if (token == null) {
+        throw Exception(
+          'Sessão expirada. Faça login novamente.',
+        );
+      }
+
+      final url = Uri.parse(
+        '${Api.baseUrl}/pagamentos/pix',
+      );
+
+      final itens =
+          widget.itens.map((item) {
+        return {
+          'produtoId':
+              item.nome,
+          'nome':
+              item.nome,
+          'quantidade':
+              item.quantidade,
+          'preco':
+              item.preco,
+          'valor':
+              item.preco *
+                  item.quantidade,
+        };
+      }).toList();
+
+      final body = {
+        'valor':
+            double.parse(
+          widget.total
+              .toStringAsFixed(2),
         ),
-      ),
-      child: SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 45,
-              height: 5,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade300,
-                borderRadius:
-                    BorderRadius.circular(10),
-              ),
-            ),
 
-            const SizedBox(height: 25),
-
-            Container(
-              width: 70,
-              height: 70,
-              decoration: BoxDecoration(
-                color: iconeCor.withValues(alpha: 0.10),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                icone,
-                color: iconeCor,
-                size: 35,
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            Text(
-              titulo,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-
-            const SizedBox(height: 6),
-
-            Text(
-              subtitulo,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.grey.shade600,
-              ),
-            ),
-
-            const SizedBox(height: 25),
-
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(17),
-              decoration: BoxDecoration(
-                color: Colors.grey.shade50,
-                borderRadius:
-                    BorderRadius.circular(16),
-              ),
-              child: Column(
-                children: [
-                  Text(
-                    'Valor do pedido',
-                    style: TextStyle(
-                      color: Colors.grey.shade600,
-                    ),
-                  ),
-                  const SizedBox(height: 5),
-                  Text(
-                    preco(total),
-                    style: const TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 18),
-
-            if (tipo == 'PIX')
-              _informacao(
-                Icons.flash_on,
-                'PIX será utilizado para pagamento instantâneo.',
-              ),
-
-            if (tipo == 'MERCADO_PAGO')
-              _informacao(
-                Icons.security,
-                'Pagamento protegido pelo Mercado Pago.',
-              ),
-
-            if (tipo == 'NUBANK')
-              _informacao(
-                Icons.lock_outline,
-                'Pagamento protegido e processado com segurança.',
-              ),
-
-            const SizedBox(height: 20),
-
-            SizedBox(
-              width: double.infinity,
-              height: 55,
-              child: ElevatedButton(
-                onPressed: onContinuar,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: iconeCor,
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius:
-                        BorderRadius.circular(15),
-                  ),
-                ),
-                child: const Text(
-                  'CONTINUAR PARA REVISÃO',
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ),
-          ],
+        'total':
+            double.parse(
+          widget.total
+              .toStringAsFixed(2),
         ),
+
+        'subtotal':
+            double.parse(
+          widget.subtotal
+              .toStringAsFixed(2),
+        ),
+
+        'taxaEntrega':
+            double.parse(
+          widget.taxaEntrega
+              .toStringAsFixed(2),
+        ),
+
+        'taxaServico':
+            double.parse(
+          widget.taxaServico
+              .toStringAsFixed(2),
+        ),
+
+        'restauranteId':
+            widget.restauranteId,
+
+        'pedidoId':
+            null,
+
+        'formaPagamento':
+            'PIX',
+
+        'endereco':
+            widget.endereco,
+
+        'itens':
+            itens,
+      };
+
+      debugPrint(
+        '🚀 FLUTTER - GERANDO PIX',
+      );
+
+      final response =
+          await http.post(
+        url,
+
+        headers: {
+          'Content-Type':
+              'application/json',
+
+          'Authorization':
+              'Bearer $token',
+        },
+
+        body:
+            jsonEncode(body),
+      ).timeout(
+        const Duration(
+          seconds: 30,
+        ),
+      );
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        String detalhe =
+            'Não foi possível gerar o Pix.';
+
+        try {
+          final resposta =
+              jsonDecode(
+            response.body,
+          );
+
+          if (resposta is Map) {
+            detalhe =
+                resposta['erro']
+                        ?.toString() ??
+                    resposta['message']
+                        ?.toString() ??
+                    resposta['error']
+                        ?.toString() ??
+                    detalhe;
+          }
+        } catch (_) {}
+
+        throw Exception(
+          detalhe,
+        );
+      }
+
+      final dados =
+          jsonDecode(
+        response.body,
+      );
+
+      if (dados is! Map) {
+        throw Exception(
+          'Resposta inválida do servidor.',
+        );
+      }
+
+      if (dados['sucesso'] != true) {
+        throw Exception(
+          dados['erro']
+                  ?.toString() ??
+              'Não foi possível gerar o Pix.',
+        );
+      }
+
+      pagamentoId =
+          _stringValue(
+        dados['pagamentoId'],
+      );
+
+      pagamentoId ??=
+          _stringValue(
+        dados['paymentId'],
+      );
+
+      final pix =
+          dados['pix'] is Map
+              ? dados['pix']
+              : <dynamic, dynamic>{};
+
+      pixPayload =
+          _stringValue(
+        pix['qrCode'],
+      );
+
+      encodedImage =
+          _stringValue(
+        pix['qrCodeBase64'],
+      );
+
+      expirationDate =
+          _stringValue(
+        pix['expiracao'],
+      );
+
+      if ((pixPayload == null ||
+              pixPayload!.isEmpty) &&
+          (encodedImage == null ||
+              encodedImage!.isEmpty)) {
+        throw Exception(
+          'O servidor criou o pagamento, mas não retornou os dados do Pix.',
+        );
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        carregando = false;
+        erro = false;
+      });
+
+    } catch (e) {
+      debugPrint(
+        '❌ ERRO AO GERAR PIX: $e',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        carregando = false;
+        erro = true;
+
+        mensagemErro =
+            e.toString()
+                .replaceFirst(
+          'Exception: ',
+          '',
+        );
+      });
+    }
+  }
+
+  String? _stringValue(
+    dynamic valor,
+  ) {
+    if (valor == null) {
+      return null;
+    }
+
+    final texto =
+        valor.toString().trim();
+
+    if (texto.isEmpty) {
+      return null;
+    }
+
+    return texto;
+  }
+
+  Future<void> _copiarPix() async {
+    if (pixPayload == null ||
+        pixPayload!.isEmpty) {
+      return;
+    }
+
+    await Clipboard.setData(
+      ClipboardData(
+        text:
+            pixPayload!,
+      ),
+    );
+
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      const SnackBar(
+        content:
+            Text(
+          'Código Pix copiado!',
+        ),
+        backgroundColor:
+            verdePix,
+        behavior:
+            SnackBarBehavior.floating,
       ),
     );
   }
 
-  Widget _informacao(
-    IconData icon,
-    String texto,
-  ) {
-    return Row(
-      children: [
-        Icon(
-          icon,
-          color: iconeCor,
-          size: 20,
+  Widget _qrCode() {
+    if (encodedImage == null ||
+        encodedImage!.isEmpty) {
+      return Container(
+        width: 240,
+        height: 240,
+
+        alignment:
+            Alignment.center,
+
+        decoration:
+            BoxDecoration(
+          color:
+              Colors.white,
+
+          borderRadius:
+              BorderRadius.circular(
+            18,
+          ),
         ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            texto,
-            style: const TextStyle(
-              fontSize: 12,
-            ),
+
+        child:
+            const Icon(
+          Icons.qr_code_2,
+          size: 110,
+          color:
+              Colors.grey,
+        ),
+      );
+    }
+
+    try {
+      String base64String =
+          encodedImage!.trim();
+
+      if (base64String
+          .contains(',')) {
+        base64String =
+            base64String
+                .split(',')
+                .last;
+      }
+
+      final bytes =
+          base64Decode(
+        base64String,
+      );
+
+      return Container(
+        width: 240,
+        height: 240,
+
+        padding:
+            const EdgeInsets.all(
+          16,
+        ),
+
+        decoration:
+            BoxDecoration(
+          color:
+              Colors.white,
+
+          borderRadius:
+              BorderRadius.circular(
+            18,
+          ),
+        ),
+
+        child:
+            Image.memory(
+          bytes,
+          fit:
+              BoxFit.contain,
+        ),
+      );
+
+    } catch (_) {
+      return Container(
+        width: 240,
+        height: 240,
+
+        alignment:
+            Alignment.center,
+
+        decoration:
+            BoxDecoration(
+          color:
+              Colors.white,
+
+          borderRadius:
+              BorderRadius.circular(
+            18,
+          ),
+        ),
+
+        child:
+            const Icon(
+          Icons.error_outline,
+          color:
+              Colors.red,
+          size: 42,
+        ),
+      );
+    }
+  }
+
+  Widget _linha(
+    String titulo,
+    String valor, {
+    bool destaque = false,
+  }) {
+    return Row(
+      mainAxisAlignment:
+          MainAxisAlignment.spaceBetween,
+
+      children: [
+        Text(
+          titulo,
+
+          style:
+              TextStyle(
+            color: destaque
+                ? Colors.black87
+                : Colors.grey.shade700,
+
+            fontSize:
+                destaque
+                    ? 15
+                    : 12,
+
+            fontWeight:
+                destaque
+                    ? FontWeight.w800
+                    : FontWeight.w500,
+          ),
+        ),
+
+        Text(
+          valor,
+
+          style:
+              TextStyle(
+            color: destaque
+                ? laranja
+                : Colors.black87,
+
+            fontSize:
+                destaque
+                    ? 18
+                    : 12,
+
+            fontWeight:
+                destaque
+                    ? FontWeight.w900
+                    : FontWeight.w600,
           ),
         ),
       ],
     );
   }
+
+  Widget _carregando() {
+    return const Center(
+      child:
+          Column(
+        mainAxisAlignment:
+            MainAxisAlignment.center,
+
+        children: [
+          CircularProgressIndicator(
+            color:
+                verdePix,
+          ),
+
+          SizedBox(
+            height: 20,
+          ),
+
+          Text(
+            'Gerando seu Pix...',
+            style:
+                TextStyle(
+              fontSize:
+                  18,
+              fontWeight:
+                  FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _erro() {
+    return Center(
+      child:
+          Padding(
+        padding:
+            const EdgeInsets.all(
+          25,
+        ),
+
+        child:
+            Column(
+          mainAxisAlignment:
+              MainAxisAlignment.center,
+
+          children: [
+            const Icon(
+              Icons.error_outline,
+              color:
+                  Colors.red,
+              size: 55,
+            ),
+
+            const SizedBox(
+              height: 15,
+            ),
+
+            const Text(
+              'Não foi possível gerar o Pix',
+              textAlign:
+                  TextAlign.center,
+
+              style:
+                  TextStyle(
+                fontSize:
+                    18,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(
+              height: 10,
+            ),
+
+            Text(
+              mensagemErro,
+              textAlign:
+                  TextAlign.center,
+            ),
+
+            const SizedBox(
+              height: 20,
+            ),
+
+            ElevatedButton(
+              onPressed:
+                  _gerarPix,
+
+              child:
+                  const Text(
+                'TENTAR NOVAMENTE',
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _conteudo() {
+    return SingleChildScrollView(
+      padding:
+          const EdgeInsets.all(
+        16,
+      ),
+
+      child:
+          Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+
+        children: [
+          Container(
+            width:
+                double.infinity,
+
+            padding:
+                const EdgeInsets.all(
+              14,
+            ),
+
+            decoration:
+                BoxDecoration(
+              color:
+                  const Color(
+                0xFFE4F7EF,
+              ),
+
+              borderRadius:
+                  BorderRadius.circular(
+                13,
+              ),
+            ),
+
+            child:
+                const Row(
+              children: [
+                Icon(
+                  Icons.shield_outlined,
+                  color:
+                      verdePix,
+                ),
+
+                SizedBox(
+                  width: 10,
+                ),
+
+                Expanded(
+                  child:
+                      Text(
+                    'Pagamento seguro processado pelo Asaas.',
+                    style:
+                        TextStyle(
+                      fontSize:
+                          12,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(
+            height: 22,
+          ),
+
+          const Text(
+            'Escaneie o QR Code',
+            style:
+                TextStyle(
+              fontSize:
+                  16,
+              fontWeight:
+                  FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(
+            height: 18,
+          ),
+
+          Center(
+            child:
+                _qrCode(),
+          ),
+
+          const SizedBox(
+            height: 20,
+          ),
+
+          const Text(
+            'Ou copie o código Pix',
+            style:
+                TextStyle(
+              fontSize:
+                  16,
+              fontWeight:
+                  FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(
+            height: 10,
+          ),
+
+          Container(
+            padding:
+                const EdgeInsets.all(
+              13,
+            ),
+
+            decoration:
+                BoxDecoration(
+              color:
+                  Colors.white,
+
+              borderRadius:
+                  BorderRadius.circular(
+                14,
+              ),
+            ),
+
+            child:
+                Row(
+              children: [
+                Expanded(
+                  child:
+                      Text(
+                    pixPayload ??
+                        'Código indisponível',
+
+                    maxLines:
+                        3,
+
+                    overflow:
+                        TextOverflow.ellipsis,
+
+                    style:
+                        const TextStyle(
+                      fontSize:
+                          10,
+                    ),
+                  ),
+                ),
+
+                IconButton(
+                  onPressed:
+                      _copiarPix,
+
+                  icon:
+                      const Icon(
+                    Icons.copy_outlined,
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(
+            height: 18,
+          ),
+
+          Container(
+            padding:
+                const EdgeInsets.all(
+              15,
+            ),
+
+            decoration:
+                BoxDecoration(
+              color:
+                  Colors.white,
+
+              borderRadius:
+                  BorderRadius.circular(
+                14,
+              ),
+            ),
+
+            child:
+                Column(
+              children: [
+                _linha(
+                  'Subtotal',
+                  dinheiro(
+                    widget.subtotal,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 8,
+                ),
+
+                _linha(
+                  'Taxa de serviço',
+                  dinheiro(
+                    widget.taxaServico,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 8,
+                ),
+
+                _linha(
+                  'Taxa de entrega',
+                  dinheiro(
+                    widget.taxaEntrega,
+                  ),
+                ),
+
+                const Divider(
+                  height: 20,
+                ),
+
+                _linha(
+                  'Total',
+                  dinheiro(
+                    widget.total,
+                  ),
+                  destaque:
+                      true,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(
+            height: 20,
+          ),
+
+          SizedBox(
+            width:
+                double.infinity,
+
+            height: 54,
+
+            child:
+                ElevatedButton(
+              onPressed: () {
+                Navigator.pop(
+                  context,
+                );
+              },
+
+              style:
+                  ElevatedButton
+                      .styleFrom(
+                backgroundColor:
+                    laranja,
+
+                foregroundColor:
+                    Colors.white,
+
+                elevation: 0,
+
+                shape:
+                    RoundedRectangleBorder(
+                  borderRadius:
+                      BorderRadius.circular(
+                    15,
+                  ),
+                ),
+              ),
+
+              child:
+                  const Text(
+                'VOLTAR AO PEDIDO',
+                style:
+                    TextStyle(
+                  fontWeight:
+                      FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(
+            height: 12,
+          ),
+
+          Center(
+            child:
+                Text(
+              expirationDate !=
+                          null &&
+                      expirationDate!
+                          .isNotEmpty
+                  ? 'QR Code válido até $expirationDate'
+                  : 'Pix gerado com segurança pelo Asaas',
+
+              style:
+                  TextStyle(
+                color:
+                    Colors.grey.shade600,
+                fontSize:
+                    10,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    return Scaffold(
+      backgroundColor:
+          const Color(0xFFF7F7F7),
+
+      appBar: AppBar(
+        backgroundColor:
+            Colors.white,
+
+        foregroundColor:
+            Colors.black87,
+
+        elevation: 0,
+
+        title:
+            const Text(
+          'PIX',
+
+          style:
+              TextStyle(
+            fontWeight:
+                FontWeight.bold,
+          ),
+        ),
+      ),
+
+      body:
+          SafeArea(
+        child:
+            carregando
+                ? _carregando()
+                : erro
+                    ? _erro()
+                    : _conteudo(),
+      ),
+    );
+  }
 }
+

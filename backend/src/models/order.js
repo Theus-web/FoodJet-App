@@ -1,3 +1,4 @@
+
 const { db } = require("../config/database");
 
 // ======================================================
@@ -20,7 +21,47 @@ async function prepararBanco() {
 
 
 // ======================================================
+// GERAR ID DO PEDIDO
+// ======================================================
+
+async function gerarIdPedido() {
+    await db.read();
+
+    if (!db.data) {
+        db.data = {};
+    }
+
+    if (!Array.isArray(db.data.pedidos)) {
+        db.data.pedidos = [];
+    }
+
+    if (db.data.pedidos.length === 0) {
+        return 1;
+    }
+
+    const maiorId = db.data.pedidos.reduce(
+        (maior, pedido) => {
+            const id = Number(pedido.id) || 0;
+
+            return id > maior ? id : maior;
+        },
+        0
+    );
+
+    return maiorId + 1;
+}
+
+
+// ======================================================
 // CRIAR PEDIDO
+// ======================================================
+//
+// IMPORTANTE:
+// O clienteId deve ser definido pelo CONTROLLER,
+// usando req.usuario.id.
+//
+// O Flutter NÃO deve decidir qual é o cliente.
+//
 // ======================================================
 
 async function criar(pedido) {
@@ -35,43 +76,264 @@ async function criar(pedido) {
         db.data.pedidos = [];
     }
 
-    /*
-     * IMPORTANTE:
-     * A taxa de entrega NÃO é definida pelo restaurante.
-     *
-     * O sistema poderá calcular a entrega posteriormente.
-     */
+    // ==================================================
+    // VALIDAÇÕES
+    // ==================================================
+
+    if (
+        !pedido ||
+        typeof pedido !== "object"
+    ) {
+        throw new Error(
+            "Dados do pedido inválidos."
+        );
+    }
+
+    if (
+        pedido.clienteId === undefined ||
+        pedido.clienteId === null ||
+        String(pedido.clienteId).trim() === ""
+    ) {
+        throw new Error(
+            "Cliente não identificado."
+        );
+    }
+
+    if (
+        pedido.restauranteId === undefined ||
+        pedido.restauranteId === null ||
+        String(pedido.restauranteId).trim() === ""
+    ) {
+        throw new Error(
+            "Restaurante não identificado."
+        );
+    }
+
+    // ==================================================
+    // ID
+    // ==================================================
+
+    const id = await gerarIdPedido();
+
+    // ==================================================
+    // ITENS
+    // ==================================================
+
+    const itens = Array.isArray(pedido.itens)
+        ? pedido.itens
+        : [];
+
+    // ==================================================
+    // VALORES
+    // ==================================================
+
+    const subtotal =
+        Number(pedido.subtotal) || 0;
+
+    const taxaServico =
+        Number(pedido.taxaServico) || 0;
+
+    const total =
+        Number(pedido.total) ||
+        subtotal + taxaServico;
+
+    // ==================================================
+    // PAGAMENTO
+    // ==================================================
+
+    const pagamento =
+        String(
+            pedido.pagamento || "PIX"
+        )
+            .trim()
+            .toUpperCase();
+
+    // ==================================================
+    // TROCO
+    // ==================================================
+
+    const precisaTroco =
+        pagamento === "DINHEIRO"
+            ? Boolean(pedido.precisaTroco)
+            : false;
+
+    const trocoPara =
+        precisaTroco
+            ? Number(pedido.trocoPara) || 0
+            : null;
+
+    const valorTroco =
+        precisaTroco && trocoPara !== null
+            ? Math.max(
+                0,
+                trocoPara - total
+            )
+            : 0;
+
+    // ==================================================
+    // NOVO PEDIDO
+    // ==================================================
 
     const novoPedido = {
-        ...pedido,
 
-        // relacionamento
-        clienteId: pedido.clienteId,
-        restauranteId: pedido.restauranteId,
+        id,
 
-        // status inicial
-        status: "AGUARDANDO_RESTAURANTE",
+        // ==================================================
+        // CLIENTE
+        // ==================================================
+        //
+        // Este valor deve vir do backend.
+        //
+        clienteId:
+            String(pedido.clienteId),
 
-        // suporte
+        // ==================================================
+        // RESTAURANTE
+        // ==================================================
+
+        restauranteId:
+            String(pedido.restauranteId),
+
+        // ==================================================
+        // ITENS
+        // ==================================================
+
+        itens,
+
+        // ==================================================
+        // ENDEREÇO
+        // ==================================================
+
+        endereco:
+            pedido.endereco || {},
+
+        // ==================================================
+        // PAGAMENTO
+        // ==================================================
+
+        pagamento,
+
+        pagamentoStatus:
+            pagamento === "PIX"
+                ? "PENDENTE"
+                : "AGUARDANDO",
+
+        // ==================================================
+        // VALORES
+        // ==================================================
+
+        subtotal,
+
+        taxaServico,
+
+        total,
+
+        // ==================================================
+        // TROCO
+        // ==================================================
+
+        precisaTroco,
+
+        trocoPara,
+
+        valorTroco,
+
+        // ==================================================
+        // REFERÊNCIA
+        // ==================================================
+
+        externalReference:
+            pedido.externalReference ||
+            `FOODJET-${id}-${Date.now()}`,
+
+        // ==================================================
+        // STATUS
+        // ==================================================
+
+        status:
+            "AGUARDANDO_RESTAURANTE",
+
+        // ==================================================
+        // SUPORTE
+        // ==================================================
+
         suporte: {
             aberto: false,
             status: "FECHADO",
             mensagens: []
         },
 
+        // ==================================================
+        // DATAS
+        // ==================================================
+
         criadoEm:
             pedido.criadoEm ||
             new Date().toISOString()
     };
 
-    /*
-     * Remover taxa antiga caso venha do aplicativo
-     */
+    // ==================================================
+    // NÃO SALVAR TAXA DE ENTREGA
+    // ==================================================
+    //
+    // A taxa pode ser calculada posteriormente
+    // pelo sistema.
+    //
+    // ==================================================
+
     delete novoPedido.taxaEntrega;
 
-    db.data.pedidos.push(novoPedido);
+    // ==================================================
+    // SALVAR
+    // ==================================================
+
+    db.data.pedidos.push(
+        novoPedido
+    );
 
     await db.write();
+
+    console.log(
+        "========================================"
+    );
+
+    console.log(
+        "✅ PEDIDO CRIADO"
+    );
+
+    console.log(
+        "ID:",
+        novoPedido.id
+    );
+
+    console.log(
+        "CLIENTE:",
+        novoPedido.clienteId
+    );
+
+    console.log(
+        "RESTAURANTE:",
+        novoPedido.restauranteId
+    );
+
+    console.log(
+        "PAGAMENTO:",
+        novoPedido.pagamento
+    );
+
+    console.log(
+        "TOTAL:",
+        novoPedido.total
+    );
+
+    console.log(
+        "STATUS:",
+        novoPedido.status
+    );
+
+    console.log(
+        "========================================"
+    );
 
     return novoPedido;
 }
@@ -115,7 +377,7 @@ async function buscarPorId(id) {
 
     const pedido =
         db.data.pedidos.find(
-            (item) =>
+            item =>
                 Number(item.id) === Number(id)
         );
 
@@ -124,7 +386,7 @@ async function buscarPorId(id) {
 
 
 // ======================================================
-// ATUALIZAR STATUS DO PEDIDO
+// ATUALIZAR STATUS
 // ======================================================
 
 async function atualizarStatus(
@@ -144,7 +406,7 @@ async function atualizarStatus(
 
     const index =
         db.data.pedidos.findIndex(
-            (item) =>
+            item =>
                 Number(item.id) === Number(id)
         );
 
@@ -182,7 +444,7 @@ async function aceitarPedidoRestaurante(id) {
 
     const index =
         db.data.pedidos.findIndex(
-            (item) =>
+            item =>
                 Number(item.id) === Number(id)
         );
 
@@ -192,11 +454,6 @@ async function aceitarPedidoRestaurante(id) {
 
     const pedido =
         db.data.pedidos[index];
-
-    /*
-     * Só permite aceitar pedidos
-     * que estão aguardando o restaurante.
-     */
 
     if (
         pedido.status !==
@@ -237,7 +494,7 @@ async function recusarPedidoRestaurante(
 
     const index =
         db.data.pedidos.findIndex(
-            (item) =>
+            item =>
                 Number(item.id) === Number(id)
         );
 
@@ -291,7 +548,7 @@ async function aceitarEntrega(
 
     const index =
         db.data.pedidos.findIndex(
-            (item) =>
+            item =>
                 Number(item.id) === Number(id)
         );
 
@@ -302,17 +559,12 @@ async function aceitarEntrega(
     const pedido =
         db.data.pedidos[index];
 
-    /*
-     * O entregador somente pode pegar
-     * pedidos que estão PRONTOS.
-     */
-
     if (pedido.status !== "PRONTO") {
         return null;
     }
 
     pedido.entregadorId =
-        entregadorId;
+        String(entregadorId);
 
     pedido.status =
         "EM_ENTREGA";
@@ -327,7 +579,7 @@ async function aceitarEntrega(
 
 
 // ======================================================
-// BUSCAR PEDIDOS DO RESTAURANTE
+// PEDIDOS DO RESTAURANTE
 // ======================================================
 
 async function listarPorRestaurante(
@@ -345,7 +597,7 @@ async function listarPorRestaurante(
     }
 
     return db.data.pedidos.filter(
-        (pedido) =>
+        pedido =>
             String(pedido.restauranteId) ===
             String(restauranteId)
     );
@@ -353,7 +605,7 @@ async function listarPorRestaurante(
 
 
 // ======================================================
-// BUSCAR PEDIDOS DO CLIENTE
+// PEDIDOS DO CLIENTE
 // ======================================================
 
 async function listarPorCliente(
@@ -371,7 +623,7 @@ async function listarPorCliente(
     }
 
     return db.data.pedidos.filter(
-        (pedido) =>
+        pedido =>
             String(pedido.clienteId) ===
             String(clienteId)
     );
@@ -395,7 +647,7 @@ async function listarDisponiveisEntrega() {
     }
 
     return db.data.pedidos.filter(
-        (pedido) =>
+        pedido =>
             pedido.status === "PRONTO"
     );
 }
@@ -419,7 +671,7 @@ async function finalizarEntrega(id) {
 
     const index =
         db.data.pedidos.findIndex(
-            (item) =>
+            item =>
                 Number(item.id) === Number(id)
         );
 
@@ -430,12 +682,10 @@ async function finalizarEntrega(id) {
     const pedido =
         db.data.pedidos[index];
 
-    /*
-     * Só pode finalizar uma entrega
-     * que realmente está em entrega.
-     */
-
-    if (pedido.status !== "EM_ENTREGA") {
+    if (
+        pedido.status !==
+        "EM_ENTREGA"
+    ) {
         return null;
     }
 
@@ -475,7 +725,7 @@ async function abrirSuporte(
 
     const index =
         db.data.pedidos.findIndex(
-            (item) =>
+            item =>
                 Number(item.id) ===
                 Number(pedidoId)
         );
@@ -532,8 +782,7 @@ async function abrirSuporte(
 
 
 // ======================================================
-// LISTAR PEDIDOS COM SUPORTE
-// FUTURO PAINEL ADMIN
+// LISTAR SUPORTES
 // ======================================================
 
 async function listarSuportes() {
@@ -549,7 +798,7 @@ async function listarSuportes() {
     }
 
     return db.data.pedidos.filter(
-        (pedido) =>
+        pedido =>
             pedido.suporte &&
             pedido.suporte.aberto === true
     );
@@ -558,7 +807,6 @@ async function listarSuportes() {
 
 // ======================================================
 // RESPONDER SUPORTE
-// FUTURO ADMIN
 // ======================================================
 
 async function responderSuporte(
@@ -579,7 +827,7 @@ async function responderSuporte(
 
     const index =
         db.data.pedidos.findIndex(
-            (item) =>
+            item =>
                 Number(item.id) ===
                 Number(pedidoId)
         );
@@ -623,10 +871,11 @@ async function responderSuporte(
 
 // ======================================================
 // FECHAR SUPORTE
-// FUTURO ADMIN
 // ======================================================
 
-async function fecharSuporte(pedidoId) {
+async function fecharSuporte(
+    pedidoId
+) {
 
     await db.read();
 
@@ -640,7 +889,7 @@ async function fecharSuporte(pedidoId) {
 
     const index =
         db.data.pedidos.findIndex(
-            (item) =>
+            item =>
                 Number(item.id) ===
                 Number(pedidoId)
         );
@@ -676,6 +925,8 @@ async function fecharSuporte(pedidoId) {
 
 module.exports = {
 
+    prepararBanco,
+
     criar,
 
     listar,
@@ -706,3 +957,4 @@ module.exports = {
 
     fecharSuporte
 };
+

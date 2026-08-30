@@ -5,8 +5,10 @@ const router = express.Router();
 const orderController =
     require("../controllers/orderController");
 
-console.log("✅ ROTA PEDIDOS CARREGADA");
+const autenticar =
+    require("../middlewares/authMiddleware");
 
+console.log("✅ ROTA PEDIDOS CARREGADA");
 
 // ======================================================
 // CRIAR PEDIDO
@@ -14,9 +16,9 @@ console.log("✅ ROTA PEDIDOS CARREGADA");
 
 router.post(
     "/",
+    autenticar,
     orderController.create
 );
-
 
 // ======================================================
 // LISTAR TODOS
@@ -26,7 +28,6 @@ router.get(
     "/",
     orderController.list
 );
-
 
 // ======================================================
 // PEDIDOS DO RESTAURANTE
@@ -38,16 +39,15 @@ router.get(
     orderController.restaurantOrders
 );
 
-
 // ======================================================
 // PEDIDOS DO CLIENTE
 // ======================================================
 
 router.get(
     "/cliente/:id",
+    autenticar,
     orderController.clientOrders
 );
-
 
 // ======================================================
 // PEDIDOS DISPONÍVEIS PARA ENTREGA
@@ -58,7 +58,6 @@ router.get(
     orderController.availableDeliveries
 );
 
-
 // ======================================================
 // BUSCAR PEDIDO PELO ID
 // ======================================================
@@ -67,7 +66,6 @@ router.get(
     "/:id",
     orderController.getById
 );
-
 
 // ======================================================
 // ATUALIZAR STATUS
@@ -78,7 +76,6 @@ router.put(
     orderController.updateStatus
 );
 
-
 // ======================================================
 // RESTAURANTE ACEITA PEDIDO
 // ======================================================
@@ -87,7 +84,6 @@ router.put(
     "/:id/accept",
     orderController.acceptRestaurant
 );
-
 
 // ======================================================
 // RESTAURANTE RECUSA PEDIDO
@@ -98,7 +94,6 @@ router.put(
     orderController.rejectRestaurant
 );
 
-
 // ======================================================
 // ENTREGADOR ACEITA
 // ======================================================
@@ -107,7 +102,6 @@ router.put(
     "/:id/accept-delivery",
     orderController.acceptDelivery
 );
-
 
 // ======================================================
 // ENTREGADOR FINALIZA
@@ -118,7 +112,6 @@ router.put(
     orderController.completeDelivery
 );
 
-
 // ======================================================
 // CLIENTE/RESTAURANTE ABRE SUPORTE
 // ======================================================
@@ -127,6 +120,5 @@ router.post(
     "/:id/support",
     orderController.openSupport
 );
-
 
 module.exports = router;

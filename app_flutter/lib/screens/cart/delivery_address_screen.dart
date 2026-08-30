@@ -3,18 +3,12 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import 'payment_screen.dart';
 import 'cart_screen.dart';
+import 'order_review_screen.dart';
 
 class DeliveryAddressScreen extends StatefulWidget {
   final List<CartItem> itens;
   final double subtotal;
-
-
-  // ============================================================
-  // RESTAURANTE DO PEDIDO
-  // ============================================================
-
   final String restauranteId;
 
   const DeliveryAddressScreen({
@@ -25,12 +19,10 @@ class DeliveryAddressScreen extends StatefulWidget {
   });
 
   @override
-  State<DeliveryAddressScreen> createState() =>
-      _DeliveryAddressScreenState();
+  State<DeliveryAddressScreen> createState() => _DeliveryAddressScreenState();
 }
 
-class _DeliveryAddressScreenState
-    extends State<DeliveryAddressScreen> {
+class _DeliveryAddressScreenState extends State<DeliveryAddressScreen> {
   static const Color laranja = Color(0xFFF97316);
   static const Color fundo = Color(0xFFF5F5F5);
 
@@ -55,6 +47,7 @@ class _DeliveryAddressScreenState
     complementoController.dispose();
     cidadeController.dispose();
     estadoController.dispose();
+
     super.dispose();
   }
 
@@ -69,7 +62,10 @@ class _DeliveryAddressScreenState
     );
 
     if (cep.length != 8) {
-      _mensagem('Digite um CEP válido.');
+      _mensagem(
+        'Digite um CEP válido.',
+        erro: true,
+      );
       return;
     }
 
@@ -84,9 +80,7 @@ class _DeliveryAddressScreenState
         'https://viacep.com.br/ws/$cep/json/',
       );
 
-      final response = await http
-          .get(url)
-          .timeout(
+      final response = await http.get(url).timeout(
             const Duration(seconds: 10),
           );
 
@@ -125,24 +119,22 @@ class _DeliveryAddressScreenState
       }
 
       setState(() {
-        ruaController.text =
-            dados['logradouro']?.toString() ?? '';
+        ruaController.text = dados['logradouro']?.toString() ?? '';
 
-        bairroController.text =
-            dados['bairro']?.toString() ?? '';
+        bairroController.text = dados['bairro']?.toString() ?? '';
 
-        cidadeController.text =
-            dados['localidade']?.toString() ?? '';
+        cidadeController.text = dados['localidade']?.toString() ?? '';
 
-        estadoController.text =
-            dados['uf']?.toString() ?? '';
+        estadoController.text = dados['uf']?.toString() ?? '';
       });
 
       _mensagem(
         'Endereço encontrado com sucesso!',
       );
     } catch (e) {
-      debugPrint('ERRO AO BUSCAR CEP: $e');
+      debugPrint(
+        'ERRO AO BUSCAR CEP: $e',
+      );
 
       if (!mounted) return;
 
@@ -170,6 +162,10 @@ class _DeliveryAddressScreenState
       return;
     }
 
+    // ============================================================
+    // VALIDAR CARRINHO
+    // ============================================================
+
     if (widget.itens.isEmpty) {
       _mensagem(
         'Seu carrinho está vazio.',
@@ -182,8 +178,7 @@ class _DeliveryAddressScreenState
     // VALIDAR RESTAURANTE
     // ============================================================
 
-    final restauranteId =
-        widget.restauranteId.trim();
+    final restauranteId = widget.restauranteId.trim();
 
     if (restauranteId.isEmpty) {
       _mensagem(
@@ -193,45 +188,87 @@ class _DeliveryAddressScreenState
       return;
     }
 
+    // ============================================================
+    // ENDEREÇO
+    // ============================================================
+
     final endereco = <String, String>{
       'cep': cepController.text.trim(),
       'rua': ruaController.text.trim(),
       'numero': numeroController.text.trim(),
       'bairro': bairroController.text.trim(),
-      'complemento':
-          complementoController.text.trim(),
+      'complemento': complementoController.text.trim(),
       'cidade': cidadeController.text.trim(),
       'estado': estadoController.text.trim(),
     };
 
-    debugPrint('========================================');
-    debugPrint('📍 ENDEREÇO DE ENTREGA');
-    debugPrint('$endereco');
-    debugPrint('🛒 ITENS: ${widget.itens.length}');
-    debugPrint('💰 SUBTOTAL: ${widget.subtotal}');
-    debugPrint('🏪 RESTAURANTE ID: $restauranteId');
-    debugPrint('========================================');
+    // ============================================================
+    // DEBUG
+    // ============================================================
+
+    debugPrint(
+      '========================================',
+    );
+
+    debugPrint(
+      '📍 ENDEREÇO DE ENTREGA',
+    );
+
+    debugPrint(
+      '$endereco',
+    );
+
+    debugPrint(
+      '🛒 ITENS: ${widget.itens.length}',
+    );
+
+    debugPrint(
+      '💰 SUBTOTAL: ${widget.subtotal}',
+    );
+
+    debugPrint(
+      '🏪 RESTAURANTE ID: $restauranteId',
+    );
+
+    debugPrint(
+      '========================================',
+    );
+
+    // ============================================================
+    // IR PARA REVISÃO DO PEDIDO
+    //
+    // NOVO FLUXO:
+    //
+    // ENDEREÇO
+    //     ↓
+    // ORDER REVIEW
+    //     ↓
+    // PAYMENT SCREEN
+    //
+    // Não enviamos:
+    // total
+    // pagamento
+    // taxaServico
+    //
+    // O OrderReviewScreen calcula as taxas sozinho.
+    // ============================================================
 
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => PaymentScreen(
-          endereco: endereco,
+        builder: (_) => OrderReviewScreen(
           itens: widget.itens,
           subtotal: widget.subtotal,
-
-          // ======================================================
-          // PASSA O RESTAURANTE PARA O PAGAMENTO
-          // ======================================================
-
-          restauranteId: restauranteId,
+          endereco: endereco,
+          restauranteId: widget.restauranteId,
+          pagamento: 'PIX',
         ),
       ),
     );
   }
 
   // ============================================================
-  // CAMPO
+  // CAMPO TEXTO
   // ============================================================
 
   Widget campoTexto({
@@ -243,7 +280,9 @@ class _DeliveryAddressScreenState
     Widget? prefixIcon,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.only(
+        bottom: 15,
+      ),
       child: TextFormField(
         controller: controller,
         keyboardType: keyboardType,
@@ -253,32 +292,25 @@ class _DeliveryAddressScreenState
           labelText: label,
           prefixIcon: prefixIcon,
           filled: true,
-          fillColor:
-              somenteLeitura
-                  ? Colors.grey.shade100
-                  : Colors.white,
+          fillColor: somenteLeitura ? Colors.grey.shade100 : Colors.white,
           border: OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(12),
           ),
           enabledBorder: OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(
               color: Colors.black12,
             ),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(
               color: laranja,
               width: 2,
             ),
           ),
           errorBorder: OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(12),
             borderSide: const BorderSide(
               color: Colors.red,
             ),
@@ -286,8 +318,7 @@ class _DeliveryAddressScreenState
         ),
         validator: obrigatorio
             ? (value) {
-                if (value == null ||
-                    value.trim().isEmpty) {
+                if (value == null || value.trim().isEmpty) {
                   return 'Informe $label';
                 }
 
@@ -299,7 +330,7 @@ class _DeliveryAddressScreenState
   }
 
   // ============================================================
-  // CEP
+  // FORMATAR CEP
   // ============================================================
 
   String formatarCep(String valor) {
@@ -312,29 +343,30 @@ class _DeliveryAddressScreenState
       return numeros;
     }
 
-    final parte1 =
-        numeros.substring(0, 5);
+    final parte1 = numeros.substring(0, 5);
 
     final parte2 = numeros.substring(
       5,
-      numeros.length > 8
-          ? 8
-          : numeros.length,
+      numeros.length > 8 ? 8 : numeros.length,
     );
 
     return '$parte1-$parte2';
   }
 
+  // ============================================================
+  // CAMPO CEP
+  // ============================================================
+
   Widget campoCep() {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 15),
+      padding: const EdgeInsets.only(
+        bottom: 15,
+      ),
       child: TextFormField(
         controller: cepController,
-        keyboardType:
-            TextInputType.number,
+        keyboardType: TextInputType.number,
         maxLength: 9,
-        textInputAction:
-            TextInputAction.next,
+        textInputAction: TextInputAction.next,
         decoration: InputDecoration(
           labelText: 'CEP',
           hintText: '00000-000',
@@ -351,8 +383,7 @@ class _DeliveryAddressScreenState
                   child: SizedBox(
                     width: 20,
                     height: 20,
-                    child:
-                        CircularProgressIndicator(
+                    child: CircularProgressIndicator(
                       strokeWidth: 2,
                       color: laranja,
                     ),
@@ -367,63 +398,49 @@ class _DeliveryAddressScreenState
                   onPressed: buscarCep,
                 ),
           border: OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(12),
           ),
-          enabledBorder:
-              OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
-            borderSide:
-                const BorderSide(
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(
               color: Colors.black12,
             ),
           ),
-          focusedBorder:
-              OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
-            borderSide:
-                const BorderSide(
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: const BorderSide(
               color: laranja,
               width: 2,
             ),
           ),
         ),
         onChanged: (valor) {
-          final formatado =
-              formatarCep(valor);
+          final formatado = formatarCep(valor);
 
-          if (formatado !=
-              cepController.text) {
-            cepController.value =
-                TextEditingValue(
+          if (formatado != cepController.text) {
+            cepController.value = TextEditingValue(
               text: formatado,
-              selection:
-                  TextSelection.collapsed(
+              selection: TextSelection.collapsed(
                 offset: formatado.length,
               ),
             );
           }
 
-          final cep =
-              formatado.replaceAll(
+          final cep = formatado.replaceAll(
             RegExp(r'[^0-9]'),
             '',
           );
 
-          if (cep.length == 8 &&
-              !buscandoCep) {
+          if (cep.length == 8 && !buscandoCep) {
             buscarCep();
           }
         },
         validator: (value) {
-          final cep =
-              value?.replaceAll(
-                    RegExp(r'[^0-9]'),
-                    '',
-                  ) ??
-                  '';
+          final cep = value?.replaceAll(
+                RegExp(r'[^0-9]'),
+                '',
+              ) ??
+              '';
 
           if (cep.isEmpty) {
             return 'Informe o CEP';
@@ -449,24 +466,17 @@ class _DeliveryAddressScreenState
   }) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(mensagem),
-        duration:
-            const Duration(seconds: 3),
-        behavior:
-            SnackBarBehavior.floating,
-        backgroundColor: erro
-            ? Colors.red.shade700
-            : Colors.black87,
-        shape:
-            RoundedRectangleBorder(
-          borderRadius:
-              BorderRadius.circular(12),
+        duration: const Duration(seconds: 3),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: erro ? Colors.red.shade700 : Colors.black87,
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
         ),
       ),
     );
@@ -480,7 +490,6 @@ class _DeliveryAddressScreenState
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: fundo,
-
       appBar: AppBar(
         backgroundColor: laranja,
         foregroundColor: Colors.white,
@@ -492,18 +501,12 @@ class _DeliveryAddressScreenState
           ),
         ),
       ),
-
       body: Form(
         key: _formKey,
-
         child: SingleChildScrollView(
-          padding:
-              const EdgeInsets.all(20),
-
+          padding: const EdgeInsets.all(20),
           child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
-
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
                 'Onde devemos entregar seu pedido?',
@@ -514,7 +517,9 @@ class _DeliveryAddressScreenState
                 ),
               ),
 
-              const SizedBox(height: 8),
+              const SizedBox(
+                height: 8,
+              ),
 
               const Text(
                 'Digite seu CEP e encontraremos automaticamente seu endereço.',
@@ -524,132 +529,131 @@ class _DeliveryAddressScreenState
                 ),
               ),
 
-              const SizedBox(height: 25),
+              const SizedBox(
+                height: 25,
+              ),
+
+              // ==================================================
+              // CEP
+              // ==================================================
 
               campoCep(),
 
+              // ==================================================
+              // RUA
+              // ==================================================
+
               campoTexto(
                 label: 'Rua',
-                controller:
-                    ruaController,
-                somenteLeitura:
-                    buscandoCep,
-                prefixIcon:
-                    const Icon(
-                  Icons
-                      .signpost_outlined,
+                controller: ruaController,
+                somenteLeitura: buscandoCep,
+                prefixIcon: const Icon(
+                  Icons.signpost_outlined,
                   color: laranja,
                 ),
               ),
 
+              // ==================================================
+              // NÚMERO
+              // ==================================================
+
               campoTexto(
                 label: 'Número',
-                controller:
-                    numeroController,
-                keyboardType:
-                    TextInputType.number,
-                prefixIcon:
-                    const Icon(
+                controller: numeroController,
+                keyboardType: TextInputType.number,
+                prefixIcon: const Icon(
                   Icons.numbers_outlined,
                   color: laranja,
                 ),
               ),
 
+              // ==================================================
+              // BAIRRO
+              // ==================================================
+
               campoTexto(
                 label: 'Bairro',
-                controller:
-                    bairroController,
-                somenteLeitura:
-                    buscandoCep,
-                prefixIcon:
-                    const Icon(
-                  Icons
-                      .location_city_outlined,
+                controller: bairroController,
+                somenteLeitura: buscandoCep,
+                prefixIcon: const Icon(
+                  Icons.location_city_outlined,
                   color: laranja,
                 ),
               ),
+
+              // ==================================================
+              // COMPLEMENTO
+              // ==================================================
 
               campoTexto(
                 label: 'Complemento',
-                controller:
-                    complementoController,
+                controller: complementoController,
                 obrigatorio: false,
-                prefixIcon:
-                    const Icon(
-                  Icons
-                      .home_work_outlined,
+                prefixIcon: const Icon(
+                  Icons.home_work_outlined,
                   color: laranja,
                 ),
               ),
 
+              // ==================================================
+              // CIDADE
+              // ==================================================
+
               campoTexto(
                 label: 'Cidade',
-                controller:
-                    cidadeController,
-                somenteLeitura:
-                    buscandoCep,
-                prefixIcon:
-                    const Icon(
+                controller: cidadeController,
+                somenteLeitura: buscandoCep,
+                prefixIcon: const Icon(
                   Icons.location_city,
                   color: laranja,
                 ),
               ),
 
+              // ==================================================
+              // ESTADO
+              // ==================================================
+
               campoTexto(
                 label: 'Estado',
-                controller:
-                    estadoController,
-                somenteLeitura:
-                    buscandoCep,
-                prefixIcon:
-                    const Icon(
+                controller: estadoController,
+                somenteLeitura: buscandoCep,
+                prefixIcon: const Icon(
                   Icons.map_outlined,
                   color: laranja,
                 ),
               ),
 
-              const SizedBox(height: 10),
+              const SizedBox(
+                height: 10,
+              ),
+
+              // ==================================================
+              // CONTINUAR
+              // ==================================================
 
               SizedBox(
                 width: double.infinity,
-
-                child:
-                    ElevatedButton.icon(
-                  onPressed:
-                      buscandoCep
-                          ? null
-                          : continuar,
-
+                child: ElevatedButton.icon(
+                  onPressed: buscandoCep ? null : continuar,
                   icon: const Icon(
                     Icons.arrow_forward,
                   ),
-
                   label: const Text(
                     'CONTINUAR',
                     style: TextStyle(
                       fontSize: 16,
-                      fontWeight:
-                          FontWeight.bold,
+                      fontWeight: FontWeight.bold,
                     ),
                   ),
-
-                  style:
-                      ElevatedButton.styleFrom(
-                    backgroundColor:
-                        laranja,
-                    foregroundColor:
-                        Colors.white,
-                    disabledBackgroundColor:
-                        Colors.orange.shade200,
-                    padding:
-                        const EdgeInsets
-                            .symmetric(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: laranja,
+                    foregroundColor: Colors.white,
+                    disabledBackgroundColor: Colors.orange.shade200,
+                    padding: const EdgeInsets.symmetric(
                       vertical: 16,
                     ),
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(
                         12,
                       ),
                     ),
@@ -657,22 +661,28 @@ class _DeliveryAddressScreenState
                 ),
               ),
 
-              const SizedBox(height: 15),
+              const SizedBox(
+                height: 15,
+              ),
+
+              // ==================================================
+              // AVISO
+              // ==================================================
 
               Center(
                 child: Text(
                   'Seu endereço será utilizado apenas para realizar a entrega.',
-                  textAlign:
-                      TextAlign.center,
+                  textAlign: TextAlign.center,
                   style: TextStyle(
-                    color: Colors
-                        .grey.shade600,
+                    color: Colors.grey.shade600,
                     fontSize: 12,
                   ),
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(
+                height: 20,
+              ),
             ],
           ),
         ),

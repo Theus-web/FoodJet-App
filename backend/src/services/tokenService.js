@@ -22,9 +22,21 @@ function criarToken(usuario) {
 
     const payload = {
         id: usuario.id,
+
         nome: usuario.nome,
+
         email: usuario.email,
-        tipo: usuario.tipo || "CLIENTE"
+
+        cpf: usuario.cpf || "",
+
+        telefone:
+            usuario.telefone ||
+            usuario.celular ||
+            "",
+
+        tipo:
+            usuario.tipo ||
+            "CLIENTE"
     };
 
     const token = jwt.sign(
@@ -40,12 +52,18 @@ function criarToken(usuario) {
         usuario.email
     );
 
+    console.log(
+        "CPF NO TOKEN:",
+        usuario.cpf
+            ? "SIM"
+            : "NÃO"
+    );
+
     return token;
 }
 
 // ================================================
 // GERAR TOKEN
-// Compatibilidade com authController
 // ================================================
 
 function gerar(usuario) {

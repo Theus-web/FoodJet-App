@@ -6,8 +6,7 @@ const axios = require("axios");
 // CONFIGURAÇÃO ASAAS
 // ============================================================
 
-const ASAAS_API_KEY =
-  process.env.ASAAS_API_KEY;
+const ASAAS_API_KEY = process.env.ASAAS_API_KEY;
 
 const ASAAS_API_URL =
   process.env.ASAAS_API_URL ||
@@ -24,8 +23,7 @@ console.log(
 
 console.log(
   "AMBIENTE:",
-  process.env.ASAAS_ENVIRONMENT ||
-    "production"
+  process.env.ASAAS_ENVIRONMENT || "production"
 );
 
 console.log(
@@ -56,11 +54,9 @@ if (!ASAAS_API_KEY) {
 
 const api = axios.create({
 
-  baseURL:
-    ASAAS_API_URL,
+  baseURL: ASAAS_API_URL,
 
-  timeout:
-    30000,
+  timeout: 30000,
 
   headers: {
 
@@ -72,129 +68,172 @@ const api = axios.create({
 
     access_token:
       ASAAS_API_KEY,
-
   },
-
 });
 
 // ============================================================
-// CRIAR CLIENTE
+// DATA
+// ============================================================
+
+function obterDataHoje() {
+
+  const agora =
+    new Date();
+
+  const ano =
+    agora.getFullYear();
+
+  const mes =
+    String(
+      agora.getMonth() + 1
+    ).padStart(2, "0");
+
+  const dia =
+    String(
+      agora.getDate()
+    ).padStart(2, "0");
+
+  return `${ano}-${mes}-${dia}`;
+}
+
+// ============================================================
+// CRIAR / LOCALIZAR CLIENTE ASAAS
 // ============================================================
 
 async function criarCliente({
+
   nome,
   email,
-  cpfCnpj,
+  cpf,
+  telefone,
+  usuarioId,
+
 }) {
 
-  console.log(
-    "👤 CRIANDO/LOCALIZANDO CLIENTE ASAAS"
-  );
-
-  // ==========================================================
-  // NORMALIZAR CPF/CNPJ
-  // ==========================================================
-
   const documento =
-    cpfCnpj
-      ? String(cpfCnpj)
+    cpf
+      ? String(cpf)
           .replace(/\D/g, "")
       : "";
 
   // ==========================================================
-  // PROCURAR CLIENTE PELO CPF/CNPJ
-  // ==========================================================
-
-  if (documento) {
-
-    try {
-
-      const busca =
-        await api.get(
-          "/v3/customers",
-          {
-            params: {
-              cpfCnpj:
-                documento,
-            },
-          }
-        );
-
-      if (
-        busca.data &&
-        Array.isArray(
-          busca.data.data
-        ) &&
-        busca.data.data.length > 0
-      ) {
-
-        const cliente =
-          busca.data.data[0];
-
-        console.log(
-          "✅ CLIENTE JÁ EXISTE:",
-          cliente.id
-        );
-
-        return cliente;
-      }
-
-    } catch (erro) {
-
-      console.warn(
-        "⚠️ NÃO FOI POSSÍVEL LOCALIZAR CLIENTE:"
-      );
-
-      console.warn(
-        erro?.response?.data ||
-        erro?.message
-      );
-    }
-  }
-
-  // ==========================================================
-  // VALIDAR CPF/CNPJ
+  // VALIDAR CPF
   // ==========================================================
 
   if (!documento) {
 
     throw new Error(
-      "CPF ou CNPJ do cliente é obrigatório para criar a cobrança PIX."
+      "CPF não cadastrado. Atualize seu cadastro antes de realizar o pagamento."
+    );
+  }
+
+  if (!nome) {
+
+    throw new Error(
+      "Nome do cliente não encontrado."
+    );
+  }
+
+  if (!email) {
+
+    throw new Error(
+      "E-mail do cliente não encontrado."
     );
   }
 
   // ==========================================================
-  // CRIAR CLIENTE
+  // PROCURAR CLIENTE PELO CPF
   // ==========================================================
+
+  try {
+
+    const busca =
+      await api.get(
+        "/v3/customers",
+        {
+          params: {
+            cpfCnpj:
+              documento,
+          },
+        }
+      );
+
+    if (
+      busca.data &&
+      Array.isArray(
+        busca.data.data
+      ) &&
+      busca.data.data.length > 0
+    ) {
+
+      const cliente =
+        busca.data.data[0];
+
+      console.log(
+        "✅ CLIENTE ASAAS ENCONTRADO:",
+        cliente.id
+      );
+
+      return cliente;
+    }
+
+  } catch (erro) {
+
+    console.warn(
+      "⚠️ NÃO FOI POSSÍVEL LOCALIZAR CLIENTE ASAAS PELO CPF:"
+    );
+
+    console.warn(
+      erro?.response?.data ||
+      erro?.message
+    );
+  }
+
+  // ==========================================================
+  // CRIAR CLIENTE ASAAS
+  // ==========================================================
+
+  const body = {
+
+    name:
+      String(nome).trim(),
+
+    email:
+      String(email)
+        .trim()
+        .toLowerCase(),
+
+    cpfCnpj:
+      documento,
+
+    notificationDisabled:
+      true,
+  };
+
+  if (telefone) {
+
+    body.mobilePhone =
+      String(telefone)
+        .replace(/\D/g, "");
+  }
+
+  if (usuarioId) {
+
+    body.externalReference =
+      String(usuarioId);
+  }
 
   try {
 
     const response =
       await api.post(
         "/v3/customers",
-        {
-
-          name:
-            nome ||
-            "Cliente FoodJet",
-
-          email:
-            String(email)
-              .trim()
-              .toLowerCase(),
-
-          cpfCnpj:
-            documento,
-
-          notificationDisabled:
-            true,
-
-        }
+        body
       );
 
     console.log(
       "✅ CLIENTE ASAAS CRIADO:",
-      response.data.id
+      response.data?.id
     );
 
     return response.data;
@@ -219,62 +258,48 @@ async function criarCliente({
 }
 
 // ============================================================
-// CRIAR PIX
+// CRIAR COBRANÇA - CARTÃO DE CRÉDITO
+// ============================================================
+//
+// Fluxo:
+//
+// FoodJet
+//    ↓
+// Cliente ASAAS
+//    ↓
+// Cobrança CREDIT_CARD
+//    ↓
+// invoiceUrl
+//    ↓
+// Cliente informa cartão na página ASAAS
+//
 // ============================================================
 
-async function criarPix({
+async function criarCartao({
 
   valor,
-
   email,
-
   referencia,
-
   descricao,
-
   nome,
-
-  cpfCnpj,
+  cpf,
+  telefone,
+  usuarioId,
 
 }) {
 
-  console.log("========================================");
-  console.log("💳 ASAAS - CRIAR PIX");
-  console.log("========================================");
-
-  console.log(
-    "💰 VALOR:",
-    valor
-  );
-
-  console.log(
-    "📧 EMAIL:",
-    email
-  );
-
-  console.log(
-    "🔖 REFERÊNCIA:",
-    referencia
-  );
-
-  console.log(
-    "🪪 CPF/CNPJ:",
-    cpfCnpj
-      ? "INFORMADO"
-      : "NÃO INFORMADO"
-  );
-
-  console.log("========================================");
+  const valorNumerico =
+    Number(valor);
 
   // ==========================================================
-  // VALIDAR VALOR
+  // VALOR
   // ==========================================================
 
   if (
     !Number.isFinite(
-      Number(valor)
+      valorNumerico
     ) ||
-    Number(valor) <= 0
+    valorNumerico <= 0
   ) {
 
     throw new Error(
@@ -283,7 +308,7 @@ async function criarPix({
   }
 
   // ==========================================================
-  // VALIDAR EMAIL
+  // EMAIL
   // ==========================================================
 
   if (
@@ -297,7 +322,7 @@ async function criarPix({
   }
 
   // ==========================================================
-  // VALIDAR REFERÊNCIA
+  // REFERÊNCIA
   // ==========================================================
 
   if (
@@ -324,102 +349,101 @@ async function criarPix({
           .trim()
           .toLowerCase(),
 
-      cpfCnpj,
+      cpf,
 
+      telefone,
+
+      usuarioId,
     });
 
   // ==========================================================
-  // DATA DE VENCIMENTO
+  // COBRANÇA
   // ==========================================================
 
-  const agora =
-    new Date();
+  const body = {
 
-  const ano =
-    agora.getFullYear();
+    customer:
+      cliente.id,
 
-  const mes =
-    String(
-      agora.getMonth() + 1
-    ).padStart(2, "0");
+    billingType:
+      "CREDIT_CARD",
 
-  const dia =
-    String(
-      agora.getDate()
-    ).padStart(2, "0");
+    value:
+      Number(
+        valorNumerico.toFixed(2)
+      ),
 
-  const dueDate =
-    `${ano}-${mes}-${dia}`;
+    dueDate:
+      obterDataHoje(),
 
-  // ==========================================================
-  // CRIAR COBRANÇA
-  // ==========================================================
+    description:
+      descricao ||
+      `Pedido FoodJet #${referencia}`,
+
+    externalReference:
+      String(referencia),
+
+    postalService:
+      false,
+  };
 
   try {
 
     const response =
       await api.post(
         "/v3/payments",
-        {
-
-          customer:
-            cliente.id,
-
-          billingType:
-            "PIX",
-
-          value:
-            Number(
-              Number(valor).toFixed(2)
-            ),
-
-          dueDate,
-
-          description:
-            descricao ||
-            `Pedido FoodJet #${referencia}`,
-
-          externalReference:
-            String(referencia),
-
-          postalService:
-            false,
-
-        }
+        body
       );
 
-    console.log("========================================");
-    console.log("✅ COBRANÇA ASAAS CRIADA");
-    console.log("========================================");
+    console.log(
+      "========================================"
+    );
 
     console.log(
-      "🆔 ID:",
+      "💳 FOODJET - CARTÃO DE CRÉDITO"
+    );
+
+    console.log(
+      "CLIENTE ASAAS:",
+      cliente.id
+    );
+
+    console.log(
+      "PAGAMENTO:",
       response.data?.id
     );
 
     console.log(
-      "📊 STATUS:",
-      response.data?.status
+      "PEDIDO:",
+      referencia
     );
 
     console.log(
-      "💰 VALOR:",
+      "VALOR:",
       response.data?.value
     );
 
     console.log(
-      "🔖 REFERÊNCIA:",
-      response.data?.externalReference
+      "STATUS:",
+      response.data?.status
     );
 
-    console.log("========================================");
+    console.log(
+      "INVOICE URL:",
+      response.data?.invoiceUrl ||
+      "NÃO INFORMADA"
+    );
+
+    console.log(
+      "========================================"
+    );
 
     return response.data;
 
   } catch (erro) {
 
     console.error(
-      "❌ ERRO CRIANDO COBRANÇA ASAAS:"
+      "❌ ERRO CRIANDO COBRANÇA CARTÃO ASAAS:"
     );
 
     console.error(
@@ -428,7 +452,6 @@ async function criarPix({
     );
 
     console.error(
-      "DETALHES:",
       JSON.stringify(
         erro?.response?.data ||
         {},
@@ -442,138 +465,413 @@ async function criarPix({
 }
 
 // ============================================================
-// OBTER QR CODE PIX
+// CRIAR COBRANÇA - CARTÃO DE DÉBITO
+// ============================================================
+//
+// ATENÇÃO:
+//
+// O Asaas NÃO permite enviar número, validade e CVV
+// de cartão de débito diretamente pela API.
+//
+// Para débito:
+// 1. Criamos a cobrança no Asaas
+// 2. Usamos billingType CREDIT_CARD
+// 3. Pegamos a invoiceUrl
+// 4. O cliente abre a página do Asaas
+// 5. Na página da fatura ele poderá escolher DÉBITO
+//
 // ============================================================
 
-async function obterQrCodePix(
-  pagamentoId
-) {
-
-  console.log("========================================");
-  console.log("📱 ASAAS - OBTER QR CODE PIX");
-  console.log("========================================");
+async function criarDebito({
+  valor,
+  email,
+  referencia,
+  descricao,
+  nome,
+  cpf,
+  telefone,
+  usuarioId,
+}) {
 
   // ==========================================================
-  // VALIDAR ID
+  // VALOR
   // ==========================================================
+
+  const valorNumerico =
+    Number(valor);
 
   if (
-    !pagamentoId ||
-    !String(pagamentoId).trim()
+    !Number.isFinite(valorNumerico) ||
+    valorNumerico <= 0
   ) {
-
     throw new Error(
-      "ID do pagamento obrigatório."
+      "Valor inválido para pagamento."
     );
   }
 
-  const id =
-    String(pagamentoId).trim();
+  // ==========================================================
+  // EMAIL
+  // ==========================================================
 
-  console.log(
-    "🆔 PAYMENT ID:",
-    id
-  );
-
-  const endpoint =
-    `/v3/payments/${encodeURIComponent(
-      id
-    )}/pixQrCode`;
-
-  console.log(
-    "🌐 ENDPOINT:",
-    endpoint
-  );
-
-  console.log("========================================");
+  if (
+    !email ||
+    !String(email).trim()
+  ) {
+    throw new Error(
+      "E-mail obrigatório."
+    );
+  }
 
   // ==========================================================
-  // IMPORTANTE:
-  // GET SEM BODY
+  // REFERÊNCIA
   // ==========================================================
+
+  if (
+    !referencia ||
+    !String(referencia).trim()
+  ) {
+    throw new Error(
+      "Referência obrigatória."
+    );
+  }
+
+  // ==========================================================
+  // CLIENTE ASAAS
+  // ==========================================================
+
+  const cliente =
+    await criarCliente({
+      nome,
+      email:
+        String(email)
+          .trim()
+          .toLowerCase(),
+
+      cpf,
+
+      telefone,
+
+      usuarioId,
+    });
+
+  // ==========================================================
+  // COBRANÇA
+  // ==========================================================
+
+  const body = {
+
+    customer:
+      cliente.id,
+
+    // O Asaas usa CREDIT_CARD para disponibilizar
+    // o pagamento por cartão através da invoiceUrl.
+    billingType:
+      "CREDIT_CARD",
+
+    value:
+      Number(
+        valorNumerico.toFixed(2)
+      ),
+
+    dueDate:
+      obterDataHoje(),
+
+    description:
+      descricao ||
+      `Pedido FoodJet #${referencia}`,
+
+    externalReference:
+      String(referencia),
+
+    postalService:
+      false,
+  };
 
   try {
 
+    console.log("");
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "💳 FOODJET - CRIANDO COBRANÇA DÉBITO"
+    );
+
+    console.log(
+      "CLIENTE:",
+      cliente.id
+    );
+
+    console.log(
+      "VALOR:",
+      body.value
+    );
+
+    console.log(
+      "REFERÊNCIA:",
+      referencia
+    );
+
+    console.log(
+      "BILLING TYPE:",
+      body.billingType
+    );
+
+    console.log(
+      "========================================"
+    );
+
     const response =
-      await api.request({
+      await api.post(
+        "/v3/payments",
+        body
+      );
 
-        method:
-          "GET",
-
-        url:
-          endpoint,
-
-        headers: {
-
-          Accept:
-            "application/json",
-
-          access_token:
-            ASAAS_API_KEY,
-
-        },
-
-        // Não enviar data/body aqui.
-      });
-
-    console.log("========================================");
-    console.log("✅ QR CODE PIX OBTIDO");
-    console.log("========================================");
-
+    console.log("");
     console.log(
-      "🆔 PAYMENT ID:",
-      id
+      "========================================"
     );
 
     console.log(
-      "📱 PAYLOAD:",
-      response.data?.payload
-        ? "SIM"
-        : "NÃO"
+      "✅ COBRANÇA DÉBITO CRIADA"
     );
 
     console.log(
-      "🖼️ BASE64:",
-      response.data?.encodedImage
-        ? "SIM"
-        : "NÃO"
+      "PAGAMENTO:",
+      response.data?.id
     );
 
     console.log(
-      "⏰ EXPIRAÇÃO:",
-      response.data?.expirationDate ||
-      ""
+      "STATUS:",
+      response.data?.status
     );
 
-    console.log("========================================");
+    console.log(
+      "INVOICE URL:",
+      response.data?.invoiceUrl ||
+        "NÃO INFORMADA"
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    // ========================================================
+    // VALIDAR INVOICE URL
+    // ========================================================
+
+    if (
+      !response.data?.invoiceUrl
+    ) {
+      throw new Error(
+        "O Asaas criou a cobrança, mas não retornou a invoiceUrl."
+      );
+    }
 
     return response.data;
 
   } catch (erro) {
 
-    console.error("========================================");
+    console.error("");
     console.error(
-      "❌ ERRO AO OBTER QR CODE PIX ASAAS"
-    );
-    console.error("========================================");
-
-    console.error(
-      "🆔 PAYMENT ID:",
-      id
+      "❌ ERRO CRIANDO COBRANÇA DÉBITO ASAAS"
     );
 
     console.error(
-      "HTTP STATUS:",
+      "STATUS:",
       erro?.response?.status
     );
 
     console.error(
-      "MENSAGEM:",
-      erro?.message
+      "RESPOSTA ASAAS:"
     );
 
     console.error(
-      "RESPOSTA ASAAS:"
+      JSON.stringify(
+        erro?.response?.data ||
+          {},
+        null,
+        2
+      )
+    );
+
+    throw erro;
+  }
+}
+
+// ============================================================
+// CRIAR PIX
+// ============================================================
+
+async function criarPix({
+
+  valor,
+  email,
+  referencia,
+  descricao,
+  nome,
+  cpf,
+  telefone,
+  usuarioId,
+
+}) {
+
+  const valorNumerico =
+    Number(valor);
+
+  // ==========================================================
+  // VALOR
+  // ==========================================================
+
+  if (
+    !Number.isFinite(
+      valorNumerico
+    ) ||
+    valorNumerico <= 0
+  ) {
+
+    throw new Error(
+      "Valor inválido para pagamento."
+    );
+  }
+
+  // ==========================================================
+  // EMAIL
+  // ==========================================================
+
+  if (
+    !email ||
+    !String(email).trim()
+  ) {
+
+    throw new Error(
+      "E-mail obrigatório."
+    );
+  }
+
+  // ==========================================================
+  // REFERÊNCIA
+  // ==========================================================
+
+  if (
+    !referencia ||
+    !String(referencia).trim()
+  ) {
+
+    throw new Error(
+      "Referência obrigatória."
+    );
+  }
+
+  // ==========================================================
+  // CLIENTE ASAAS
+  // ==========================================================
+
+  const cliente =
+    await criarCliente({
+
+      nome,
+
+      email:
+        String(email)
+          .trim()
+          .toLowerCase(),
+
+      cpf,
+
+      telefone,
+
+      usuarioId,
+    });
+
+  // ==========================================================
+  // COBRANÇA PIX
+  // ==========================================================
+
+  const body = {
+
+    customer:
+      cliente.id,
+
+    billingType:
+      "PIX",
+
+    value:
+      Number(
+        valorNumerico.toFixed(2)
+      ),
+
+    dueDate:
+      obterDataHoje(),
+
+    description:
+      descricao ||
+      `Pedido FoodJet #${referencia}`,
+
+    externalReference:
+      String(referencia),
+
+    postalService:
+      false,
+  };
+
+  try {
+
+    const response =
+      await api.post(
+        "/v3/payments",
+        body
+      );
+
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "💰 FOODJET - PIX CRIADO"
+    );
+
+    console.log(
+      "CLIENTE ASAAS:",
+      cliente.id
+    );
+
+    console.log(
+      "PAGAMENTO:",
+      response.data?.id
+    );
+
+    console.log(
+      "PEDIDO:",
+      referencia
+    );
+
+    console.log(
+      "VALOR:",
+      response.data?.value
+    );
+
+    console.log(
+      "STATUS:",
+      response.data?.status
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    return response.data;
+
+  } catch (erro) {
+
+    console.error(
+      "❌ ERRO CRIANDO PIX ASAAS:"
+    );
+
+    console.error(
+      "STATUS:",
+      erro?.response?.status
     );
 
     console.error(
@@ -585,74 +883,17 @@ async function obterQrCodePix(
       )
     );
 
-    console.error("========================================");
-
-    const detalhes =
-      erro?.response?.data;
-
-    let mensagemErro =
-      "Erro ao obter QR Code PIX no Asaas.";
-
-    if (
-      detalhes?.errors &&
-      Array.isArray(
-        detalhes.errors
-      )
-    ) {
-
-      mensagemErro =
-        detalhes.errors
-          .map(
-            erroItem =>
-              erroItem?.description ||
-              erroItem?.message ||
-              JSON.stringify(
-                erroItem
-              )
-          )
-          .join(" | ");
-
-    } else if (
-      detalhes?.message
-    ) {
-
-      mensagemErro =
-        detalhes.message;
-
-    } else if (
-      typeof detalhes === "string"
-    ) {
-
-      mensagemErro =
-        detalhes;
-    }
-
-    const novoErro =
-      new Error(
-        mensagemErro
-      );
-
-    novoErro.status =
-      erro?.response?.status;
-
-    novoErro.response =
-      erro?.response;
-
-    throw novoErro;
+    throw erro;
   }
 }
 
 // ============================================================
-// CONSULTAR PAGAMENTO
+// QR CODE PIX
 // ============================================================
 
-async function consultarPagamento(
+async function obterQrCodePix(
   pagamentoId
 ) {
-
-  console.log("========================================");
-  console.log("🔎 ASAAS - CONSULTAR PAGAMENTO");
-  console.log("========================================");
 
   if (
     !pagamentoId ||
@@ -665,59 +906,25 @@ async function consultarPagamento(
   }
 
   const id =
-    String(pagamentoId).trim();
-
-  console.log(
-    "🆔 PAYMENT ID:",
-    id
-  );
+    String(
+      pagamentoId
+    ).trim();
 
   try {
 
     const response =
-      await api.request({
-
-        method:
-          "GET",
-
-        url:
-          `/v3/payments/${encodeURIComponent(
-            id
-          )}`,
-
-        headers: {
-
-          Accept:
-            "application/json",
-
-          access_token:
-            ASAAS_API_KEY,
-
-        },
-
-      });
-
-    console.log(
-      "📊 STATUS:",
-      response.data?.status
-    );
-
-    console.log(
-      "💰 VALOR:",
-      response.data?.value
-    );
-
-    console.log(
-      "🔖 REFERÊNCIA:",
-      response.data?.externalReference
-    );
+      await api.get(
+        `/v3/payments/${encodeURIComponent(
+          id
+        )}/pixQrCode`
+      );
 
     return response.data;
 
   } catch (erro) {
 
     console.error(
-      "❌ ERRO CONSULTANDO PAGAMENTO ASAAS:"
+      "❌ ERRO OBTENDO QR CODE PIX:"
     );
 
     console.error(
@@ -726,7 +933,64 @@ async function consultarPagamento(
     );
 
     console.error(
-      "DETALHES:",
+      JSON.stringify(
+        erro?.response?.data ||
+        {},
+        null,
+        2
+      )
+    );
+
+    throw erro;
+  }
+}
+
+// ============================================================
+// CONSULTAR PAGAMENTO
+// ============================================================
+
+async function consultarPagamento(
+  pagamentoId
+) {
+
+  if (
+    !pagamentoId ||
+    !String(pagamentoId).trim()
+  ) {
+
+    throw new Error(
+      "ID do pagamento obrigatório."
+    );
+  }
+
+  const id =
+    String(
+      pagamentoId
+    ).trim();
+
+  try {
+
+    const response =
+      await api.get(
+        `/v3/payments/${encodeURIComponent(
+          id
+        )}`
+      );
+
+    return response.data;
+
+  } catch (erro) {
+
+    console.error(
+      "❌ ERRO CONSULTANDO PAGAMENTO:"
+    );
+
+    console.error(
+      "STATUS:",
+      erro?.response?.status
+    );
+
+    console.error(
       JSON.stringify(
         erro?.response?.data ||
         {},
@@ -747,8 +1011,12 @@ module.exports = {
 
   criarPix,
 
-  consultarPagamento,
+  criarCartao,
+
+  criarDebito,
 
   obterQrCodePix,
+
+  consultarPagamento,
 
 };

@@ -1,6 +1,11 @@
+
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../config/api.dart';
 import '../login/login_screen.dart';
 import '../favorites/favorites_screen.dart';
 import '../orders/order_history_screen.dart';
@@ -56,9 +61,7 @@ class ProfileScreen extends StatelessWidget {
                 width: 44,
                 height: 44,
                 decoration: BoxDecoration(
-                  color: vermelho.withValues(
-                    alpha: 0.10,
-                  ),
+                  color: vermelho.withValues(alpha: 0.10),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -80,8 +83,8 @@ class ProfileScreen extends StatelessWidget {
             ],
           ),
           content: const Text(
-            'Essa ação encerra sua sessão no aplicativo e remove os dados locais da conta neste dispositivo.\n\n'
-            'A exclusão definitiva da conta e dos dados armazenados no servidor precisa ser realizada pelo sistema do FoodJet.',
+            'Essa ação excluirá definitivamente sua conta e os dados da sua conta no FoodJet.\n\n'
+            'Essa operação não poderá ser desfeita.',
             style: TextStyle(
               fontSize: 14,
               height: 1.5,
@@ -124,7 +127,7 @@ class ProfileScreen extends StatelessWidget {
                 ),
               ),
               child: const Text(
-                'Encerrar conta',
+                'Excluir conta',
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                 ),
@@ -139,7 +142,212 @@ class ProfileScreen extends StatelessWidget {
       return;
     }
 
-    await _limparDadosLocais(context);
+    await _excluirContaNoBackend(context);
+  }
+
+  // ============================================================
+  // EXCLUIR CONTA NO BACKEND
+  // ============================================================
+
+  Future<void> _excluirContaNoBackend(
+    BuildContext context,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      // ========================================================
+      // PEGAR TOKEN
+      // ========================================================
+
+      String? token;
+
+      const chavesToken = [
+        'token',
+        'jwt',
+        'access_token',
+        'auth_token',
+        'accessToken',
+      ];
+
+      for (final chave in chavesToken) {
+        final valor = prefs.getString(chave);
+
+        if (valor != null && valor.trim().isNotEmpty) {
+          token = valor.trim();
+          break;
+        }
+      }
+
+      // ========================================================
+      // VERIFICAR TOKEN
+      // ========================================================
+
+      if (token == null || token.isEmpty) {
+        if (!context.mounted) return;
+
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Sua sessão expirou. Faça login novamente.',
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+
+        return;
+      }
+
+      debugPrint('');
+      debugPrint('==========================================');
+      debugPrint('🗑️ FOODJET - EXCLUINDO CONTA');
+      debugPrint('==========================================');
+      debugPrint('URL: ${Api.baseUrl}/auth/conta');
+      debugPrint('TOKEN ENCONTRADO: SIM');
+
+      // ========================================================
+      // DELETE NO BACKEND
+      // ========================================================
+
+      final resposta = await http
+          .delete(
+            Uri.parse(
+              '${Api.baseUrl}/auth/conta',
+            ),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+          )
+          .timeout(
+            const Duration(seconds: 15),
+          );
+
+      debugPrint(
+        'STATUS BACKEND: ${resposta.statusCode}',
+      );
+
+      debugPrint(
+        'RESPOSTA BACKEND: ${resposta.body}',
+      );
+
+      // ========================================================
+      // DECODIFICAR RESPOSTA
+      // ========================================================
+
+      Map<String, dynamic> resultado = {};
+
+      try {
+        final dados = jsonDecode(
+          resposta.body,
+        );
+
+        if (dados is Map<String, dynamic>) {
+          resultado = dados;
+        }
+      } catch (_) {
+        resultado = {};
+      }
+
+      // ========================================================
+      // CONTA EXCLUÍDA
+      // ========================================================
+
+      if (resposta.statusCode == 200 &&
+          resultado['sucesso'] == true) {
+        await _limparDadosLocais(
+          context,
+        );
+
+        return;
+      }
+
+      // ========================================================
+      // TOKEN INVÁLIDO / NÃO AUTORIZADO
+      // ========================================================
+
+      if (resposta.statusCode == 401) {
+        if (!context.mounted) return;
+
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Sua sessão expirou. Faça login novamente.',
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+
+        return;
+      }
+
+      // ========================================================
+      // CONTA NÃO PODE SER EXCLUÍDA
+      // ========================================================
+
+      if (resposta.statusCode == 403) {
+        if (!context.mounted) return;
+
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(
+              content: Text(
+                resultado['erro']?.toString() ??
+                    'Esta conta não pode ser excluída.',
+              ),
+              backgroundColor: Colors.red,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+
+        return;
+      }
+
+      // ========================================================
+      // OUTRO ERRO
+      // ========================================================
+
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(
+            content: Text(
+              resultado['erro']?.toString() ??
+                  'Não foi possível excluir sua conta.',
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    } catch (e) {
+      debugPrint('');
+      debugPrint('==========================================');
+      debugPrint('❌ ERRO AO EXCLUIR CONTA');
+      debugPrint('==========================================');
+      debugPrint(e.toString());
+
+      if (!context.mounted) return;
+
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Não foi possível conectar ao servidor.',
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+    }
   }
 
   // ============================================================
@@ -155,6 +363,9 @@ class ProfileScreen extends StatelessWidget {
 
       const chavesSessao = [
         'token',
+        'jwt',
+        'access_token',
+        'auth_token',
         'accessToken',
         'refreshToken',
         'usuario',
@@ -178,6 +389,26 @@ class ProfileScreen extends StatelessWidget {
         return;
       }
 
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Conta excluída com sucesso.',
+            ),
+            backgroundColor: Colors.green,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+
+      await Future.delayed(
+        const Duration(milliseconds: 700),
+      );
+
+      if (!context.mounted) {
+        return;
+      }
+
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(
@@ -187,7 +418,7 @@ class ProfileScreen extends StatelessWidget {
       );
     } catch (e) {
       debugPrint(
-        'ERRO AO ENCERRAR CONTA: $e',
+        'ERRO AO LIMPAR DADOS LOCAIS: $e',
       );
 
       if (!context.mounted) {
@@ -195,16 +426,17 @@ class ProfileScreen extends StatelessWidget {
       }
 
       ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Não foi possível encerrar a conta neste momento.',
-            ),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
+          .hideCurrentSnackBar();
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Conta excluída, mas não foi possível limpar todos os dados locais.',
           ),
-        );
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
   }
 
@@ -497,7 +729,7 @@ class ProfileScreen extends StatelessWidget {
                   SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'O encerramento da conta é uma ação importante. Certifique-se de que realmente deseja sair do FoodJet.',
+                      'O encerramento da conta é permanente e remove sua conta do FoodJet.',
                       style: TextStyle(
                         color: Colors.black54,
                         fontSize: 12,
@@ -550,8 +782,32 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
             ElevatedButton(
-              onPressed: () {
+              onPressed: () async {
                 Navigator.pop(dialogContext);
+
+                final prefs =
+                    await SharedPreferences
+                        .getInstance();
+
+                await prefs.remove('token');
+                await prefs.remove('jwt');
+                await prefs.remove('access_token');
+                await prefs.remove('auth_token');
+                await prefs.remove('accessToken');
+                await prefs.remove('refreshToken');
+                await prefs.remove('usuario');
+                await prefs.remove('usuarioLogado');
+                await prefs.remove('user');
+                await prefs.remove('userId');
+                await prefs.remove('clienteId');
+                await prefs.remove(
+                  'restauranteSelecionadoId',
+                );
+                await prefs.remove(
+                  'restauranteId',
+                );
+
+                if (!context.mounted) return;
 
                 Navigator.pushAndRemoveUntil(
                   context,
@@ -816,3 +1072,4 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 }
+

@@ -1,559 +1,902 @@
+
 const {
-  criarPix,
-  criarCredito,
-  criarDebito,
-  consultarPagamento,
-  obterQrCodePix,
+    criarPix,
+    criarCartao,
+    criarDebito,
+    consultarPagamento,
+    obterQrCodePix,
 } = require("../services/asaasService");
+
+const User = require("../models/user");
+
+const crypto = require("crypto");
+
+// ============================================================
+// REFERÊNCIA TEMPORÁRIA
+// ============================================================
+
+function gerarReferenciaTemporaria() {
+    return `FOODJET-${Date.now()}-${crypto
+        .randomBytes(4)
+        .toString("hex")
+        .toUpperCase()}`;
+}
+
+
+// ============================================================
+// BUSCAR USUÁRIO AUTENTICADO
+// ============================================================
+
+async function buscarUsuarioAutenticado(req) {
+
+    // Aceita os dois formatos usados pelo middleware
+    const usuarioToken =
+        req.usuario ||
+        req.user ||
+        null;
+
+    console.log("");
+    console.log("========================================");
+    console.log("🔐 BUSCANDO CLIENTE AUTENTICADO");
+    console.log("========================================");
+
+    if (!usuarioToken) {
+
+        console.error(
+            "❌ NENHUM USUÁRIO ENCONTRADO NO REQUEST"
+        );
+
+        throw new Error(
+            "Cliente não identificado. Faça login novamente."
+        );
+    }
+
+    // Aceita diferentes nomes possíveis para o ID
+    const usuarioId =
+        usuarioToken.id ||
+        usuarioToken.usuarioId ||
+        usuarioToken.userId ||
+        usuarioToken._id ||
+        null;
+
+    console.log(
+        "👤 ID RECEBIDO DO TOKEN:",
+        usuarioId
+    );
+
+    if (!usuarioId) {
+
+        console.error(
+            "❌ TOKEN NÃO POSSUI ID DO USUÁRIO:"
+        );
+
+        console.error(
+            usuarioToken
+        );
+
+        throw new Error(
+            "Cliente não identificado. Faça login novamente."
+        );
+    }
+
+    // Busca o usuário real no banco
+    const usuario =
+        await User.buscarPorId(
+            usuarioId
+        );
+
+    if (!usuario) {
+
+        console.error(
+            "❌ USUÁRIO NÃO ENCONTRADO NO BANCO:",
+            usuarioId
+        );
+
+        throw new Error(
+            "Cliente não identificado. Faça login novamente."
+        );
+    }
+
+    console.log(
+        "✅ CLIENTE ENCONTRADO"
+    );
+
+    console.log(
+        "👤 ID:",
+        usuario.id
+    );
+
+    console.log(
+        "👤 NOME:",
+        usuario.nome || "SEM NOME"
+    );
+
+    console.log(
+        "📧 EMAIL:",
+        usuario.email || "SEM EMAIL"
+    );
+
+    console.log(
+        "📱 TELEFONE:",
+        usuario.telefone ||
+        usuario.celular ||
+        "SEM TELEFONE"
+    );
+
+    console.log(
+        "🪪 CPF:",
+        usuario.cpf ||
+        usuario.cpfCnpj ||
+        "SEM CPF"
+    );
+
+    console.log(
+        "========================================"
+    );
+
+    return usuario;
+}
+
+// ============================================================
+// PREPARAR DADOS DO CLIENTE
+// ============================================================
+
+function prepararDadosCliente(usuario, body = {}) {
+
+    const nomeCliente =
+        usuario.nome ||
+        body.nome ||
+        "Cliente FoodJet";
+
+    const email =
+        usuario.email
+            ? String(usuario.email)
+                .trim()
+                .toLowerCase()
+            : "";
+
+    const telefoneCliente =
+        usuario.telefone ||
+        usuario.celular ||
+        body.telefone ||
+        "";
+
+    // ========================================================
+    // CPF / CNPJ
+    // ========================================================
+    // Prioridade:
+    // 1. usuario.cpf
+    // 2. usuario.cpfCnpj
+    // 3. body.cpf
+    //
+    // Assim o checkout não precisa pedir CPF novamente.
+    // ========================================================
+
+    const cpfCliente =
+        usuario.cpf ||
+        usuario.cpfCnpj ||
+        body.cpf ||
+        "";
+
+    const documento =
+        String(cpfCliente)
+            .replace(/\D/g, "")
+            .trim();
+
+    return {
+        nomeCliente,
+        email,
+        telefoneCliente,
+        documento,
+    };
+}
+
+// ============================================================
+// VALIDAR DADOS DO CLIENTE
+// ============================================================
+
+function validarDadosCliente({
+    email,
+    documento,
+}) {
+
+    if (!email) {
+        throw new Error(
+            "E-mail do cliente não encontrado."
+        );
+    }
+
+    if (!documento) {
+        throw new Error(
+            "CPF não cadastrado. Atualize seu cadastro antes de realizar o pagamento."
+        );
+    }
+
+    if (
+        documento.length !== 11 &&
+        documento.length !== 14
+    ) {
+        throw new Error(
+            "CPF ou CNPJ inválido."
+        );
+    }
+}
+
+// ============================================================
+// GERAR REFERÊNCIA
+// ============================================================
+
+function obterReferencia(pedidoId) {
+
+    if (
+        pedidoId &&
+        String(pedidoId).trim()
+    ) {
+        return String(
+            pedidoId
+        ).trim();
+    }
+
+    return gerarReferenciaTemporaria();
+}
 
 // ============================================================
 // PIX
+// POST /pagamentos/pix
 // ============================================================
 
 async function gerarPix(req, res) {
-  try {
-    const {
-      valor,
-      email,
-      pedidoId,
-      nome,
-      cpfCnpj,
-    } = req.body;
-
-    if (
-      valor === undefined ||
-      valor === null ||
-      !Number.isFinite(Number(valor)) ||
-      Number(valor) <= 0
-    ) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "Valor do pagamento obrigatório.",
-      });
-    }
-
-    if (!email) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "E-mail da conta não encontrado.",
-      });
-    }
-
-    if (!pedidoId) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "ID do pedido obrigatório.",
-      });
-    }
-
-    const pagamento =
-      await criarPix({
-        valor:
-          Number(valor),
-
-        email:
-          String(email)
-            .trim()
-            .toLowerCase(),
-
-        pedidoId,
-
-        referencia:
-          String(pedidoId).trim(),
-
-        nome,
-
-        cpfCnpj,
-
-        descricao:
-          `Pedido FoodJet #${pedidoId}`,
-      });
-
-    const pagamentoId =
-      pagamento?.id;
-
-    if (!pagamentoId) {
-      throw new Error(
-        "O Asaas não retornou o ID da cobrança."
-      );
-    }
-
-    let pix = null;
 
     try {
-      pix =
-        await obterQrCodePix(
-          pagamentoId
-        );
+
+        console.log("");
+        console.log("========================================");
+        console.log("💚 POST /pagamentos/pix");
+        console.log("========================================");
+
+        const usuario =
+            await buscarUsuarioAutenticado(req);
+
+        const {
+            valor,
+            pedidoId,
+        } = req.body || {};
+
+        const valorNumerico =
+            Number(valor);
+
+        if (
+            !Number.isFinite(valorNumerico) ||
+            valorNumerico <= 0
+        ) {
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "Valor do pagamento inválido.",
+            });
+        }
+
+        const valorFinal =
+            Number(
+                valorNumerico.toFixed(2)
+            );
+
+        const {
+            nomeCliente,
+            email,
+            telefoneCliente,
+            documento,
+        } =
+            prepararDadosCliente(
+                usuario,
+                req.body
+            );
+
+        validarDadosCliente({
+            email,
+            documento,
+        });
+
+        const referencia =
+            obterReferencia(pedidoId);
+
+        console.log("👤 USUÁRIO:", usuario.id);
+        console.log("📧 EMAIL:", email);
+        console.log("👤 NOME:", nomeCliente);
+        console.log("🪪 CPF:", documento);
+        console.log("💰 VALOR:", valorFinal);
+
+        const pagamento =
+            await criarPix({
+
+                valor:
+                    valorFinal,
+
+                email,
+
+                referencia,
+
+                descricao:
+                    `Pedido FoodJet #${referencia}`,
+
+                nome:
+                    String(
+                        nomeCliente
+                    ).trim(),
+
+                cpf:
+                    documento,
+
+                telefone:
+                    telefoneCliente,
+
+                usuarioId:
+                    String(
+                        usuario.id
+                    ),
+            });
+
+        const pagamentoId =
+            pagamento?.id;
+
+        if (!pagamentoId) {
+            throw new Error(
+                "O Asaas não retornou o ID da cobrança."
+            );
+        }
+
+        const pix =
+            await obterQrCodePix(
+                pagamentoId
+            );
+
+        if (
+            !pix ||
+            !pix.payload
+        ) {
+            throw new Error(
+                "O Asaas criou a cobrança, mas não retornou o código PIX."
+            );
+        }
+
+        return res.status(201).json({
+
+            sucesso: true,
+
+            pagamentoId,
+
+            paymentId:
+                pagamentoId,
+
+            pedidoId:
+                pedidoId || null,
+
+            externalReference:
+                pagamento?.externalReference ||
+                referencia,
+
+            status:
+                pagamento?.status ||
+                "PENDING",
+
+            totalAmount:
+                Number(
+                    pagamento?.value ??
+                    valorFinal
+                ),
+
+            billingType:
+                pagamento?.billingType ||
+                "PIX",
+
+            pix: {
+
+                qrCode:
+                    pix.payload,
+
+                qrCodeBase64:
+                    pix.encodedImage ||
+                    "",
+
+                ticketUrl:
+                    pix.ticketUrl ||
+                    "",
+
+                expiracao:
+                    pix.expirationDate ||
+                    "",
+            },
+        });
+
     } catch (erro) {
-      console.error(
-        "⚠️ Não foi possível obter QR Code PIX:",
-        erro?.message
-      );
+
+        console.error(
+            "❌ ERRO GERANDO PIX:",
+            erro
+        );
+
+        const status =
+            erro?.response?.status >= 400 &&
+            erro?.response?.status < 600
+                ? erro.response.status
+                : 500;
+
+        const mensagem =
+            erro?.response?.data
+                ?.errors?.[0]
+                ?.description ||
+            erro?.message ||
+            "Não foi possível gerar o PIX.";
+
+        return res.status(status).json({
+
+            sucesso: false,
+
+            erro: mensagem,
+
+            detalhe:
+                erro?.response?.data
+                    ?.errors ||
+                null,
+        });
     }
-
-    return res.status(201).json({
-      sucesso: true,
-
-      pagamentoId,
-
-      paymentId:
-        pagamentoId,
-
-      status:
-        pagamento?.status || "",
-
-      externalReference:
-        pagamento?.externalReference ||
-        String(pedidoId),
-
-      totalAmount:
-        pagamento?.value ||
-        Number(valor),
-
-      billingType:
-        "PIX",
-
-      pix: {
-        qrCode:
-          pix?.payload || "",
-
-        qrCodeBase64:
-          pix?.encodedImage || "",
-
-        ticketUrl:
-          "",
-
-        expiracao:
-          pix?.expirationDate || "",
-      },
-    });
-  } catch (erro) {
-    console.error(
-      "❌ ERRO GERANDO PIX:",
-      erro?.message
-    );
-
-    return res.status(
-      erro?.response?.status >= 400 &&
-      erro?.response?.status < 600
-        ? erro.response.status
-        : 500
-    ).json({
-      sucesso: false,
-
-      erro:
-        erro?.response?.data?.errors?.[0]
-          ?.description ||
-        erro?.message ||
-        "Não foi possível gerar o PIX.",
-    });
-  }
 }
 
 // ============================================================
-// CRÉDITO
+// CARTÃO DE CRÉDITO
+// POST /pagamentos/cartao
 // ============================================================
 
-async function gerarCredito(req, res) {
-  try {
-    const {
-      valor,
-      email,
-      pedidoId,
-      nome,
-      cpfCnpj,
-      creditCard,
-      creditCardHolderInfo,
-      installmentCount,
-    } = req.body;
+async function gerarCartao(req, res) {
 
-    if (
-      !Number.isFinite(Number(valor)) ||
-      Number(valor) <= 0
-    ) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "Valor inválido.",
-      });
+    try {
+
+        console.log("");
+        console.log("========================================");
+        console.log("💳 POST /pagamentos/cartao");
+        console.log("========================================");
+
+        const usuario =
+            await buscarUsuarioAutenticado(req);
+
+        const {
+            valor,
+            pedidoId,
+        } = req.body || {};
+
+        const valorNumerico =
+            Number(valor);
+
+        if (
+            !Number.isFinite(valorNumerico) ||
+            valorNumerico <= 0
+        ) {
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "Valor do pagamento inválido.",
+            });
+        }
+
+        const {
+            nomeCliente,
+            email,
+            telefoneCliente,
+            documento,
+        } =
+            prepararDadosCliente(
+                usuario,
+                req.body
+            );
+
+        validarDadosCliente({
+            email,
+            documento,
+        });
+
+        const referencia =
+            obterReferencia(pedidoId);
+
+        console.log("👤 USUÁRIO:", usuario.id);
+        console.log("📧 EMAIL:", email);
+        console.log("👤 NOME:", nomeCliente);
+        console.log("🪪 CPF:", documento);
+        console.log("💳 TIPO: CRÉDITO");
+
+        const pagamento =
+            await criarCartao({
+
+                valor:
+                    Number(
+                        valorNumerico.toFixed(2)
+                    ),
+
+                email,
+
+                referencia,
+
+                descricao:
+                    `Pedido FoodJet #${referencia}`,
+
+                nome:
+                    nomeCliente,
+
+                cpf:
+                    documento,
+
+                telefone:
+                    telefoneCliente,
+
+                usuarioId:
+                    String(
+                        usuario.id
+                    ),
+            });
+
+        return res.status(201).json({
+
+            sucesso: true,
+
+            pagamentoId:
+                pagamento?.id,
+
+            paymentId:
+                pagamento?.id,
+
+            pedidoId:
+                pedidoId || null,
+
+            externalReference:
+                pagamento?.externalReference ||
+                referencia,
+
+            status:
+                pagamento?.status ||
+                "PENDING",
+
+            totalAmount:
+                Number(
+                    pagamento?.value ??
+                    valorNumerico
+                ),
+
+            billingType:
+                pagamento?.billingType ||
+                "CREDIT_CARD",
+
+            invoiceUrl:
+                pagamento?.invoiceUrl ||
+                "",
+        });
+
+    } catch (erro) {
+
+        console.error(
+            "❌ ERRO GERANDO CARTÃO:",
+            erro
+        );
+
+        const status =
+            erro?.response?.status >= 400 &&
+            erro?.response?.status < 600
+                ? erro.response.status
+                : 500;
+
+        const mensagem =
+            erro?.response?.data
+                ?.errors?.[0]
+                ?.description ||
+            erro?.message ||
+            "Não foi possível gerar o pagamento com cartão.";
+
+        return res.status(status).json({
+
+            sucesso: false,
+
+            erro: mensagem,
+
+            detalhe:
+                erro?.response?.data
+                    ?.errors ||
+                null,
+        });
     }
-
-    if (!email) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "E-mail obrigatório.",
-      });
-    }
-
-    if (!pedidoId) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "Pedido obrigatório.",
-      });
-    }
-
-    const remoteIp =
-      req.headers["x-forwarded-for"]
-        ?.split(",")[0]
-        ?.trim() ||
-      req.socket?.remoteAddress;
-
-    const pagamento =
-      await criarCredito({
-        valor:
-          Number(valor),
-
-        email,
-
-        referencia:
-          String(pedidoId),
-
-        nome,
-
-        cpfCnpj,
-
-        creditCard,
-
-        creditCardHolderInfo,
-
-        remoteIp,
-
-        installmentCount,
-      });
-
-    return res.status(200).json({
-      sucesso: true,
-
-      pagamentoId:
-        pagamento?.id,
-
-      paymentId:
-        pagamento?.id,
-
-      status:
-        pagamento?.status,
-
-      statusDetalhe:
-        pagamento?.status,
-
-      totalAmount:
-        pagamento?.value ||
-        Number(valor),
-
-      externalReference:
-        pagamento?.externalReference ||
-        String(pedidoId),
-
-      billingType:
-        "CREDIT_CARD",
-
-      invoiceUrl:
-        pagamento?.invoiceUrl || "",
-    });
-  } catch (erro) {
-    console.error(
-      "❌ ERRO CARTÃO DE CRÉDITO:",
-      erro?.message
-    );
-
-    return res.status(
-      erro?.response?.status >= 400 &&
-      erro?.response?.status < 600
-        ? erro.response.status
-        : 500
-    ).json({
-      sucesso: false,
-
-      erro:
-        erro?.response?.data?.errors?.[0]
-          ?.description ||
-        erro?.message ||
-        "Não foi possível processar o cartão.",
-    });
-  }
 }
 
 // ============================================================
-// DÉBITO
+// CARTÃO DE DÉBITO
+// POST /pagamentos/debito
 // ============================================================
 
 async function gerarDebito(req, res) {
-  try {
-    const {
-      valor,
-      email,
-      pedidoId,
-      nome,
-      cpfCnpj,
-    } = req.body;
 
-    if (
-      !Number.isFinite(Number(valor)) ||
-      Number(valor) <= 0
-    ) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "Valor inválido.",
-      });
+    try {
+
+        console.log("");
+        console.log("========================================");
+        console.log("💳 POST /pagamentos/debito");
+        console.log("========================================");
+
+        const usuario =
+            await buscarUsuarioAutenticado(req);
+
+        const {
+            valor,
+            pedidoId,
+        } = req.body || {};
+
+        const valorNumerico =
+            Number(valor);
+
+        if (
+            !Number.isFinite(valorNumerico) ||
+            valorNumerico <= 0
+        ) {
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "Valor do pagamento inválido.",
+            });
+        }
+
+        const {
+            nomeCliente,
+            email,
+            telefoneCliente,
+            documento,
+        } =
+            prepararDadosCliente(
+                usuario,
+                req.body
+            );
+
+        validarDadosCliente({
+            email,
+            documento,
+        });
+
+        const referencia =
+            obterReferencia(pedidoId);
+
+        console.log("👤 USUÁRIO:", usuario.id);
+        console.log("📧 EMAIL:", email);
+        console.log("👤 NOME:", nomeCliente);
+        console.log("🪪 CPF:", documento);
+        console.log("💳 TIPO: DÉBITO");
+
+        const pagamento =
+            await criarDebito({
+
+                valor:
+                    Number(
+                        valorNumerico.toFixed(2)
+                    ),
+
+                email,
+
+                referencia,
+
+                descricao:
+                    `Pedido FoodJet #${referencia}`,
+
+                nome:
+                    nomeCliente,
+
+                cpf:
+                    documento,
+
+                telefone:
+                    telefoneCliente,
+
+                usuarioId:
+                    String(
+                        usuario.id
+                    ),
+            });
+
+        return res.status(201).json({
+
+            sucesso: true,
+
+            pagamentoId:
+                pagamento?.id,
+
+            paymentId:
+                pagamento?.id,
+
+            pedidoId:
+                pedidoId || null,
+
+            externalReference:
+                pagamento?.externalReference ||
+                referencia,
+
+            status:
+                pagamento?.status ||
+                "PENDING",
+
+            totalAmount:
+                Number(
+                    pagamento?.value ??
+                    valorNumerico
+                ),
+
+            billingType:
+                pagamento?.billingType ||
+                "DEBIT_CARD",
+
+            invoiceUrl:
+                pagamento?.invoiceUrl ||
+                "",
+        });
+
+    } catch (erro) {
+
+        console.error(
+            "❌ ERRO GERANDO DÉBITO:",
+            erro
+        );
+
+        const status =
+            erro?.response?.status >= 400 &&
+            erro?.response?.status < 600
+                ? erro.response.status
+                : 500;
+
+        const mensagem =
+            erro?.response?.data
+                ?.errors?.[0]
+                ?.description ||
+            erro?.message ||
+            "Não foi possível gerar o pagamento com débito.";
+
+        return res.status(status).json({
+
+            sucesso: false,
+
+            erro: mensagem,
+
+            detalhe:
+                erro?.response?.data
+                    ?.errors ||
+                null,
+        });
     }
-
-    if (!email) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "E-mail obrigatório.",
-      });
-    }
-
-    if (!pedidoId) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "Pedido obrigatório.",
-      });
-    }
-
-    const pagamento =
-      await criarDebito({
-        valor:
-          Number(valor),
-
-        email,
-
-        referencia:
-          String(pedidoId),
-
-        nome,
-
-        cpfCnpj,
-
-        descricao:
-          `Pedido FoodJet #${pedidoId}`,
-      });
-
-    return res.status(201).json({
-      sucesso: true,
-
-      pagamentoId:
-        pagamento?.id,
-
-      paymentId:
-        pagamento?.id,
-
-      status:
-        pagamento?.status,
-
-      billingType:
-        "CREDIT_CARD",
-
-      invoiceUrl:
-        pagamento?.invoiceUrl || "",
-
-      externalReference:
-        pagamento?.externalReference ||
-        String(pedidoId),
-
-      mensagem:
-        "Continue o pagamento pela página segura do Asaas.",
-    });
-  } catch (erro) {
-    console.error(
-      "❌ ERRO CARTÃO DE DÉBITO:",
-      erro?.message
-    );
-
-    return res.status(
-      erro?.response?.status >= 400 &&
-      erro?.response?.status < 600
-        ? erro.response.status
-        : 500
-    ).json({
-      sucesso: false,
-
-      erro:
-        erro?.response?.data?.errors?.[0]
-          ?.description ||
-        erro?.message ||
-        "Não foi possível iniciar o pagamento com débito.",
-    });
-  }
 }
 
 // ============================================================
-// DINHEIRO
-// ============================================================
-
-async function registrarDinheiro(
-  req,
-  res
-) {
-  try {
-    const {
-      valor,
-      pedidoId,
-    } = req.body;
-
-    if (
-      !Number.isFinite(Number(valor)) ||
-      Number(valor) <= 0
-    ) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "Valor inválido.",
-      });
-    }
-
-    if (!pedidoId) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "Pedido obrigatório.",
-      });
-    }
-
-    return res.status(200).json({
-      sucesso: true,
-
-      pagamentoId:
-        null,
-
-      paymentId:
-        null,
-
-      status:
-        "PENDING",
-
-      statusDetalhe:
-        "PENDING",
-
-      billingType:
-        "CASH",
-
-      totalAmount:
-        Number(valor),
-
-      externalReference:
-        String(pedidoId),
-
-      mensagem:
-        "Pagamento será realizado na entrega.",
-    });
-  } catch (erro) {
-    console.error(
-      "❌ ERRO PAGAMENTO DINHEIRO:",
-      erro?.message
-    );
-
-    return res.status(500).json({
-      sucesso: false,
-      erro:
-        "Não foi possível registrar o pagamento em dinheiro.",
-    });
-  }
-}
-
-// ============================================================
-// CONSULTAR
+// CONSULTAR PAGAMENTO
 // ============================================================
 
 async function consultar(req, res) {
-  try {
-    const {
-      pagamentoId,
-    } = req.params;
 
-    if (
-      !pagamentoId ||
-      !String(pagamentoId).trim()
-    ) {
-      return res.status(400).json({
-        sucesso: false,
-        erro:
-          "ID do pagamento obrigatório.",
-      });
+    try {
+
+        await buscarUsuarioAutenticado(req);
+
+        const pagamentoId =
+            String(
+                req.params.pagamentoId ||
+                ""
+            ).trim();
+
+        if (!pagamentoId) {
+
+            return res.status(400).json({
+
+                sucesso: false,
+
+                erro:
+                    "ID do pagamento obrigatório.",
+            });
+        }
+
+        const pagamento =
+            await consultarPagamento(
+                pagamentoId
+            );
+
+        return res.json({
+
+            sucesso: true,
+
+            pagamentoId:
+                pagamento?.id ||
+                pagamentoId,
+
+            orderId:
+                pagamento?.externalReference ||
+                pagamento?.id ||
+                pagamentoId,
+
+            paymentId:
+                pagamento?.id ||
+                pagamentoId,
+
+            status:
+                pagamento?.status ||
+                "",
+
+            statusDetalhe:
+                pagamento?.status ||
+                "",
+
+            totalAmount:
+                pagamento?.value ??
+                null,
+
+            externalReference:
+                pagamento?.externalReference ||
+                "",
+
+            billingType:
+                pagamento?.billingType ||
+                "PIX",
+
+            invoiceUrl:
+                pagamento?.invoiceUrl ||
+                "",
+
+            pix: {
+
+                qrCode:
+                    "",
+
+                qrCodeBase64:
+                    "",
+
+                ticketUrl:
+                    "",
+
+                expiracao:
+                    pagamento?.dueDate ||
+                    "",
+            },
+        });
+
+    } catch (erro) {
+
+        console.error(
+            "❌ ERRO CONSULTANDO PAGAMENTO:",
+            erro
+        );
+
+        const status =
+            erro?.response?.status >= 400 &&
+            erro?.response?.status < 600
+                ? erro.response.status
+                : 500;
+
+        const mensagem =
+            erro?.response?.data
+                ?.errors?.[0]
+                ?.description ||
+            erro?.message ||
+            "Erro ao consultar pagamento.";
+
+        return res.status(status).json({
+
+            sucesso: false,
+
+            erro:
+                mensagem,
+        });
     }
-
-    const pagamento =
-      await consultarPagamento(
-        pagamentoId
-      );
-
-    return res.json({
-      sucesso: true,
-
-      pagamentoId:
-        pagamento?.id ||
-        pagamentoId,
-
-      orderId:
-        pagamento?.id ||
-        pagamentoId,
-
-      paymentId:
-        pagamento?.id ||
-        pagamentoId,
-
-      status:
-        pagamento?.status || "",
-
-      statusDetalhe:
-        pagamento?.status || "",
-
-      totalAmount:
-        pagamento?.value,
-
-      externalReference:
-        pagamento?.externalReference,
-
-      billingType:
-        pagamento?.billingType || "",
-
-      invoiceUrl:
-        pagamento?.invoiceUrl || "",
-
-      pix: {
-        qrCode: "",
-        qrCodeBase64: "",
-        ticketUrl: "",
-        expiracao:
-          pagamento?.dueDate || "",
-      },
-    });
-  } catch (erro) {
-    console.error(
-      "❌ ERRO CONSULTANDO PAGAMENTO:",
-      erro?.message
-    );
-
-    return res.status(
-      erro?.response?.status >= 400 &&
-      erro?.response?.status < 600
-        ? erro.response.status
-        : 500
-    ).json({
-      sucesso: false,
-
-      erro:
-        erro?.response?.data?.errors?.[0]
-          ?.description ||
-        erro?.message ||
-        "Erro ao consultar pagamento.",
-    });
-  }
 }
 
+// ============================================================
+// EXPORTAR
+// ============================================================
+
 module.exports = {
-  gerarPix,
-  gerarCredito,
-  gerarDebito,
-  registrarDinheiro,
-  consultar,
+
+    gerarPix,
+
+    gerarCartao,
+
+    gerarDebito,
+
+    consultar,
+
 };
+
