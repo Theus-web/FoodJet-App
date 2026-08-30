@@ -1692,6 +1692,10 @@ class _CashPaymentPageState
 // PIX CHECKOUT ASAAS
 // ============================================================================
 
+// ============================================================================
+// PIX CHECKOUT ASAAS
+// ============================================================================
+
 class PixCheckoutPage extends StatefulWidget {
   final double total;
   final double subtotal;
@@ -1717,20 +1721,21 @@ class PixCheckoutPage extends StatefulWidget {
       _PixCheckoutPageState();
 }
 
-class _PixCheckoutPageState
-    extends State<PixCheckoutPage> {
-  static const Color laranja =
-      Color(0xFFF97316);
-
-  static const Color verdePix =
-      Color(0xFF00A884);
+class _PixCheckoutPageState extends State<PixCheckoutPage> {
+  static const Color laranja = Color(0xFFF97316);
+  static const Color verdePix = Color(0xFF00A884);
 
   bool carregando = true;
   bool erro = false;
 
   String mensagemErro = '';
 
+  // ID DO PEDIDO FOODJET
+  String? pedidoId;
+
+  // ID DO PAGAMENTO ASAAS
   String? pagamentoId;
+
   String? pixPayload;
   String? encodedImage;
   String? expirationDate;
@@ -1741,13 +1746,12 @@ class _PixCheckoutPageState
   void initState() {
     super.initState();
 
-    _gerarPix();
+    _iniciarFluxoPix();
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-
     super.dispose();
   }
 
@@ -1760,8 +1764,7 @@ class _PixCheckoutPageState
   // ============================================================
 
   Future<String?> _obterToken() async {
-    final prefs =
-        await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
     const chaves = [
       'token',
@@ -1771,25 +1774,20 @@ class _PixCheckoutPageState
     ];
 
     for (final chave in chaves) {
-      final valor =
-          prefs.getString(chave);
+      final valor = prefs.getString(chave);
 
       if (valor == null) {
         continue;
       }
 
-      var token =
-          valor.trim();
+      var token = valor.trim();
 
       if (token.isEmpty) {
         continue;
       }
 
-      if (token
-          .toLowerCase()
-          .startsWith('bearer ')) {
-        token =
-            token.substring(7).trim();
+      if (token.toLowerCase().startsWith('bearer ')) {
+        token = token.substring(7).trim();
       }
 
       if (token.isNotEmpty) {
@@ -1809,10 +1807,14 @@ class _PixCheckoutPageState
   }
 
   // ============================================================
-  // GERAR PIX
+  // INICIAR FLUXO COMPLETO
+  //
+  // 1. CRIA PEDIDO
+  // 2. RECEBE pedidoId
+  // 3. CRIA PIX NO ASAAS
   // ============================================================
 
-  Future<void> _gerarPix() async {
+  Future<void> _iniciarFluxoPix() async {
     if (!mounted) return;
 
     setState(() {
@@ -1822,8 +1824,33 @@ class _PixCheckoutPageState
     });
 
     try {
-      final token =
-          await _obterToken();
+      // ----------------------------------------------------------
+      // VALIDAÇÕES
+      // ----------------------------------------------------------
+
+      if (widget.itens.isEmpty) {
+        throw Exception(
+          'Seu carrinho está vazio.',
+        );
+      }
+
+      if (widget.restauranteId.trim().isEmpty) {
+        throw Exception(
+          'Restaurante não identificado.',
+        );
+      }
+
+      if (widget.total <= 0) {
+        throw Exception(
+          'O valor do pedido é inválido.',
+        );
+      }
+
+      // ----------------------------------------------------------
+      // TOKEN
+      // ----------------------------------------------------------
+
+      final token = await _obterToken();
 
       if (token == null) {
         throw Exception(
@@ -1831,183 +1858,35 @@ class _PixCheckoutPageState
         );
       }
 
-      final url = Uri.parse(
-        '${Api.baseUrl}/pagamentos/pix',
-      );
+      // ----------------------------------------------------------
+      // 1. CRIAR PEDIDO FOODJET
+      // ----------------------------------------------------------
 
-      final itens =
-          widget.itens.map((item) {
-        return {
-          'produtoId':
-              item.nome,
-          'nome':
-              item.nome,
-          'quantidade':
-              item.quantidade,
-          'preco':
-              item.preco,
-          'valor':
-              item.preco *
-                  item.quantidade,
-        };
-      }).toList();
+      final id = await _criarPedido(token);
 
-      final body = {
-        'valor':
-            double.parse(
-          widget.total
-              .toStringAsFixed(2),
-        ),
-
-        'total':
-            double.parse(
-          widget.total
-              .toStringAsFixed(2),
-        ),
-
-        'subtotal':
-            double.parse(
-          widget.subtotal
-              .toStringAsFixed(2),
-        ),
-
-        'taxaEntrega':
-            double.parse(
-          widget.taxaEntrega
-              .toStringAsFixed(2),
-        ),
-
-        'taxaServico':
-            double.parse(
-          widget.taxaServico
-              .toStringAsFixed(2),
-        ),
-
-        'restauranteId':
-            widget.restauranteId,
-
-        'pedidoId':
-            null,
-
-        'formaPagamento':
-            'PIX',
-
-        'endereco':
-            widget.endereco,
-
-        'itens':
-            itens,
-      };
+      pedidoId = id;
 
       debugPrint(
-        '🚀 FLUTTER - GERANDO PIX',
+        '========================================',
       );
 
-      final response =
-          await http.post(
-        url,
-
-        headers: {
-          'Content-Type':
-              'application/json',
-
-          'Authorization':
-              'Bearer $token',
-        },
-
-        body:
-            jsonEncode(body),
-      ).timeout(
-        const Duration(
-          seconds: 30,
-        ),
+      debugPrint(
+        '🛒 PEDIDO FOODJET CRIADO ANTES DO PIX',
       );
 
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300) {
-        String detalhe =
-            'Não foi possível gerar o Pix.';
-
-        try {
-          final resposta =
-              jsonDecode(
-            response.body,
-          );
-
-          if (resposta is Map) {
-            detalhe =
-                resposta['erro']
-                        ?.toString() ??
-                    resposta['message']
-                        ?.toString() ??
-                    resposta['error']
-                        ?.toString() ??
-                    detalhe;
-          }
-        } catch (_) {}
-
-        throw Exception(
-          detalhe,
-        );
-      }
-
-      final dados =
-          jsonDecode(
-        response.body,
+      debugPrint(
+        '🆔 PEDIDO ID: $pedidoId',
       );
 
-      if (dados is! Map) {
-        throw Exception(
-          'Resposta inválida do servidor.',
-        );
-      }
-
-      if (dados['sucesso'] != true) {
-        throw Exception(
-          dados['erro']
-                  ?.toString() ??
-              'Não foi possível gerar o Pix.',
-        );
-      }
-
-      pagamentoId =
-          _stringValue(
-        dados['pagamentoId'],
+      debugPrint(
+        '========================================',
       );
 
-      pagamentoId ??=
-          _stringValue(
-        dados['paymentId'],
-      );
+      // ----------------------------------------------------------
+      // 2. CRIAR PIX ASAAS
+      // ----------------------------------------------------------
 
-      final pix =
-          dados['pix'] is Map
-              ? dados['pix']
-              : <dynamic, dynamic>{};
-
-      pixPayload =
-          _stringValue(
-        pix['qrCode'],
-      );
-
-      encodedImage =
-          _stringValue(
-        pix['qrCodeBase64'],
-      );
-
-      expirationDate =
-          _stringValue(
-        pix['expiracao'],
-      );
-
-      if ((pixPayload == null ||
-              pixPayload!.isEmpty) &&
-          (encodedImage == null ||
-              encodedImage!.isEmpty)) {
-        throw Exception(
-          'O servidor criou o pagamento, mas não retornou os dados do Pix.',
-        );
-      }
+      await _gerarPix(token);
 
       if (!mounted) return;
 
@@ -2015,10 +1894,9 @@ class _PixCheckoutPageState
         carregando = false;
         erro = false;
       });
-
     } catch (e) {
       debugPrint(
-        '❌ ERRO AO GERAR PIX: $e',
+        '❌ ERRO NO FLUXO PIX: $e',
       );
 
       if (!mounted) return;
@@ -2027,25 +1905,508 @@ class _PixCheckoutPageState
         carregando = false;
         erro = true;
 
-        mensagemErro =
-            e.toString()
-                .replaceFirst(
-          'Exception: ',
-          '',
-        );
+        mensagemErro = e
+            .toString()
+            .replaceFirst(
+              'Exception: ',
+              '',
+            );
       });
     }
   }
 
-  String? _stringValue(
-    dynamic valor,
-  ) {
+  // ============================================================
+  // CRIAR PEDIDO
+  // ============================================================
+
+  Future<String> _criarPedido(String token) async {
+    final url = Uri.parse(
+      '${Api.baseUrl}/pedidos',
+    );
+
+    // ----------------------------------------------------------
+    // ITENS
+    // ----------------------------------------------------------
+
+    final itens = widget.itens.map((item) {
+      return {
+        'produtoId': item.nome,
+        'nome': item.nome,
+        'quantidade': item.quantidade,
+        'preco': item.preco,
+        'valor': item.preco * item.quantidade,
+      };
+    }).toList();
+
+    // ----------------------------------------------------------
+    // BODY DO PEDIDO
+    // ----------------------------------------------------------
+
+    final body = {
+      'restauranteId': widget.restauranteId,
+
+      'formaPagamento': 'PIX',
+
+      'pagamento': 'PIX',
+
+      // O pedido fica pendente até o webhook
+      // confirmar o pagamento no Asaas.
+      'statusPagamento': 'PENDING',
+
+      'subtotal': double.parse(
+        widget.subtotal.toStringAsFixed(2),
+      ),
+
+      'taxaEntrega': double.parse(
+        widget.taxaEntrega.toStringAsFixed(2),
+      ),
+
+      'taxaServico': double.parse(
+        widget.taxaServico.toStringAsFixed(2),
+      ),
+
+      'total': double.parse(
+        widget.total.toStringAsFixed(2),
+      ),
+
+      'endereco': widget.endereco,
+
+      'itens': itens,
+    };
+
+    debugPrint(
+      '========================================',
+    );
+
+    debugPrint(
+      '🛒 FOODJET - CRIANDO PEDIDO',
+    );
+
+    debugPrint(
+      'RESTAURANTE: ${widget.restauranteId}',
+    );
+
+    debugPrint(
+      'FORMA: PIX',
+    );
+
+    debugPrint(
+      'TOTAL: ${widget.total}',
+    );
+
+    debugPrint(
+      '========================================',
+    );
+
+    final response = await http
+        .post(
+          url,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(
+          const Duration(
+            seconds: 30,
+          ),
+        );
+
+    debugPrint(
+      '🛒 CRIAR PEDIDO HTTP: ${response.statusCode}',
+    );
+
+    debugPrint(
+      '🛒 CRIAR PEDIDO BODY: ${response.body}',
+    );
+
+    dynamic dados;
+
+    try {
+      dados = jsonDecode(response.body);
+    } catch (_) {
+      throw Exception(
+        'Resposta inválida do servidor ao criar o pedido.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // ERRO HTTP
+    // ----------------------------------------------------------
+
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300) {
+      String mensagem =
+          'Não foi possível criar o pedido.';
+
+      if (dados is Map) {
+        mensagem =
+            dados['erro']?.toString() ??
+            dados['message']?.toString() ??
+            dados['error']?.toString() ??
+            mensagem;
+      }
+
+      throw Exception(mensagem);
+    }
+
+    // ----------------------------------------------------------
+    // ERRO DE NEGÓCIO
+    // ----------------------------------------------------------
+
+    if (dados is Map &&
+        dados['sucesso'] == false) {
+      throw Exception(
+        dados['erro']?.toString() ??
+            dados['message']?.toString() ??
+            'Não foi possível criar o pedido.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // LOCALIZAR PEDIDO ID
+    //
+    // Aceitamos os formatos mais comuns para não depender
+    // de uma única estrutura da resposta.
+    // ----------------------------------------------------------
+
+    String? id;
+
+    if (dados is Map) {
+      // Exemplo:
+      // { "pedidoId": "123" }
+      id = _stringValue(
+        dados['pedidoId'],
+      );
+
+      // Exemplo:
+      // { "id": "123" }
+      id ??= _stringValue(
+        dados['id'],
+      );
+
+      // Exemplo:
+      // { "pedido": { "id": "123" } }
+      if (id == null &&
+          dados['pedido'] is Map) {
+        final pedido = dados['pedido'];
+
+        id = _stringValue(
+          pedido['pedidoId'],
+        );
+
+        id ??= _stringValue(
+          pedido['id'],
+        );
+      }
+
+      // Exemplo:
+      // { "data": { "id": "123" } }
+      if (id == null &&
+          dados['data'] is Map) {
+        final data = dados['data'];
+
+        id = _stringValue(
+          data['pedidoId'],
+        );
+
+        id ??= _stringValue(
+          data['id'],
+        );
+      }
+    }
+
+    if (id == null || id.isEmpty) {
+      debugPrint(
+        '❌ SERVIDOR NÃO RETORNOU pedidoId',
+      );
+
+      throw Exception(
+        'O pedido foi criado, mas o servidor não retornou o ID do pedido.',
+      );
+    }
+
+    debugPrint(
+      '✅ pedidoId RECEBIDO: $id',
+    );
+
+    return id;
+  }
+
+  // ============================================================
+  // GERAR PIX ASAAS
+  // ============================================================
+
+  Future<void> _gerarPix(String token) async {
+    if (pedidoId == null ||
+        pedidoId!.trim().isEmpty) {
+      throw Exception(
+        'Pedido não identificado para gerar o Pix.',
+      );
+    }
+
+    final url = Uri.parse(
+      '${Api.baseUrl}/pagamentos/pix',
+    );
+
+    // ----------------------------------------------------------
+    // ITENS
+    // ----------------------------------------------------------
+
+    final itens = widget.itens.map((item) {
+      return {
+        'produtoId': item.nome,
+        'nome': item.nome,
+        'quantidade': item.quantidade,
+        'preco': item.preco,
+        'valor': item.preco * item.quantidade,
+      };
+    }).toList();
+
+    // ----------------------------------------------------------
+    // BODY PIX
+    // ----------------------------------------------------------
+
+    final body = {
+      'valor': double.parse(
+        widget.total.toStringAsFixed(2),
+      ),
+
+      'total': double.parse(
+        widget.total.toStringAsFixed(2),
+      ),
+
+      'subtotal': double.parse(
+        widget.subtotal.toStringAsFixed(2),
+      ),
+
+      'taxaEntrega': double.parse(
+        widget.taxaEntrega.toStringAsFixed(2),
+      ),
+
+      'taxaServico': double.parse(
+        widget.taxaServico.toStringAsFixed(2),
+      ),
+
+      'restauranteId':
+          widget.restauranteId,
+
+      // ========================================================
+      // AQUI ESTÁ A CORREÇÃO PRINCIPAL
+      // ========================================================
+
+      'pedidoId': pedidoId,
+
+      'formaPagamento': 'PIX',
+
+      'endereco': widget.endereco,
+
+      'itens': itens,
+    };
+
+    debugPrint(
+      '========================================',
+    );
+
+    debugPrint(
+      '💠 FOODJET - GERANDO PIX ASAAS',
+    );
+
+    debugPrint(
+      '🆔 PEDIDO ID: $pedidoId',
+    );
+
+    debugPrint(
+      '💰 VALOR: ${widget.total}',
+    );
+
+    debugPrint(
+      '🏪 RESTAURANTE: ${widget.restauranteId}',
+    );
+
+    debugPrint(
+      '========================================',
+    );
+
+    final response = await http
+        .post(
+          url,
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer $token',
+          },
+          body: jsonEncode(body),
+        )
+        .timeout(
+          const Duration(
+            seconds: 30,
+          ),
+        );
+
+    debugPrint(
+      '💠 PIX HTTP: ${response.statusCode}',
+    );
+
+    debugPrint(
+      '💠 PIX BODY: ${response.body}',
+    );
+
+    // ----------------------------------------------------------
+    // DECODIFICAR RESPOSTA
+    // ----------------------------------------------------------
+
+    dynamic dados;
+
+    try {
+      dados = jsonDecode(response.body);
+    } catch (_) {
+      throw Exception(
+        'Resposta inválida do servidor ao gerar o Pix.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // ERRO HTTP
+    // ----------------------------------------------------------
+
+    if (response.statusCode < 200 ||
+        response.statusCode >= 300) {
+      String detalhe =
+          'Não foi possível gerar o Pix.';
+
+      if (dados is Map) {
+        detalhe =
+            dados['erro']?.toString() ??
+            dados['message']?.toString() ??
+            dados['error']?.toString() ??
+            detalhe;
+      }
+
+      throw Exception(detalhe);
+    }
+
+    // ----------------------------------------------------------
+    // VALIDAR SUCESSO
+    // ----------------------------------------------------------
+
+    if (dados is! Map) {
+      throw Exception(
+        'Resposta inválida do servidor.',
+      );
+    }
+
+    if (dados['sucesso'] == false) {
+      throw Exception(
+        dados['erro']?.toString() ??
+            dados['message']?.toString() ??
+            'Não foi possível gerar o Pix.',
+      );
+    }
+
+    // ----------------------------------------------------------
+    // PAGAMENTO ID
+    // ----------------------------------------------------------
+
+    pagamentoId = _stringValue(
+      dados['pagamentoId'],
+    );
+
+    pagamentoId ??= _stringValue(
+      dados['paymentId'],
+    );
+
+    pagamentoId ??= _stringValue(
+      dados['id'],
+    );
+
+    // ----------------------------------------------------------
+    // DADOS PIX
+    // ----------------------------------------------------------
+
+    final pix = dados['pix'] is Map
+        ? dados['pix']
+        : <dynamic, dynamic>{};
+
+    pixPayload = _stringValue(
+      pix['qrCode'],
+    );
+
+    encodedImage = _stringValue(
+      pix['qrCodeBase64'],
+    );
+
+    expirationDate = _stringValue(
+      pix['expiracao'],
+    );
+
+    // Algumas respostas podem usar
+    // nomes alternativos.
+
+    pixPayload ??= _stringValue(
+      pix['payload'],
+    );
+
+    encodedImage ??= _stringValue(
+      pix['encodedImage'],
+    );
+
+    expirationDate ??= _stringValue(
+      pix['expirationDate'],
+    );
+
+    // ----------------------------------------------------------
+    // VALIDAR DADOS PIX
+    // ----------------------------------------------------------
+
+    if ((pixPayload == null ||
+            pixPayload!.isEmpty) &&
+        (encodedImage == null ||
+            encodedImage!.isEmpty)) {
+      throw Exception(
+        'O servidor criou o pagamento, mas não retornou os dados do Pix.',
+      );
+    }
+
+    debugPrint(
+      '========================================',
+    );
+
+    debugPrint(
+      '✅ PIX ASAAS GERADO',
+    );
+
+    debugPrint(
+      '🆔 PEDIDO FOODJET: $pedidoId',
+    );
+
+    debugPrint(
+      '💳 PAGAMENTO ASAAS: $pagamentoId',
+    );
+
+    debugPrint(
+      '📊 PIX PAYLOAD: ${pixPayload != null ? "SIM" : "NÃO"}',
+    );
+
+    debugPrint(
+      '📷 QR CODE: ${encodedImage != null ? "SIM" : "NÃO"}',
+    );
+
+    debugPrint(
+      '========================================',
+    );
+  }
+
+  // ============================================================
+  // STRING SEGURA
+  // ============================================================
+
+  String? _stringValue(dynamic valor) {
     if (valor == null) {
       return null;
     }
 
-    final texto =
-        valor.toString().trim();
+    final texto = valor.toString().trim();
 
     if (texto.isEmpty) {
       return null;
@@ -2053,6 +2414,10 @@ class _PixCheckoutPageState
 
     return texto;
   }
+
+  // ============================================================
+  // COPIAR PIX
+  // ============================================================
 
   Future<void> _copiarPix() async {
     if (pixPayload == null ||
@@ -2062,27 +2427,30 @@ class _PixCheckoutPageState
 
     await Clipboard.setData(
       ClipboardData(
-        text:
-            pixPayload!,
+        text: pixPayload!,
       ),
     );
 
     if (!mounted) return;
 
     ScaffoldMessenger.of(context)
+        .hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context)
         .showSnackBar(
       const SnackBar(
-        content:
-            Text(
+        content: Text(
           'Código Pix copiado!',
         ),
-        backgroundColor:
-            verdePix,
-        behavior:
-            SnackBarBehavior.floating,
+        backgroundColor: verdePix,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
+
+  // ============================================================
+  // QR CODE
+  // ============================================================
 
   Widget _qrCode() {
     if (encodedImage == null ||
@@ -2090,27 +2458,16 @@ class _PixCheckoutPageState
       return Container(
         width: 240,
         height: 240,
-
-        alignment:
-            Alignment.center,
-
-        decoration:
-            BoxDecoration(
-          color:
-              Colors.white,
-
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius:
-              BorderRadius.circular(
-            18,
-          ),
+              BorderRadius.circular(18),
         ),
-
-        child:
-            const Icon(
+        child: const Icon(
           Icons.qr_code_2,
           size: 110,
-          color:
-              Colors.grey,
+          color: Colors.grey,
         ),
       );
     }
@@ -2119,76 +2476,52 @@ class _PixCheckoutPageState
       String base64String =
           encodedImage!.trim();
 
-      if (base64String
-          .contains(',')) {
+      if (base64String.contains(',')) {
         base64String =
-            base64String
-                .split(',')
-                .last;
+            base64String.split(',').last;
       }
 
-      final bytes =
-          base64Decode(
+      final bytes = base64Decode(
         base64String,
       );
 
       return Container(
         width: 240,
         height: 240,
-
         padding:
-            const EdgeInsets.all(
-          16,
-        ),
-
-        decoration:
-            BoxDecoration(
-          color:
-              Colors.white,
-
+            const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius:
-              BorderRadius.circular(
-            18,
-          ),
+              BorderRadius.circular(18),
         ),
-
-        child:
-            Image.memory(
+        child: Image.memory(
           bytes,
-          fit:
-              BoxFit.contain,
+          fit: BoxFit.contain,
         ),
       );
-
     } catch (_) {
       return Container(
         width: 240,
         height: 240,
-
-        alignment:
-            Alignment.center,
-
-        decoration:
-            BoxDecoration(
-          color:
-              Colors.white,
-
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: Colors.white,
           borderRadius:
-              BorderRadius.circular(
-            18,
-          ),
+              BorderRadius.circular(18),
         ),
-
-        child:
-            const Icon(
+        child: const Icon(
           Icons.error_outline,
-          color:
-              Colors.red,
+          color: Colors.red,
           size: 42,
         ),
       );
     }
   }
+
+  // ============================================================
+  // LINHA
+  // ============================================================
 
   Widget _linha(
     String titulo,
@@ -2198,43 +2531,29 @@ class _PixCheckoutPageState
     return Row(
       mainAxisAlignment:
           MainAxisAlignment.spaceBetween,
-
       children: [
         Text(
           titulo,
-
-          style:
-              TextStyle(
+          style: TextStyle(
             color: destaque
                 ? Colors.black87
                 : Colors.grey.shade700,
-
             fontSize:
-                destaque
-                    ? 15
-                    : 12,
-
+                destaque ? 15 : 12,
             fontWeight:
                 destaque
                     ? FontWeight.w800
                     : FontWeight.w500,
           ),
         ),
-
         Text(
           valor,
-
-          style:
-              TextStyle(
+          style: TextStyle(
             color: destaque
                 ? laranja
                 : Colors.black87,
-
             fontSize:
-                destaque
-                    ? 18
-                    : 12,
-
+                destaque ? 18 : 12,
             fontWeight:
                 destaque
                     ? FontWeight.w900
@@ -2245,31 +2564,34 @@ class _PixCheckoutPageState
     );
   }
 
+  // ============================================================
+  // CARREGANDO
+  // ============================================================
+
   Widget _carregando() {
     return const Center(
-      child:
-          Column(
+      child: Column(
         mainAxisAlignment:
             MainAxisAlignment.center,
-
         children: [
           CircularProgressIndicator(
-            color:
-                verdePix,
+            color: verdePix,
           ),
-
-          SizedBox(
-            height: 20,
-          ),
-
+          SizedBox(height: 20),
           Text(
-            'Gerando seu Pix...',
-            style:
-                TextStyle(
-              fontSize:
-                  18,
-              fontWeight:
-                  FontWeight.bold,
+            'Preparando seu pagamento...',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Criando pedido e gerando seu Pix.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 13,
+              color: Colors.grey,
             ),
           ),
         ],
@@ -2277,25 +2599,22 @@ class _PixCheckoutPageState
     );
   }
 
+  // ============================================================
+  // ERRO
+  // ============================================================
+
   Widget _erro() {
     return Center(
-      child:
-          Padding(
+      child: Padding(
         padding:
-            const EdgeInsets.all(
-          25,
-        ),
-
-        child:
-            Column(
+            const EdgeInsets.all(25),
+        child: Column(
           mainAxisAlignment:
               MainAxisAlignment.center,
-
           children: [
             const Icon(
               Icons.error_outline,
-              color:
-                  Colors.red,
+              color: Colors.red,
               size: 55,
             ),
 
@@ -2304,16 +2623,11 @@ class _PixCheckoutPageState
             ),
 
             const Text(
-              'Não foi possível gerar o Pix',
-              textAlign:
-                  TextAlign.center,
-
-              style:
-                  TextStyle(
-                fontSize:
-                    18,
-                fontWeight:
-                    FontWeight.bold,
+              'Não foi possível preparar o Pix',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
               ),
             ),
 
@@ -2323,8 +2637,7 @@ class _PixCheckoutPageState
 
             Text(
               mensagemErro,
-              textAlign:
-                  TextAlign.center,
+              textAlign: TextAlign.center,
             ),
 
             const SizedBox(
@@ -2332,11 +2645,14 @@ class _PixCheckoutPageState
             ),
 
             ElevatedButton(
-              onPressed:
-                  _gerarPix,
-
-              child:
-                  const Text(
+              onPressed: _iniciarFluxoPix,
+              style:
+                  ElevatedButton.styleFrom(
+                backgroundColor: laranja,
+                foregroundColor:
+                    Colors.white,
+              ),
+              child: const Text(
                 'TENTAR NOVAMENTE',
               ),
             ),
@@ -2346,62 +2662,44 @@ class _PixCheckoutPageState
     );
   }
 
+  // ============================================================
+  // CONTEÚDO
+  // ============================================================
+
   Widget _conteudo() {
     return SingleChildScrollView(
       padding:
-          const EdgeInsets.all(
-        16,
-      ),
-
-      child:
-          Column(
+          const EdgeInsets.all(16),
+      child: Column(
         crossAxisAlignment:
             CrossAxisAlignment.start,
-
         children: [
+          // ------------------------------------------------------
+          // SEGURANÇA
+          // ------------------------------------------------------
+
           Container(
-            width:
-                double.infinity,
-
+            width: double.infinity,
             padding:
-                const EdgeInsets.all(
-              14,
-            ),
-
-            decoration:
-                BoxDecoration(
+                const EdgeInsets.all(14),
+            decoration: BoxDecoration(
               color:
-                  const Color(
-                0xFFE4F7EF,
-              ),
-
+                  const Color(0xFFE4F7EF),
               borderRadius:
-                  BorderRadius.circular(
-                13,
-              ),
+                  BorderRadius.circular(13),
             ),
-
-            child:
-                const Row(
+            child: const Row(
               children: [
                 Icon(
                   Icons.shield_outlined,
-                  color:
-                      verdePix,
+                  color: verdePix,
                 ),
-
-                SizedBox(
-                  width: 10,
-                ),
-
+                SizedBox(width: 10),
                 Expanded(
-                  child:
-                      Text(
+                  child: Text(
                     'Pagamento seguro processado pelo Asaas.',
-                    style:
-                        TextStyle(
-                      fontSize:
-                          12,
+                    style: TextStyle(
+                      fontSize: 12,
                     ),
                   ),
                 ),
@@ -2413,14 +2711,55 @@ class _PixCheckoutPageState
             height: 22,
           ),
 
+          // ------------------------------------------------------
+          // PEDIDO
+          // ------------------------------------------------------
+
+          if (pedidoId != null &&
+              pedidoId!.isNotEmpty)
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.all(12),
+              margin:
+                  const EdgeInsets.only(
+                bottom: 18,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius:
+                    BorderRadius.circular(12),
+              ),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.receipt_long_outlined,
+                    color: laranja,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Pedido #$pedidoId',
+                      style:
+                          const TextStyle(
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+          // ------------------------------------------------------
+          // QR CODE
+          // ------------------------------------------------------
+
           const Text(
             'Escaneie o QR Code',
-            style:
-                TextStyle(
-              fontSize:
-                  16,
-              fontWeight:
-                  FontWeight.bold,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
             ),
           ),
 
@@ -2429,22 +2768,22 @@ class _PixCheckoutPageState
           ),
 
           Center(
-            child:
-                _qrCode(),
+            child: _qrCode(),
           ),
 
           const SizedBox(
             height: 20,
           ),
 
+          // ------------------------------------------------------
+          // PIX COPIA E COLA
+          // ------------------------------------------------------
+
           const Text(
             'Ou copie o código Pix',
-            style:
-                TextStyle(
-              fontSize:
-                  16,
-              fontWeight:
-                  FontWeight.bold,
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
             ),
           ),
 
@@ -2454,50 +2793,30 @@ class _PixCheckoutPageState
 
           Container(
             padding:
-                const EdgeInsets.all(
-              13,
-            ),
-
-            decoration:
-                BoxDecoration(
-              color:
-                  Colors.white,
-
+                const EdgeInsets.all(13),
+            decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius:
-                  BorderRadius.circular(
-                14,
-              ),
+                  BorderRadius.circular(14),
             ),
-
-            child:
-                Row(
+            child: Row(
               children: [
                 Expanded(
-                  child:
-                      Text(
+                  child: Text(
                     pixPayload ??
                         'Código indisponível',
-
-                    maxLines:
-                        3,
-
+                    maxLines: 3,
                     overflow:
                         TextOverflow.ellipsis,
-
                     style:
                         const TextStyle(
-                      fontSize:
-                          10,
+                      fontSize: 10,
                     ),
                   ),
                 ),
-
                 IconButton(
-                  onPressed:
-                      _copiarPix,
-
-                  icon:
-                      const Icon(
+                  onPressed: _copiarPix,
+                  icon: const Icon(
                     Icons.copy_outlined,
                   ),
                 ),
@@ -2509,25 +2828,19 @@ class _PixCheckoutPageState
             height: 18,
           ),
 
+          // ------------------------------------------------------
+          // VALORES
+          // ------------------------------------------------------
+
           Container(
             padding:
-                const EdgeInsets.all(
-              15,
-            ),
-
-            decoration:
-                BoxDecoration(
-              color:
-                  Colors.white,
-
+                const EdgeInsets.all(15),
+            decoration: BoxDecoration(
+              color: Colors.white,
               borderRadius:
-                  BorderRadius.circular(
-                14,
-              ),
+                  BorderRadius.circular(14),
             ),
-
-            child:
-                Column(
+            child: Column(
               children: [
                 _linha(
                   'Subtotal',
@@ -2567,8 +2880,7 @@ class _PixCheckoutPageState
                   dinheiro(
                     widget.total,
                   ),
-                  destaque:
-                      true,
+                  destaque: true,
                 ),
               ],
             ),
@@ -2578,45 +2890,71 @@ class _PixCheckoutPageState
             height: 20,
           ),
 
+          // ------------------------------------------------------
+          // INFORMAÇÃO
+          // ------------------------------------------------------
+
+          Container(
+            width: double.infinity,
+            padding:
+                const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius:
+                  BorderRadius.circular(14),
+            ),
+            child: const Row(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Icon(
+                  Icons.info_outline,
+                  color: laranja,
+                ),
+                SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Após o pagamento, o Asaas notificará o FoodJet automaticamente. O pedido será atualizado quando o pagamento for confirmado.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.4,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(
+            height: 20,
+          ),
+
+          // ------------------------------------------------------
+          // VOLTAR
+          // ------------------------------------------------------
+
           SizedBox(
-            width:
-                double.infinity,
-
+            width: double.infinity,
             height: 54,
-
-            child:
-                ElevatedButton(
+            child: ElevatedButton(
               onPressed: () {
-                Navigator.pop(
-                  context,
-                );
+                Navigator.pop(context);
               },
-
               style:
-                  ElevatedButton
-                      .styleFrom(
-                backgroundColor:
-                    laranja,
-
+                  ElevatedButton.styleFrom(
+                backgroundColor: laranja,
                 foregroundColor:
                     Colors.white,
-
                 elevation: 0,
-
                 shape:
                     RoundedRectangleBorder(
                   borderRadius:
-                      BorderRadius.circular(
-                    15,
-                  ),
+                      BorderRadius.circular(15),
                 ),
               ),
-
-              child:
-                  const Text(
+              child: const Text(
                 'VOLTAR AO PEDIDO',
-                style:
-                    TextStyle(
+                style: TextStyle(
                   fontWeight:
                       FontWeight.bold,
                 ),
@@ -2629,33 +2967,33 @@ class _PixCheckoutPageState
           ),
 
           Center(
-            child:
-                Text(
-              expirationDate !=
-                          null &&
-                      expirationDate!
-                          .isNotEmpty
+            child: Text(
+              expirationDate != null &&
+                      expirationDate!.isNotEmpty
                   ? 'QR Code válido até $expirationDate'
                   : 'Pix gerado com segurança pelo Asaas',
-
-              style:
-                  TextStyle(
+              style: TextStyle(
                 color:
                     Colors.grey.shade600,
-                fontSize:
-                    10,
+                fontSize: 10,
               ),
             ),
+          ),
+
+          const SizedBox(
+            height: 20,
           ),
         ],
       ),
     );
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor:
           const Color(0xFFF7F7F7),
@@ -2663,32 +3001,24 @@ class _PixCheckoutPageState
       appBar: AppBar(
         backgroundColor:
             Colors.white,
-
         foregroundColor:
             Colors.black87,
-
         elevation: 0,
-
-        title:
-            const Text(
+        title: const Text(
           'PIX',
-
-          style:
-              TextStyle(
+          style: TextStyle(
             fontWeight:
                 FontWeight.bold,
           ),
         ),
       ),
 
-      body:
-          SafeArea(
-        child:
-            carregando
-                ? _carregando()
-                : erro
-                    ? _erro()
-                    : _conteudo(),
+      body: SafeArea(
+        child: carregando
+            ? _carregando()
+            : erro
+                ? _erro()
+                : _conteudo(),
       ),
     );
   }
