@@ -369,6 +369,48 @@
         "mensagens": []
       },
       "criadoEm": "2026-08-30T21:12:19.263Z"
+    },
+    {
+      "id": 1787424643960,
+      "clienteId": "user_1788031295568",
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "Açai 200ml",
+          "nome": "Açai 200ml",
+          "quantidade": 1,
+          "preco": 0.01,
+          "valor": 0.01
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "12",
+        "bairro": "Bethânia",
+        "complemento": "Cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "PIX",
+      "pagamentoStatus": "PENDENTE",
+      "statusPagamento": "pending",
+      "pagamentoAprovado": false,
+      "subtotal": 0.01,
+      "taxaServico": 0,
+      "total": 5.01,
+      "precisaTroco": false,
+      "trocoPara": null,
+      "valorTroco": 0,
+      "externalReference": "FOODJET-1788124907157",
+      "referenciaPagamento": "FOODJET-1788124907157",
+      "status": "AGUARDANDO_RESTAURANTE",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "criadoEm": "2026-08-30T21:21:47.206Z"
     }
   ],
   "entregadores": [
