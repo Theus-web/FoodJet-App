@@ -1336,7 +1336,7 @@ class _CashPaymentPageState
 
     try {
       final url = Uri.parse(
-        '${Api.baseUrl}/pedidos',
+        '${Api.baseUrl}/orders',
       );
 
       final itens =
@@ -1807,6 +1807,49 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   }
 
   // ============================================================
+  // DECODIFICAR RESPOSTA DO BACKEND COM DIAGNÓSTICO COMPLETO
+  // ============================================================
+
+  dynamic _decodificarResposta(
+    http.Response response,
+    String origem,
+  ) {
+    debugPrint('');
+    debugPrint('========================================');
+    debugPrint('🌐 RESPOSTA DO SERVIDOR');
+    debugPrint('📍 ORIGEM: $origem');
+    debugPrint('📊 STATUS HTTP: ${response.statusCode}');
+    debugPrint(
+      '📄 CONTENT-TYPE: ${response.headers['content-type'] ?? 'não informado'}',
+    );
+    debugPrint('📦 BODY:');
+    debugPrint(response.body);
+    debugPrint('========================================');
+    debugPrint('');
+
+    final body = response.body.trim();
+
+    if (body.isEmpty) {
+      throw Exception(
+        '$origem: o servidor retornou uma resposta vazia. HTTP ${response.statusCode}.',
+      );
+    }
+
+    try {
+      return jsonDecode(body);
+    } catch (e) {
+      debugPrint('❌ ERRO AO DECODIFICAR JSON');
+      debugPrint('📍 ORIGEM: $origem');
+      debugPrint('❌ ERRO: $e');
+      debugPrint('📦 RESPOSTA RECEBIDA: $body');
+
+      throw Exception(
+        '$origem: o servidor não retornou JSON válido. HTTP ${response.statusCode}.',
+      );
+    }
+  }
+
+  // ============================================================
   // INICIAR FLUXO COMPLETO
   //
   // 1. CRIA PEDIDO
@@ -1815,105 +1858,136 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   // ============================================================
 
   Future<void> _iniciarFluxoPix() async {
+  debugPrint('🚀 ========================================');
+  debugPrint('🚀 INICIANDO FLUXO PIX');
+  debugPrint('🚀 ========================================');
+
+  debugPrint('🏪 restauranteId: ${widget.restauranteId}');
+  debugPrint('💰 subtotal: ${widget.subtotal}');
+  debugPrint('🚚 taxaEntrega: ${widget.taxaEntrega}');
+  debugPrint('⚙️ taxaServico: ${widget.taxaServico}');
+  debugPrint('💰 TOTAL: ${widget.total}');
+  debugPrint('🛒 ITENS: ${widget.itens.length}');
+  debugPrint('🌐 API BASE: ${Api.baseUrl}');
+
+  if (!mounted) return;
+
+  setState(() {
+    carregando = true;
+    erro = false;
+    mensagemErro = '';
+  });
+
+  try {
+    debugPrint('✅ Entrou no try do PIX');
+
+    if (widget.itens.isEmpty) {
+      debugPrint('❌ ERRO: carrinho vazio');
+
+      throw Exception(
+        'Seu carrinho está vazio.',
+      );
+    }
+
+    if (widget.restauranteId.trim().isEmpty) {
+      debugPrint('❌ ERRO: restauranteId vazio');
+
+      throw Exception(
+        'Restaurante não identificado.',
+      );
+    }
+
+    if (widget.total <= 0) {
+      debugPrint(
+        '❌ ERRO: total inválido: ${widget.total}',
+      );
+
+      throw Exception(
+        'O valor do pedido é inválido.',
+      );
+    }
+
+    debugPrint('✅ Validações iniciais OK');
+
+    final token = await _obterToken();
+
+    debugPrint(
+      '🔐 Token retornado: ${token != null ? "SIM" : "NÃO"}',
+    );
+
+    if (token == null) {
+      throw Exception(
+        'Sessão expirada. Faça login novamente.',
+      );
+    }
+
+    debugPrint('➡️ Chamando _criarPedido()');
+
+    final id = await _criarPedido(token);
+
+    debugPrint(
+      '✅ _criarPedido() terminou: $id',
+    );
+
+    pedidoId = id;
+
+    debugPrint(
+      '➡️ Chamando _gerarPix()',
+    );
+
+    await _gerarPix(token);
+
+    debugPrint(
+      '✅ _gerarPix() terminou com sucesso',
+    );
+
     if (!mounted) return;
 
     setState(() {
-      carregando = true;
+      carregando = false;
       erro = false;
-      mensagemErro = '';
     });
 
-    try {
-      // ----------------------------------------------------------
-      // VALIDAÇÕES
-      // ----------------------------------------------------------
+    debugPrint(
+      '🎉 ========================================',
+    );
+    debugPrint(
+      '🎉 PIX PREPARADO COM SUCESSO',
+    );
+    debugPrint(
+      '🎉 ========================================',
+    );
+  } catch (e, stackTrace) {
+    debugPrint(
+      '❌ ========================================',
+    );
+    debugPrint(
+      '❌ ERRO NO FLUXO PIX',
+    );
+    debugPrint(
+      '❌ ERRO: $e',
+    );
+    debugPrint(
+      '❌ STACKTRACE: $stackTrace',
+    );
+    debugPrint(
+      '❌ ========================================',
+    );
 
-      if (widget.itens.isEmpty) {
-        throw Exception(
-          'Seu carrinho está vazio.',
-        );
-      }
+    if (!mounted) return;
 
-      if (widget.restauranteId.trim().isEmpty) {
-        throw Exception(
-          'Restaurante não identificado.',
-        );
-      }
-
-      if (widget.total <= 0) {
-        throw Exception(
-          'O valor do pedido é inválido.',
-        );
-      }
-
-      // ----------------------------------------------------------
-      // TOKEN
-      // ----------------------------------------------------------
-
-      final token = await _obterToken();
-
-      if (token == null) {
-        throw Exception(
-          'Sessão expirada. Faça login novamente.',
-        );
-      }
-
-      // ----------------------------------------------------------
-      // 1. CRIAR PEDIDO FOODJET
-      // ----------------------------------------------------------
-
-      final id = await _criarPedido(token);
-
-      pedidoId = id;
-
-      debugPrint(
-        '========================================',
-      );
-
-      debugPrint(
-        '🛒 PEDIDO FOODJET CRIADO ANTES DO PIX',
-      );
-
-      debugPrint(
-        '🆔 PEDIDO ID: $pedidoId',
-      );
-
-      debugPrint(
-        '========================================',
-      );
-
-      // ----------------------------------------------------------
-      // 2. CRIAR PIX ASAAS
-      // ----------------------------------------------------------
-
-      await _gerarPix(token);
-
-      if (!mounted) return;
-
-      setState(() {
-        carregando = false;
-        erro = false;
-      });
-    } catch (e) {
-      debugPrint(
-        '❌ ERRO NO FLUXO PIX: $e',
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        carregando = false;
-        erro = true;
-
-        mensagemErro = e
-            .toString()
-            .replaceFirst(
-              'Exception: ',
-              '',
-            );
-      });
-    }
+    setState(() {
+      carregando = false;
+      erro = true;
+      mensagemErro = e
+          .toString()
+          .replaceFirst(
+            'Exception: ',
+            '',
+          );
+    });
   }
+}
 
   // ============================================================
   // CRIAR PEDIDO
@@ -1921,7 +1995,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
 
   Future<String> _criarPedido(String token) async {
     final url = Uri.parse(
-      '${Api.baseUrl}/pedidos',
+      '${Api.baseUrl}/orders',
     );
 
     // ----------------------------------------------------------
@@ -2003,6 +2077,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
           url,
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'Authorization': 'Bearer $token',
           },
           body: jsonEncode(body),
@@ -2021,15 +2096,10 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
       '🛒 CRIAR PEDIDO BODY: ${response.body}',
     );
 
-    dynamic dados;
-
-    try {
-      dados = jsonDecode(response.body);
-    } catch (_) {
-      throw Exception(
-        'Resposta inválida do servidor ao criar o pedido.',
-      );
-    }
+    final dynamic dados = _decodificarResposta(
+      response,
+      'CRIAR PEDIDO',
+    );
 
     // ----------------------------------------------------------
     // ERRO HTTP
@@ -2234,6 +2304,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
           url,
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
             'Authorization': 'Bearer $token',
           },
           body: jsonEncode(body),
@@ -2256,15 +2327,10 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
     // DECODIFICAR RESPOSTA
     // ----------------------------------------------------------
 
-    dynamic dados;
-
-    try {
-      dados = jsonDecode(response.body);
-    } catch (_) {
-      throw Exception(
-        'Resposta inválida do servidor ao gerar o Pix.',
-      );
-    }
+    final dynamic dados = _decodificarResposta(
+      response,
+      'GERAR PIX',
+    );
 
     // ----------------------------------------------------------
     // ERRO HTTP
