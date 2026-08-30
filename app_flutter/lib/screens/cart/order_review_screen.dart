@@ -38,7 +38,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   // TAXAS
   // ============================================================
 
-  final double taxaEntrega = 6.50;
+  final double taxaEntrega = 5.0;
 
   // 15% de taxa de serviço
   final double percentualTaxaServico = 0.15;

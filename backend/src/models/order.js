@@ -6,6 +6,7 @@ const { db } = require("../config/database");
 // ======================================================
 
 async function prepararBanco() {
+
     await db.read();
 
     if (!db.data) {
@@ -14,6 +15,10 @@ async function prepararBanco() {
 
     if (!Array.isArray(db.data.pedidos)) {
         db.data.pedidos = [];
+    }
+
+    if (!Array.isArray(db.data.pagamentosAsaas)) {
+        db.data.pagamentosAsaas = [];
     }
 
     await db.write();
@@ -25,6 +30,7 @@ async function prepararBanco() {
 // ======================================================
 
 async function gerarIdPedido() {
+
     await db.read();
 
     if (!db.data) {
@@ -39,16 +45,112 @@ async function gerarIdPedido() {
         return 1;
     }
 
-    const maiorId = db.data.pedidos.reduce(
-        (maior, pedido) => {
-            const id = Number(pedido.id) || 0;
+    const maiorId =
+        db.data.pedidos.reduce(
+            (maior, pedido) => {
 
-            return id > maior ? id : maior;
-        },
-        0
-    );
+                const id =
+                    Number(pedido.id) || 0;
+
+                return id > maior
+                    ? id
+                    : maior;
+            },
+            0
+        );
 
     return maiorId + 1;
+}
+
+
+// ======================================================
+// ENCONTRAR PAGAMENTO ASAAS PENDENTE
+// ======================================================
+//
+// O webhook do Asaas pode chegar antes do pedido.
+//
+// Nesse caso o webhook salva:
+//
+// db.data.pagamentosAsaas
+//
+// Quando o pedido for criado, procuramos pelo
+// externalReference.
+// ======================================================
+
+function encontrarPagamentoAsaasPendente(
+    externalReference
+) {
+
+    if (
+        !externalReference ||
+        !db.data ||
+        !Array.isArray(
+            db.data.pagamentosAsaas
+        )
+    ) {
+        return null;
+    }
+
+    const referencia =
+        String(
+            externalReference
+        ).trim();
+
+    if (!referencia) {
+        return null;
+    }
+
+    return (
+        db.data.pagamentosAsaas.find(
+            pagamento =>
+                String(
+                    pagamento.externalReference || ""
+                ).trim() === referencia
+        ) || null
+    );
+}
+
+
+// ======================================================
+// REMOVER PAGAMENTO ASAAS TEMPORÁRIO
+// ======================================================
+
+function removerPagamentoAsaasPendente(
+    pagamentoId
+) {
+
+    if (
+        !db.data ||
+        !Array.isArray(
+            db.data.pagamentosAsaas
+        )
+    ) {
+        return;
+    }
+
+    const index =
+        db.data.pagamentosAsaas.findIndex(
+            pagamento =>
+                String(
+                    pagamento.pagamentoId || ""
+                ).trim() ===
+                String(
+                    pagamentoId || ""
+                ).trim()
+        );
+
+    if (index !== -1) {
+
+        db.data.pagamentosAsaas.splice(
+            index,
+            1
+        );
+
+        console.log(
+            "🗑️ PAGAMENTO ASAAS TEMPORÁRIO REMOVIDO:",
+            pagamentoId
+        );
+    }
 }
 
 
@@ -57,11 +159,11 @@ async function gerarIdPedido() {
 // ======================================================
 //
 // IMPORTANTE:
-// O clienteId deve ser definido pelo CONTROLLER,
+//
+// clienteId deve ser definido pelo CONTROLLER,
 // usando req.usuario.id.
 //
-// O Flutter NÃO deve decidir qual é o cliente.
-//
+// O Flutter NÃO deve decidir o cliente.
 // ======================================================
 
 async function criar(pedido) {
@@ -76,6 +178,11 @@ async function criar(pedido) {
         db.data.pedidos = [];
     }
 
+    if (!Array.isArray(db.data.pagamentosAsaas)) {
+        db.data.pagamentosAsaas = [];
+    }
+
+
     // ==================================================
     // VALIDAÇÕES
     // ==================================================
@@ -84,58 +191,80 @@ async function criar(pedido) {
         !pedido ||
         typeof pedido !== "object"
     ) {
+
         throw new Error(
             "Dados do pedido inválidos."
         );
     }
 
+
     if (
         pedido.clienteId === undefined ||
         pedido.clienteId === null ||
-        String(pedido.clienteId).trim() === ""
+        String(
+            pedido.clienteId
+        ).trim() === ""
     ) {
+
         throw new Error(
             "Cliente não identificado."
         );
     }
 
+
     if (
         pedido.restauranteId === undefined ||
         pedido.restauranteId === null ||
-        String(pedido.restauranteId).trim() === ""
+        String(
+            pedido.restauranteId
+        ).trim() === ""
     ) {
+
         throw new Error(
             "Restaurante não identificado."
         );
     }
 
+
     // ==================================================
     // ID
     // ==================================================
 
-    const id = await gerarIdPedido();
+    const id =
+        await gerarIdPedido();
+
 
     // ==================================================
     // ITENS
     // ==================================================
 
-    const itens = Array.isArray(pedido.itens)
-        ? pedido.itens
-        : [];
+    const itens =
+        Array.isArray(pedido.itens)
+            ? pedido.itens
+            : [];
+
 
     // ==================================================
     // VALORES
     // ==================================================
 
     const subtotal =
-        Number(pedido.subtotal) || 0;
+        Number(
+            pedido.subtotal
+        ) || 0;
 
     const taxaServico =
-        Number(pedido.taxaServico) || 0;
+        Number(
+            pedido.taxaServico
+        ) || 0;
 
     const total =
-        Number(pedido.total) ||
-        subtotal + taxaServico;
+        Number(
+            pedido.total
+        ) ||
+        subtotal +
+        taxaServico;
+
 
     // ==================================================
     // PAGAMENTO
@@ -143,10 +272,12 @@ async function criar(pedido) {
 
     const pagamento =
         String(
-            pedido.pagamento || "PIX"
+            pedido.pagamento ||
+            "PIX"
         )
             .trim()
             .toUpperCase();
+
 
     // ==================================================
     // TROCO
@@ -154,21 +285,43 @@ async function criar(pedido) {
 
     const precisaTroco =
         pagamento === "DINHEIRO"
-            ? Boolean(pedido.precisaTroco)
+            ? Boolean(
+                pedido.precisaTroco
+            )
             : false;
 
     const trocoPara =
         precisaTroco
-            ? Number(pedido.trocoPara) || 0
+            ? Number(
+                pedido.trocoPara
+            ) || 0
             : null;
 
     const valorTroco =
-        precisaTroco && trocoPara !== null
+        precisaTroco &&
+        trocoPara !== null
             ? Math.max(
                 0,
                 trocoPara - total
             )
             : 0;
+
+
+    // ==================================================
+    // REFERÊNCIA DO PAGAMENTO
+    // ==================================================
+    //
+    // É MUITO IMPORTANTE que essa referência seja
+    // a mesma usada na criação do PIX.
+    //
+    // ==================================================
+
+    const externalReference =
+        String(
+            pedido.externalReference ||
+            `FOODJET-${id}-${Date.now()}`
+        ).trim();
+
 
     // ==================================================
     // NOVO PEDIDO
@@ -181,24 +334,29 @@ async function criar(pedido) {
         // ==================================================
         // CLIENTE
         // ==================================================
-        //
-        // Este valor deve vir do backend.
-        //
+
         clienteId:
-            String(pedido.clienteId),
+            String(
+                pedido.clienteId
+            ),
+
 
         // ==================================================
         // RESTAURANTE
         // ==================================================
 
         restauranteId:
-            String(pedido.restauranteId),
+            String(
+                pedido.restauranteId
+            ),
+
 
         // ==================================================
         // ITENS
         // ==================================================
 
         itens,
+
 
         // ==================================================
         // ENDEREÇO
@@ -207,16 +365,29 @@ async function criar(pedido) {
         endereco:
             pedido.endereco || {},
 
+
         // ==================================================
         // PAGAMENTO
         // ==================================================
 
         pagamento,
 
+
         pagamentoStatus:
             pagamento === "PIX"
                 ? "PENDENTE"
                 : "AGUARDANDO",
+
+
+        statusPagamento:
+            pagamento === "PIX"
+                ? "pending"
+                : "pending",
+
+
+        pagamentoAprovado:
+            false,
+
 
         // ==================================================
         // VALORES
@@ -228,6 +399,7 @@ async function criar(pedido) {
 
         total,
 
+
         // ==================================================
         // TROCO
         // ==================================================
@@ -238,13 +410,16 @@ async function criar(pedido) {
 
         valorTroco,
 
+
         // ==================================================
-        // REFERÊNCIA
+        // REFERÊNCIA ASAAS
         // ==================================================
 
-        externalReference:
-            pedido.externalReference ||
-            `FOODJET-${id}-${Date.now()}`,
+        externalReference,
+
+        referenciaPagamento:
+            externalReference,
+
 
         // ==================================================
         // STATUS
@@ -253,18 +428,23 @@ async function criar(pedido) {
         status:
             "AGUARDANDO_RESTAURANTE",
 
+
         // ==================================================
         // SUPORTE
         // ==================================================
 
         suporte: {
+
             aberto: false,
+
             status: "FECHADO",
+
             mensagens: []
         },
 
+
         // ==================================================
-        // DATAS
+        // DATA
         // ==================================================
 
         criadoEm:
@@ -272,26 +452,213 @@ async function criar(pedido) {
             new Date().toISOString()
     };
 
+
     // ==================================================
     // NÃO SALVAR TAXA DE ENTREGA
     // ==================================================
     //
-    // A taxa pode ser calculada posteriormente
-    // pelo sistema.
+    // Mantendo a regra atual do seu sistema.
     //
     // ==================================================
 
     delete novoPedido.taxaEntrega;
 
+
     // ==================================================
-    // SALVAR
+    // RECONCILIAR PAGAMENTO ASAAS
+    // ==================================================
+    //
+    // O cenário pode ser:
+    //
+    // 1. FoodJet cria PIX
+    // 2. Cliente paga
+    // 3. Asaas envia PAYMENT_RECEIVED
+    // 4. Pedido ainda não existe
+    // 5. Webhook salva pagamentoAsaas
+    // 6. Flutter cria pedido
+    //
+    // Aqui recuperamos esse pagamento.
+    //
+    // ==================================================
+
+    const pagamentoAsaas =
+        encontrarPagamentoAsaasPendente(
+            novoPedido.externalReference
+        );
+
+
+    if (pagamentoAsaas) {
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "🔄 RECONCILIANDO PAGAMENTO ASAAS"
+        );
+
+        console.log(
+            "REFERÊNCIA:",
+            novoPedido.externalReference
+        );
+
+        console.log(
+            "PAGAMENTO ASAAS:",
+            pagamentoAsaas.pagamentoId
+        );
+
+        console.log(
+            "STATUS ASAAS:",
+            pagamentoAsaas.statusAsaas
+        );
+
+        console.log(
+            "STATUS FOODJET:",
+            pagamentoAsaas.statusPagamento
+        );
+
+
+        // ==================================================
+        // DADOS ASAAS
+        // ==================================================
+
+        novoPedido.pagamentoId =
+            pagamentoAsaas.pagamentoId ||
+            "";
+
+        novoPedido.asaasPaymentId =
+            pagamentoAsaas.pagamentoId ||
+            "";
+
+        novoPedido.externalReference =
+            pagamentoAsaas.externalReference ||
+            novoPedido.externalReference;
+
+        novoPedido.referenciaPagamento =
+            pagamentoAsaas.externalReference ||
+            novoPedido.referenciaPagamento;
+
+        novoPedido.statusPagamento =
+            pagamentoAsaas.statusPagamento ||
+            "pending";
+
+        novoPedido.statusPagamentoAsaas =
+            pagamentoAsaas.statusAsaas ||
+            "";
+
+        novoPedido.asaasEvento =
+            pagamentoAsaas.evento ||
+            "";
+
+        novoPedido.asaasAtualizadoEm =
+            pagamentoAsaas.atualizadoEm ||
+            new Date().toISOString();
+
+        novoPedido.pagamentoAtualizadoEm =
+            pagamentoAsaas.atualizadoEm ||
+            new Date().toISOString();
+
+        novoPedido.valorPagamento =
+            Number(
+                pagamentoAsaas.valor
+            ) || 0;
+
+
+        // ==================================================
+        // PAGAMENTO APROVADO
+        // ==================================================
+
+        if (
+            pagamentoAsaas.statusPagamento ===
+            "approved"
+        ) {
+
+            novoPedido.statusPagamento =
+                "approved";
+
+            novoPedido.pagamentoAprovado =
+                true;
+
+            novoPedido.pagamentoAprovadoEm =
+                new Date().toISOString();
+
+            // ----------------------------------------------
+            // O restaurante ainda precisa aceitar.
+            // ----------------------------------------------
+
+            novoPedido.status =
+                "AGUARDANDO_RESTAURANTE";
+
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "✅ PIX JÁ ESTAVA PAGO"
+            );
+
+            console.log(
+                "💳 STATUS:",
+                "APPROVED"
+            );
+
+            console.log(
+                "📦 PEDIDO:",
+                novoPedido.id
+            );
+
+            console.log(
+                "🍽️ STATUS:",
+                "AGUARDANDO_RESTAURANTE"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+
+            // ==================================================
+            // REMOVER DA FILA TEMPORÁRIA
+            // ==================================================
+
+            removerPagamentoAsaasPendente(
+                pagamentoAsaas.pagamentoId
+            );
+
+        }
+
+        // ==================================================
+        // PAGAMENTO AINDA PENDENTE
+        // ==================================================
+
+        else {
+
+            novoPedido.pagamentoAprovado =
+                false;
+
+            console.log(
+                "⏳ PAGAMENTO ASAAS AINDA PENDENTE"
+            );
+        }
+    }
+
+
+    // ==================================================
+    // SALVAR PEDIDO
     // ==================================================
 
     db.data.pedidos.push(
         novoPedido
     );
 
+
     await db.write();
+
+
+    // ==================================================
+    // LOG
+    // ==================================================
 
     console.log(
         "========================================"
@@ -322,18 +689,39 @@ async function criar(pedido) {
     );
 
     console.log(
+        "PAGAMENTO ID:",
+        novoPedido.pagamentoId || "NÃO DEFINIDO"
+    );
+
+    console.log(
+        "STATUS PAGAMENTO:",
+        novoPedido.statusPagamento
+    );
+
+    console.log(
+        "PAGAMENTO APROVADO:",
+        novoPedido.pagamentoAprovado
+    );
+
+    console.log(
         "TOTAL:",
         novoPedido.total
     );
 
     console.log(
-        "STATUS:",
+        "STATUS PEDIDO:",
         novoPedido.status
+    );
+
+    console.log(
+        "REFERÊNCIA:",
+        novoPedido.externalReference
     );
 
     console.log(
         "========================================"
     );
+
 
     return novoPedido;
 }
@@ -378,7 +766,8 @@ async function buscarPorId(id) {
     const pedido =
         db.data.pedidos.find(
             item =>
-                Number(item.id) === Number(id)
+                Number(item.id) ===
+                Number(id)
         );
 
     return pedido || null;
@@ -407,7 +796,8 @@ async function atualizarStatus(
     const index =
         db.data.pedidos.findIndex(
             item =>
-                Number(item.id) === Number(id)
+                Number(item.id) ===
+                Number(id)
         );
 
     if (index === -1) {
@@ -445,7 +835,8 @@ async function aceitarPedidoRestaurante(id) {
     const index =
         db.data.pedidos.findIndex(
             item =>
-                Number(item.id) === Number(id)
+                Number(item.id) ===
+                Number(id)
         );
 
     if (index === -1) {
@@ -462,7 +853,8 @@ async function aceitarPedidoRestaurante(id) {
         return null;
     }
 
-    pedido.status = "ACEITO";
+    pedido.status =
+        "ACEITO";
 
     pedido.aceitoRestauranteEm =
         new Date().toISOString();
@@ -495,7 +887,8 @@ async function recusarPedidoRestaurante(
     const index =
         db.data.pedidos.findIndex(
             item =>
-                Number(item.id) === Number(id)
+                Number(item.id) ===
+                Number(id)
         );
 
     if (index === -1) {
@@ -512,7 +905,8 @@ async function recusarPedidoRestaurante(
         return null;
     }
 
-    pedido.status = "RECUSADO";
+    pedido.status =
+        "RECUSADO";
 
     pedido.motivoRecusa =
         motivo ||
@@ -549,7 +943,8 @@ async function aceitarEntrega(
     const index =
         db.data.pedidos.findIndex(
             item =>
-                Number(item.id) === Number(id)
+                Number(item.id) ===
+                Number(id)
         );
 
     if (index === -1) {
@@ -559,7 +954,10 @@ async function aceitarEntrega(
     const pedido =
         db.data.pedidos[index];
 
-    if (pedido.status !== "PRONTO") {
+    if (
+        pedido.status !==
+        "PRONTO"
+    ) {
         return null;
     }
 
@@ -598,7 +996,9 @@ async function listarPorRestaurante(
 
     return db.data.pedidos.filter(
         pedido =>
-            String(pedido.restauranteId) ===
+            String(
+                pedido.restauranteId
+            ) ===
             String(restauranteId)
     );
 }
@@ -624,7 +1024,9 @@ async function listarPorCliente(
 
     return db.data.pedidos.filter(
         pedido =>
-            String(pedido.clienteId) ===
+            String(
+                pedido.clienteId
+            ) ===
             String(clienteId)
     );
 }
@@ -648,7 +1050,8 @@ async function listarDisponiveisEntrega() {
 
     return db.data.pedidos.filter(
         pedido =>
-            pedido.status === "PRONTO"
+            pedido.status ===
+            "PRONTO"
     );
 }
 
@@ -672,7 +1075,8 @@ async function finalizarEntrega(id) {
     const index =
         db.data.pedidos.findIndex(
             item =>
-                Number(item.id) === Number(id)
+                Number(item.id) ===
+                Number(id)
         );
 
     if (index === -1) {
@@ -738,9 +1142,13 @@ async function abrirSuporte(
         db.data.pedidos[index];
 
     if (!pedido.suporte) {
+
         pedido.suporte = {
+
             aberto: false,
+
             status: "FECHADO",
+
             mensagens: []
         };
     }
@@ -767,7 +1175,8 @@ async function abrirSuporte(
         mensagemSuporte
     );
 
-    pedido.suporte.aberto = true;
+    pedido.suporte.aberto =
+        true;
 
     pedido.suporte.status =
         "AGUARDANDO_ADMIN";
@@ -905,7 +1314,8 @@ async function fecharSuporte(
         return null;
     }
 
-    pedido.suporte.aberto = false;
+    pedido.suporte.aberto =
+        false;
 
     pedido.suporte.status =
         "FECHADO";
