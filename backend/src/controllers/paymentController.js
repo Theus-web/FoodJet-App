@@ -1,11 +1,13 @@
 const {
   criarPix,
+  criarCredito,
+  criarDebito,
   consultarPagamento,
   obterQrCodePix,
 } = require("../services/asaasService");
 
 // ============================================================
-// GERAR PIX ASAAS
+// PIX
 // ============================================================
 
 async function gerarPix(req, res) {
@@ -18,19 +20,6 @@ async function gerarPix(req, res) {
       cpfCnpj,
     } = req.body;
 
-    console.log("========================================");
-    console.log("💳 FOODJET - GERAR PIX ASAAS");
-    console.log("========================================");
-    console.log("💰 VALOR:", valor);
-    console.log("📧 EMAIL:", email);
-    console.log("🔖 PEDIDO:", pedidoId);
-    console.log("👤 USUÁRIO:", req.usuario?.id);
-    console.log("========================================");
-
-    // ========================================================
-    // VALIDAR VALOR
-    // ========================================================
-
     if (
       valor === undefined ||
       valor === null ||
@@ -39,141 +28,72 @@ async function gerarPix(req, res) {
     ) {
       return res.status(400).json({
         sucesso: false,
-        erro: "Valor do pagamento obrigatório.",
+        erro:
+          "Valor do pagamento obrigatório.",
       });
     }
 
-    // ========================================================
-    // VALIDAR EMAIL
-    // ========================================================
-
-    if (
-      !email ||
-      typeof email !== "string" ||
-      !email.trim()
-    ) {
+    if (!email) {
       return res.status(400).json({
         sucesso: false,
-        erro: "E-mail da conta não encontrado.",
+        erro:
+          "E-mail da conta não encontrado.",
       });
     }
 
-    const emailNormalizado =
-      email.trim().toLowerCase();
-
-    // ========================================================
-    // VALIDAR PEDIDO
-    // ========================================================
-
-    if (
-      !pedidoId ||
-      !String(pedidoId).trim()
-    ) {
+    if (!pedidoId) {
       return res.status(400).json({
         sucesso: false,
-        erro: "ID do pedido obrigatório.",
+        erro:
+          "ID do pedido obrigatório.",
       });
     }
-
-    const referencia =
-      String(pedidoId).trim();
-
-    // ========================================================
-    // CRIAR COBRANÇA PIX
-    // ========================================================
 
     const pagamento =
       await criarPix({
-        valor: Number(valor),
-        email: emailNormalizado,
-        referencia,
-        nome,
-        cpfCnpj,
-        descricao:
-          `Pedido FoodJet #${referencia}`,
-      });
+        valor:
+          Number(valor),
 
-    // ========================================================
-    // ID ASAAS
-    // ========================================================
+        email:
+          String(email)
+            .trim()
+            .toLowerCase(),
+
+        pedidoId,
+
+        referencia:
+          String(pedidoId).trim(),
+
+        nome,
+
+        cpfCnpj,
+
+        descricao:
+          `Pedido FoodJet #${pedidoId}`,
+      });
 
     const pagamentoId =
-      pagamento?.id || "";
+      pagamento?.id;
 
     if (!pagamentoId) {
-      console.error(
-        "❌ Asaas não retornou o ID da cobrança."
+      throw new Error(
+        "O Asaas não retornou o ID da cobrança."
       );
-
-      return res.status(502).json({
-        sucesso: false,
-        erro:
-          "O Asaas não retornou o ID da cobrança.",
-      });
     }
-
-    console.log("========================================");
-    console.log("✅ COBRANÇA ASAAS CRIADA");
-    console.log("========================================");
-    console.log(
-      "🆔 PAYMENT ID:",
-      pagamentoId
-    );
-    console.log(
-      "📊 STATUS:",
-      pagamento?.status
-    );
-    console.log(
-      "💰 VALOR:",
-      pagamento?.value
-    );
-    console.log(
-      "📅 VENCIMENTO:",
-      pagamento?.dueDate
-    );
-    console.log(
-      "🔖 REFERÊNCIA:",
-      pagamento?.externalReference
-    );
-    console.log("========================================");
-
-    // ========================================================
-    // OBTER QR CODE PIX
-    // ========================================================
 
     let pix = null;
 
     try {
-
       pix =
         await obterQrCodePix(
           pagamentoId
         );
-
-    } catch (qrErro) {
-
+    } catch (erro) {
       console.error(
-        "⚠️ ERRO AO OBTER QR CODE PIX:"
+        "⚠️ Não foi possível obter QR Code PIX:",
+        erro?.message
       );
-
-      console.error(
-        qrErro?.message
-      );
-
-      /*
-       * A cobrança já foi criada.
-       *
-       * Não criamos outra cobrança.
-       *
-       * O Flutter poderá tentar consultar novamente.
-       */
-
-      pix = null;
     }
-
-    // ========================================================
-    // RESPOSTA
-    // ========================================================
 
     return res.status(201).json({
       sucesso: true,
@@ -186,210 +106,406 @@ async function gerarPix(req, res) {
       status:
         pagamento?.status || "",
 
-      statusDetalhe:
-        pagamento?.status || "",
-
       externalReference:
         pagamento?.externalReference ||
-        referencia,
+        String(pedidoId),
 
       totalAmount:
         pagamento?.value ||
         Number(valor),
 
       billingType:
-        pagamento?.billingType ||
         "PIX",
 
       pix: {
         qrCode:
-          pix?.payload ||
-          "",
+          pix?.payload || "",
 
         qrCodeBase64:
-          pix?.encodedImage ||
-          "",
+          pix?.encodedImage || "",
 
         ticketUrl:
           "",
 
         expiracao:
-          pix?.expirationDate ||
-          "",
+          pix?.expirationDate || "",
       },
     });
-
   } catch (erro) {
-
     console.error(
-      "========================================"
-    );
-
-    console.error(
-      "❌ ERRO ASAAS PIX"
-    );
-
-    console.error(
-      "========================================"
-    );
-
-    console.error(
-      "STATUS:",
-      erro?.status
-    );
-
-    console.error(
-      "ERRO:",
+      "❌ ERRO GERANDO PIX:",
       erro?.message
     );
 
-    console.error(
-      "DETALHES:",
-      JSON.stringify(
-        erro?.response?.data ||
-        erro?.causes ||
-        [],
-        null,
-        2
-      )
-    );
-
-    console.error(
-      "========================================"
-    );
-
     return res.status(
-      erro?.status >= 400 &&
-      erro?.status < 600
-        ? erro.status
+      erro?.response?.status >= 400 &&
+      erro?.response?.status < 600
+        ? erro.response.status
         : 500
     ).json({
       sucesso: false,
 
       erro:
+        erro?.response?.data?.errors?.[0]
+          ?.description ||
         erro?.message ||
-        "Não foi possível iniciar o pagamento PIX.",
-
-      causas:
-        erro?.response?.data ||
-        erro?.causes ||
-        [],
+        "Não foi possível gerar o PIX.",
     });
   }
 }
 
 // ============================================================
-// CONSULTAR PAGAMENTO ASAAS
+// CRÉDITO
+// ============================================================
+
+async function gerarCredito(req, res) {
+  try {
+    const {
+      valor,
+      email,
+      pedidoId,
+      nome,
+      cpfCnpj,
+      creditCard,
+      creditCardHolderInfo,
+      installmentCount,
+    } = req.body;
+
+    if (
+      !Number.isFinite(Number(valor)) ||
+      Number(valor) <= 0
+    ) {
+      return res.status(400).json({
+        sucesso: false,
+        erro:
+          "Valor inválido.",
+      });
+    }
+
+    if (!email) {
+      return res.status(400).json({
+        sucesso: false,
+        erro:
+          "E-mail obrigatório.",
+      });
+    }
+
+    if (!pedidoId) {
+      return res.status(400).json({
+        sucesso: false,
+        erro:
+          "Pedido obrigatório.",
+      });
+    }
+
+    const remoteIp =
+      req.headers["x-forwarded-for"]
+        ?.split(",")[0]
+        ?.trim() ||
+      req.socket?.remoteAddress;
+
+    const pagamento =
+      await criarCredito({
+        valor:
+          Number(valor),
+
+        email,
+
+        referencia:
+          String(pedidoId),
+
+        nome,
+
+        cpfCnpj,
+
+        creditCard,
+
+        creditCardHolderInfo,
+
+        remoteIp,
+
+        installmentCount,
+      });
+
+    return res.status(200).json({
+      sucesso: true,
+
+      pagamentoId:
+        pagamento?.id,
+
+      paymentId:
+        pagamento?.id,
+
+      status:
+        pagamento?.status,
+
+      statusDetalhe:
+        pagamento?.status,
+
+      totalAmount:
+        pagamento?.value ||
+        Number(valor),
+
+      externalReference:
+        pagamento?.externalReference ||
+        String(pedidoId),
+
+      billingType:
+        "CREDIT_CARD",
+
+      invoiceUrl:
+        pagamento?.invoiceUrl || "",
+    });
+  } catch (erro) {
+    console.error(
+      "❌ ERRO CARTÃO DE CRÉDITO:",
+      erro?.message
+    );
+
+    return res.status(
+      erro?.response?.status >= 400 &&
+      erro?.response?.status < 600
+        ? erro.response.status
+        : 500
+    ).json({
+      sucesso: false,
+
+      erro:
+        erro?.response?.data?.errors?.[0]
+          ?.description ||
+        erro?.message ||
+        "Não foi possível processar o cartão.",
+    });
+  }
+}
+
+// ============================================================
+// DÉBITO
+// ============================================================
+
+async function gerarDebito(req, res) {
+  try {
+    const {
+      valor,
+      email,
+      pedidoId,
+      nome,
+      cpfCnpj,
+    } = req.body;
+
+    if (
+      !Number.isFinite(Number(valor)) ||
+      Number(valor) <= 0
+    ) {
+      return res.status(400).json({
+        sucesso: false,
+        erro:
+          "Valor inválido.",
+      });
+    }
+
+    if (!email) {
+      return res.status(400).json({
+        sucesso: false,
+        erro:
+          "E-mail obrigatório.",
+      });
+    }
+
+    if (!pedidoId) {
+      return res.status(400).json({
+        sucesso: false,
+        erro:
+          "Pedido obrigatório.",
+      });
+    }
+
+    const pagamento =
+      await criarDebito({
+        valor:
+          Number(valor),
+
+        email,
+
+        referencia:
+          String(pedidoId),
+
+        nome,
+
+        cpfCnpj,
+
+        descricao:
+          `Pedido FoodJet #${pedidoId}`,
+      });
+
+    return res.status(201).json({
+      sucesso: true,
+
+      pagamentoId:
+        pagamento?.id,
+
+      paymentId:
+        pagamento?.id,
+
+      status:
+        pagamento?.status,
+
+      billingType:
+        "CREDIT_CARD",
+
+      invoiceUrl:
+        pagamento?.invoiceUrl || "",
+
+      externalReference:
+        pagamento?.externalReference ||
+        String(pedidoId),
+
+      mensagem:
+        "Continue o pagamento pela página segura do Asaas.",
+    });
+  } catch (erro) {
+    console.error(
+      "❌ ERRO CARTÃO DE DÉBITO:",
+      erro?.message
+    );
+
+    return res.status(
+      erro?.response?.status >= 400 &&
+      erro?.response?.status < 600
+        ? erro.response.status
+        : 500
+    ).json({
+      sucesso: false,
+
+      erro:
+        erro?.response?.data?.errors?.[0]
+          ?.description ||
+        erro?.message ||
+        "Não foi possível iniciar o pagamento com débito.",
+    });
+  }
+}
+
+// ============================================================
+// DINHEIRO
+// ============================================================
+
+async function registrarDinheiro(
+  req,
+  res
+) {
+  try {
+    const {
+      valor,
+      pedidoId,
+    } = req.body;
+
+    if (
+      !Number.isFinite(Number(valor)) ||
+      Number(valor) <= 0
+    ) {
+      return res.status(400).json({
+        sucesso: false,
+        erro:
+          "Valor inválido.",
+      });
+    }
+
+    if (!pedidoId) {
+      return res.status(400).json({
+        sucesso: false,
+        erro:
+          "Pedido obrigatório.",
+      });
+    }
+
+    return res.status(200).json({
+      sucesso: true,
+
+      pagamentoId:
+        null,
+
+      paymentId:
+        null,
+
+      status:
+        "PENDING",
+
+      statusDetalhe:
+        "PENDING",
+
+      billingType:
+        "CASH",
+
+      totalAmount:
+        Number(valor),
+
+      externalReference:
+        String(pedidoId),
+
+      mensagem:
+        "Pagamento será realizado na entrega.",
+    });
+  } catch (erro) {
+    console.error(
+      "❌ ERRO PAGAMENTO DINHEIRO:",
+      erro?.message
+    );
+
+    return res.status(500).json({
+      sucesso: false,
+      erro:
+        "Não foi possível registrar o pagamento em dinheiro.",
+    });
+  }
+}
+
+// ============================================================
+// CONSULTAR
 // ============================================================
 
 async function consultar(req, res) {
-
   try {
-
     const {
       pagamentoId,
     } = req.params;
-
-    console.log("========================================");
-    console.log(
-      "🔎 FOODJET - CONSULTAR PAGAMENTO ASAAS"
-    );
-    console.log(
-      "🆔 PAYMENT ID:",
-      pagamentoId
-    );
-    console.log("========================================");
-
-    // ========================================================
-    // VALIDAR ID
-    // ========================================================
 
     if (
       !pagamentoId ||
       !String(pagamentoId).trim()
     ) {
-
       return res.status(400).json({
         sucesso: false,
         erro:
           "ID do pagamento obrigatório.",
       });
-
     }
 
-    const id =
-      String(pagamentoId).trim();
-
-    // ========================================================
-    // CONSULTAR ASAAS
-    // ========================================================
-
     const pagamento =
-      await consultarPagamento(id);
-
-    // ========================================================
-    // STATUS
-    // ========================================================
-
-    const status =
-      pagamento?.status || "";
-
-    // ========================================================
-    // LOG
-    // ========================================================
-
-    console.log("========================================");
-    console.log(
-      "✅ PAGAMENTO ASAAS CONSULTADO"
-    );
-    console.log("========================================");
-
-    console.log(
-      "🆔 PAYMENT ID:",
-      pagamento?.id || id
-    );
-
-    console.log(
-      "📊 STATUS:",
-      status
-    );
-
-    console.log(
-      "💰 VALOR:",
-      pagamento?.value
-    );
-
-    console.log(
-      "🔖 REFERÊNCIA:",
-      pagamento?.externalReference
-    );
-
-    console.log("========================================");
-
-    // ========================================================
-    // RESPOSTA
-    // ========================================================
+      await consultarPagamento(
+        pagamentoId
+      );
 
     return res.json({
-
       sucesso: true,
 
       pagamentoId:
         pagamento?.id ||
-        id,
+        pagamentoId,
 
       orderId:
         pagamento?.id ||
-        id,
+        pagamentoId,
 
       paymentId:
         pagamento?.id ||
-        id,
+        pagamentoId,
 
-      status,
+      status:
+        pagamento?.status || "",
 
       statusDetalhe:
-        status,
+        pagamento?.status || "",
 
       totalAmount:
         pagamento?.value,
@@ -398,89 +514,46 @@ async function consultar(req, res) {
         pagamento?.externalReference,
 
       billingType:
-        pagamento?.billingType ||
-        "PIX",
+        pagamento?.billingType || "",
+
+      invoiceUrl:
+        pagamento?.invoiceUrl || "",
 
       pix: {
         qrCode: "",
-
         qrCodeBase64: "",
-
         ticketUrl: "",
-
         expiracao:
-          pagamento?.dueDate ||
-          "",
+          pagamento?.dueDate || "",
       },
-
     });
-
   } catch (erro) {
-
     console.error(
-      "========================================"
-    );
-
-    console.error(
-      "❌ ERRO CONSULTANDO ASAAS"
-    );
-
-    console.error(
-      "========================================"
-    );
-
-    console.error(
-      "STATUS:",
-      erro?.status
-    );
-
-    console.error(
-      "ERRO:",
+      "❌ ERRO CONSULTANDO PAGAMENTO:",
       erro?.message
     );
 
-    console.error(
-      "DETALHES:",
-      JSON.stringify(
-        erro?.response?.data ||
-        erro?.causes ||
-        [],
-        null,
-        2
-      )
-    );
-
-    console.error(
-      "========================================"
-    );
-
     return res.status(
-      erro?.status >= 400 &&
-      erro?.status < 600
-        ? erro.status
+      erro?.response?.status >= 400 &&
+      erro?.response?.status < 600
+        ? erro.response.status
         : 500
     ).json({
-
       sucesso: false,
 
       erro:
+        erro?.response?.data?.errors?.[0]
+          ?.description ||
         erro?.message ||
         "Erro ao consultar pagamento.",
-
-      causas:
-        erro?.response?.data ||
-        erro?.causes ||
-        [],
     });
-
   }
 }
 
-// ============================================================
-// EXPORTAR
-// ============================================================
-
 module.exports = {
   gerarPix,
+  gerarCredito,
+  gerarDebito,
+  registrarDinheiro,
   consultar,
 };
