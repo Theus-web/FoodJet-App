@@ -21,9 +21,13 @@ class PaymentScreen extends StatefulWidget {
 
   final String formaPagamento;
 
+  // ID DO PEDIDO JÁ CRIADO PELO OrderReviewScreen
+  final String pedidoId;
+
   const PaymentScreen({
     super.key,
     required this.endereco,
+    required this.pedidoId,
     required this.itens,
     required this.subtotal,
     required this.restauranteId,
@@ -68,17 +72,11 @@ class _PaymentScreenState extends State<PaymentScreen> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(texto),
-        backgroundColor:
-            erro ? Colors.red.shade700 : laranja,
+        backgroundColor: erro ? Colors.red.shade700 : laranja,
         behavior: SnackBarBehavior.floating,
       ),
     );
   }
-
-  // ============================================================
-  // TOKEN PADRONIZADO
-  // ============================================================
-
 
   // ============================================================
   // INICIAR PAGAMENTO
@@ -107,6 +105,16 @@ class _PaymentScreenState extends State<PaymentScreen> {
       return;
     }
 
+    if (widget.pedidoId.trim().isEmpty) {
+      _mensagem(
+        'Pedido não identificado.',
+        erro: true,
+      );
+
+      Navigator.pop(context);
+      return;
+    }
+
     if (total <= 0) {
       _mensagem(
         'O valor do pedido é inválido.',
@@ -117,13 +125,15 @@ class _PaymentScreenState extends State<PaymentScreen> {
       return;
     }
 
-    final forma = widget.formaPagamento
-        .trim()
-        .toUpperCase();
+    final forma = widget.formaPagamento.trim().toUpperCase();
 
-    debugPrint(
-      '💳 FORMA DE PAGAMENTO RECEBIDA: $forma',
-    );
+    debugPrint('========================================');
+    debugPrint('💳 FOODJET - INICIAR PAGAMENTO');
+    debugPrint('🆔 PEDIDO ID: ${widget.pedidoId}');
+    debugPrint('🏪 RESTAURANTE: ${widget.restauranteId}');
+    debugPrint('💰 TOTAL: $total');
+    debugPrint('💳 FORMA: $forma');
+    debugPrint('========================================');
 
     // ==========================================================
     // PIX
@@ -134,6 +144,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => PixCheckoutPage(
+            pedidoId: widget.pedidoId,
             total: total,
             subtotal: widget.subtotal,
             taxaEntrega: widget.taxaEntrega,
@@ -159,6 +170,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => CardPaymentPage(
+            pedidoId: widget.pedidoId,
             formaPagamento: 'CREDITO',
             total: total,
             subtotal: widget.subtotal,
@@ -185,6 +197,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => CardPaymentPage(
+            pedidoId: widget.pedidoId,
             formaPagamento: 'DEBITO',
             total: total,
             subtotal: widget.subtotal,
@@ -209,6 +222,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
         context,
         MaterialPageRoute(
           builder: (_) => CashPaymentPage(
+            pedidoId: widget.pedidoId,
             total: total,
             subtotal: widget.subtotal,
             taxaEntrega: widget.taxaEntrega,
@@ -247,6 +261,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
 // ============================================================================
 
 class CardPaymentPage extends StatefulWidget {
+  final String pedidoId;
   final String formaPagamento;
   final double total;
   final double subtotal;
@@ -258,6 +273,7 @@ class CardPaymentPage extends StatefulWidget {
 
   const CardPaymentPage({
     super.key,
+    required this.pedidoId,
     required this.formaPagamento,
     required this.total,
     required this.subtotal,
@@ -269,27 +285,18 @@ class CardPaymentPage extends StatefulWidget {
   });
 
   @override
-  State<CardPaymentPage> createState() =>
-      _CardPaymentPageState();
+  State<CardPaymentPage> createState() => _CardPaymentPageState();
 }
 
-class _CardPaymentPageState
-    extends State<CardPaymentPage> {
+class _CardPaymentPageState extends State<CardPaymentPage> {
   static const Color laranja = Color(0xFFF97316);
 
   final _formKey = GlobalKey<FormState>();
 
-  final numeroController =
-      TextEditingController();
-
-  final nomeController =
-      TextEditingController();
-
-  final validadeController =
-      TextEditingController();
-
-  final cvvController =
-      TextEditingController();
+  final numeroController = TextEditingController();
+  final nomeController = TextEditingController();
+  final validadeController = TextEditingController();
+  final cvvController = TextEditingController();
 
   bool carregando = false;
 
@@ -316,12 +323,11 @@ class _CardPaymentPageState
   }
 
   // ============================================================
-  // MESMO TOKEN DO PIX
+  // TOKEN
   // ============================================================
 
   Future<String?> _obterToken() async {
-    final prefs =
-        await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
     const chaves = [
       'token',
@@ -331,25 +337,20 @@ class _CardPaymentPageState
     ];
 
     for (final chave in chaves) {
-      final valor =
-          prefs.getString(chave);
+      final valor = prefs.getString(chave);
 
       if (valor == null) {
         continue;
       }
 
-      var token =
-          valor.trim();
+      var token = valor.trim();
 
       if (token.isEmpty) {
         continue;
       }
 
-      if (token
-          .toLowerCase()
-          .startsWith('bearer ')) {
-        token =
-            token.substring(7).trim();
+      if (token.toLowerCase().startsWith('bearer ')) {
+        token = token.substring(7).trim();
       }
 
       if (token.isNotEmpty) {
@@ -374,19 +375,13 @@ class _CardPaymentPageState
   }) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(texto),
-        backgroundColor:
-            erro
-                ? Colors.red.shade700
-                : laranja,
-        behavior:
-            SnackBarBehavior.floating,
+        backgroundColor: erro ? Colors.red.shade700 : laranja,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -400,12 +395,19 @@ class _CardPaymentPageState
       return;
     }
 
-    final token =
-        await _obterToken();
+    final token = await _obterToken();
 
     if (token == null) {
       _mensagem(
         'Sessão expirada. Faça login novamente.',
+        erro: true,
+      );
+      return;
+    }
+
+    if (widget.pedidoId.trim().isEmpty) {
+      _mensagem(
+        'Pedido não identificado.',
         erro: true,
       );
       return;
@@ -418,167 +420,94 @@ class _CardPaymentPageState
     });
 
     try {
-      // ========================================================
-      // ENDPOINT CORRETO
-      // ========================================================
-
       final String endpoint;
 
       if (widget.formaPagamento == 'DEBITO') {
-        endpoint =
-            '/pagamentos/debito';
+        endpoint = '/pagamentos/debito';
       } else {
-        endpoint =
-            '/pagamentos/cartao';
+        endpoint = '/pagamentos/cartao';
       }
 
       final url = Uri.parse(
         '${Api.baseUrl}$endpoint',
       );
 
-      debugPrint(
-        '========================================',
-      );
+      debugPrint('========================================');
+      debugPrint('💳 FOODJET PAGAMENTO');
+      debugPrint('🆔 PEDIDO ID: ${widget.pedidoId}');
+      debugPrint('💳 FORMA: ${widget.formaPagamento}');
+      debugPrint('📍 ENDPOINT: $endpoint');
+      debugPrint('========================================');
 
-      debugPrint(
-        '💳 FOODJET PAGAMENTO',
-      );
-
-      debugPrint(
-        'FORMA: ${widget.formaPagamento}',
-      );
-
-      debugPrint(
-        'ENDPOINT: $endpoint',
-      );
-
-      debugPrint(
-        'TOKEN: ${token.isNotEmpty ? "SIM" : "NÃO"}',
-      );
-
-      debugPrint(
-        '========================================',
-      );
-
-      // ========================================================
-      // ITENS
-      // ========================================================
-
-      final itens =
-          widget.itens.map((item) {
+      final itens = widget.itens.map((item) {
         return {
-          'produtoId':
-              item.nome,
-          'nome':
-              item.nome,
-          'quantidade':
-              item.quantidade,
-          'preco':
-              item.preco,
-          'valor':
-              item.preco *
-                  item.quantidade,
+          'produtoId': item.nome,
+          'nome': item.nome,
+          'quantidade': item.quantidade,
+          'preco': item.preco,
+          'valor': item.preco * item.quantidade,
         };
       }).toList();
 
-      // ========================================================
-      // BODY
-      // ========================================================
-
       final body = {
-        'valor':
-            double.parse(
-          widget.total
-              .toStringAsFixed(2),
+        // ======================================================
+        // PEDIDO JÁ EXISTENTE
+        // ======================================================
+
+        'pedidoId': widget.pedidoId,
+
+        'valor': double.parse(
+          widget.total.toStringAsFixed(2),
         ),
 
-        'total':
-            double.parse(
-          widget.total
-              .toStringAsFixed(2),
+        'total': double.parse(
+          widget.total.toStringAsFixed(2),
         ),
 
-        'subtotal':
-            double.parse(
-          widget.subtotal
-              .toStringAsFixed(2),
+        'subtotal': double.parse(
+          widget.subtotal.toStringAsFixed(2),
         ),
 
-        'taxaEntrega':
-            double.parse(
-          widget.taxaEntrega
-              .toStringAsFixed(2),
+        'taxaEntrega': double.parse(
+          widget.taxaEntrega.toStringAsFixed(2),
         ),
 
-        'taxaServico':
-            double.parse(
-          widget.taxaServico
-              .toStringAsFixed(2),
+        'taxaServico': double.parse(
+          widget.taxaServico.toStringAsFixed(2),
         ),
 
-        'restauranteId':
-            widget.restauranteId,
+        'restauranteId': widget.restauranteId,
 
-        'formaPagamento':
-            widget.formaPagamento,
+        'formaPagamento': widget.formaPagamento,
 
-        'endereco':
-            widget.endereco,
+        'endereco': widget.endereco,
 
-        'itens':
-            itens,
+        'itens': itens,
 
-        // Para o débito o Asaas não processa
-        // os dados diretamente pela API.
-        //
-        // Para crédito, o backend pode usar
-        // os dados conforme sua implementação.
         'cartao': {
-          'numero':
-              numeroController.text
-                  .replaceAll(
-                    ' ',
-                    '',
-                  ),
-
-          'nome':
-              nomeController.text
-                  .trim(),
-
-          'validade':
-              validadeController.text
-                  .trim(),
-
-          'cvv':
-              cvvController.text
-                  .trim(),
+          'numero': numeroController.text.replaceAll(
+            ' ',
+            '',
+          ),
+          'nome': nomeController.text.trim(),
+          'validade': validadeController.text.trim(),
+          'cvv': cvvController.text.trim(),
         },
       };
 
-      // ========================================================
-      // POST COM BEARER
-      // ========================================================
-
-      final response =
-          await http.post(
-        url,
-
-        headers: {
-          'Content-Type':
-              'application/json',
-
-          // MESMO PADRÃO DO PIX
-          'Authorization':
-              'Bearer $token',
-        },
-
-        body:
-            jsonEncode(body),
-      ).timeout(
-        const Duration(
-          seconds: 60,
-        ),
-      );
+      final response = await http
+          .post(
+            url,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+              'Authorization': 'Bearer $token',
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(
+            const Duration(seconds: 60),
+          );
 
       debugPrint(
         '💳 HTTP: ${response.statusCode}',
@@ -591,19 +520,12 @@ class _CardPaymentPageState
       dynamic dados;
 
       try {
-        dados =
-            jsonDecode(
-          response.body,
-        );
+        dados = jsonDecode(response.body);
       } catch (_) {
         throw Exception(
           'Resposta inválida do servidor.',
         );
       }
-
-      // ========================================================
-      // ERRO HTTP
-      // ========================================================
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300) {
@@ -612,29 +534,20 @@ class _CardPaymentPageState
 
         if (dados is Map) {
           mensagem =
-              dados['erro']
-                      ?.toString() ??
-                  dados['message']
-                      ?.toString() ??
-                  dados['error']
-                      ?.toString() ??
-                  mensagem;
+              dados['erro']?.toString() ??
+              dados['message']?.toString() ??
+              dados['error']?.toString() ??
+              mensagem;
         }
 
-        throw Exception(
-          mensagem,
-        );
+        throw Exception(mensagem);
       }
-
-      // ========================================================
-      // ERRO DE NEGÓCIO
-      // ========================================================
 
       if (dados is Map &&
           dados['sucesso'] == false) {
         throw Exception(
-          dados['erro']
-                  ?.toString() ??
+          dados['erro']?.toString() ??
+              dados['message']?.toString() ??
               'Pagamento não aprovado.',
         );
       }
@@ -643,13 +556,10 @@ class _CardPaymentPageState
       // DÉBITO
       // ========================================================
 
-      if (widget.formaPagamento ==
-          'DEBITO') {
-        final invoiceUrl =
-            dados is Map
-                ? dados['invoiceUrl']
-                    ?.toString()
-                : null;
+      if (widget.formaPagamento == 'DEBITO') {
+        final invoiceUrl = dados is Map
+            ? dados['invoiceUrl']?.toString()
+            : null;
 
         if (invoiceUrl != null &&
             invoiceUrl.isNotEmpty) {
@@ -658,27 +568,19 @@ class _CardPaymentPageState
           );
 
           await Future.delayed(
-            const Duration(
-              milliseconds: 700,
-            ),
+            const Duration(milliseconds: 700),
           );
 
           if (!mounted) return;
 
-          // Não abrimos URL automaticamente
-          // para evitar depender de pacote externo.
-          //
-          // Exibe a URL para o usuário copiar.
           await showDialog(
             context: context,
             builder: (_) {
               return AlertDialog(
-                title:
-                    const Text(
+                title: const Text(
                   'Pagamento com débito',
                 ),
-                content:
-                    SelectableText(
+                content: SelectableText(
                   invoiceUrl,
                 ),
                 actions: [
@@ -686,32 +588,25 @@ class _CardPaymentPageState
                     onPressed: () {
                       Clipboard.setData(
                         ClipboardData(
-                          text:
-                              invoiceUrl,
+                          text: invoiceUrl,
                         ),
                       );
 
-                      Navigator.pop(
-                        context,
-                      );
+                      Navigator.pop(context);
 
                       _mensagem(
                         'Link da fatura copiado.',
                       );
                     },
-                    child:
-                        const Text(
+                    child: const Text(
                       'COPIAR LINK',
                     ),
                   ),
                   TextButton(
                     onPressed: () {
-                      Navigator.pop(
-                        context,
-                      );
+                      Navigator.pop(context);
                     },
-                    child:
-                        const Text(
+                    child: const Text(
                       'FECHAR',
                     ),
                   ),
@@ -731,22 +626,18 @@ class _CardPaymentPageState
       if (!mounted) return;
 
       _mensagem(
-        widget.formaPagamento ==
-                'CREDITO'
+        widget.formaPagamento == 'CREDITO'
             ? 'Pagamento com cartão de crédito enviado para processamento.'
             : 'Pagamento enviado para processamento.',
       );
 
       await Future.delayed(
-        const Duration(
-          milliseconds: 800,
-        ),
+        const Duration(milliseconds: 800),
       );
 
       if (!mounted) return;
 
       Navigator.pop(context);
-
     } catch (e) {
       debugPrint(
         '❌ ERRO CARTÃO/DÉBITO: $e',
@@ -755,14 +646,12 @@ class _CardPaymentPageState
       if (!mounted) return;
 
       _mensagem(
-        e.toString()
-            .replaceFirst(
+        e.toString().replaceFirst(
           'Exception: ',
           '',
         ),
         erro: true,
       );
-
     } finally {
       if (mounted) {
         setState(() {
@@ -778,120 +667,78 @@ class _CardPaymentPageState
   ) {
     return InputDecoration(
       labelText: label,
-      prefixIcon:
-          Icon(icon),
+      prefixIcon: Icon(icon),
       filled: true,
-      fillColor:
-          Colors.white,
-      border:
-          OutlineInputBorder(
-        borderRadius:
-            BorderRadius.circular(
-          14,
-        ),
-        borderSide:
-            BorderSide.none,
+      fillColor: Colors.white,
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(14),
+        borderSide: BorderSide.none,
       ),
     );
   }
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
+  Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          const Color(0xFFF7F7F7),
-
+      backgroundColor: const Color(0xFFF7F7F7),
       appBar: AppBar(
-        backgroundColor:
-            Colors.white,
-        foregroundColor:
-            Colors.black87,
+        backgroundColor: Colors.white,
+        foregroundColor: Colors.black87,
         elevation: 0,
         title: Text(
           titulo,
-          style:
-              const TextStyle(
-            fontWeight:
-                FontWeight.bold,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
           ),
         ),
       ),
-
       body: SafeArea(
         child: Form(
           key: _formKey,
-
-          child:
-              SingleChildScrollView(
-            padding:
-                const EdgeInsets.all(
-              18,
-            ),
-
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(18),
             child: Column(
               children: [
                 Container(
-                  width:
-                      double.infinity,
-
-                  padding:
-                      const EdgeInsets.all(
-                    16,
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-
-                  decoration:
-                      BoxDecoration(
-                    color:
-                        Colors.white,
-                    borderRadius:
-                        BorderRadius.circular(
-                      16,
-                    ),
-                  ),
-
                   child: Row(
                     children: [
                       const Icon(
                         Icons.credit_card,
-                        color:
-                            laranja,
+                        color: laranja,
                         size: 30,
                       ),
-
-                      const SizedBox(
-                        width: 12,
-                      ),
-
+                      const SizedBox(width: 12),
                       Expanded(
-                        child:
-                            Column(
+                        child: Column(
                           crossAxisAlignment:
                               CrossAxisAlignment.start,
-
                           children: [
                             Text(
                               titulo,
-                              style:
-                                  const TextStyle(
-                                fontSize:
-                                    17,
-                                fontWeight:
-                                    FontWeight.bold,
+                              style: const TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.bold,
                               ),
                             ),
-
-                            const SizedBox(
-                              height: 4,
+                            const SizedBox(height: 4),
+                            Text(
+                              'Pedido #${widget.pedidoId}',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 12,
+                              ),
                             ),
-
+                            const SizedBox(height: 3),
                             Text(
                               'Total: ${dinheiro(widget.total)}',
-                              style:
-                                  TextStyle(
-                                color:
-                                    Colors.grey.shade600,
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
                               ),
                             ),
                           ],
@@ -901,45 +748,24 @@ class _CardPaymentPageState
                   ),
                 ),
 
-                const SizedBox(
-                  height: 18,
-                ),
+                const SizedBox(height: 18),
 
                 TextFormField(
-                  controller:
-                      numeroController,
-
-                  keyboardType:
-                      TextInputType.number,
-
+                  controller: numeroController,
+                  keyboardType: TextInputType.number,
                   inputFormatters: [
-                    FilteringTextInputFormatter
-                        .digitsOnly,
-
-                    LengthLimitingTextInputFormatter(
-                      16,
-                    ),
+                    FilteringTextInputFormatter.digitsOnly,
+                    LengthLimitingTextInputFormatter(16),
                   ],
-
-                  decoration:
-                      _decoracao(
+                  decoration: _decoracao(
                     'Número do cartão',
                     Icons.credit_card,
                   ),
-
-                  validator: (
-                    value,
-                  ) {
+                  validator: (value) {
                     final numero =
-                        value
-                                ?.replaceAll(
-                              ' ',
-                              '',
-                            ) ??
-                            '';
+                        value?.replaceAll(' ', '') ?? '';
 
-                    if (numero.length <
-                        13) {
+                    if (numero.length < 13) {
                       return 'Digite o número do cartão';
                     }
 
@@ -947,32 +773,19 @@ class _CardPaymentPageState
                   },
                 ),
 
-                const SizedBox(
-                  height: 14,
-                ),
+                const SizedBox(height: 14),
 
                 TextFormField(
-                  controller:
-                      nomeController,
-
+                  controller: nomeController,
                   textCapitalization:
-                      TextCapitalization
-                          .words,
-
-                  decoration:
-                      _decoracao(
+                      TextCapitalization.words,
+                  decoration: _decoracao(
                     'Nome no cartão',
                     Icons.person_outline,
                   ),
-
-                  validator: (
-                    value,
-                  ) {
-                    if (value ==
-                            null ||
-                        value
-                            .trim()
-                            .isEmpty) {
+                  validator: (value) {
+                    if (value == null ||
+                        value.trim().isEmpty) {
                       return 'Digite o nome do cartão';
                     }
 
@@ -980,43 +793,25 @@ class _CardPaymentPageState
                   },
                 ),
 
-                const SizedBox(
-                  height: 14,
-                ),
+                const SizedBox(height: 14),
 
                 Row(
                   children: [
                     Expanded(
-                      child:
-                          TextFormField(
-                        controller:
-                            validadeController,
-
-                        keyboardType:
-                            TextInputType
-                                .number,
-
+                      child: TextFormField(
+                        controller: validadeController,
+                        keyboardType: TextInputType.number,
                         inputFormatters: [
-                          FilteringTextInputFormatter
-                              .digitsOnly,
-
-                           LengthLimitingTextInputFormatter(
-                            4,
-                          ),
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(4),
                         ],
-
-                        decoration:
-                            _decoracao(
+                        decoration: _decoracao(
                           'Validade',
                           Icons.date_range,
                         ),
-
-                        validator:
-                            (value) {
-                          if (value ==
-                                  null ||
-                              value.length !=
-                                  4) {
+                        validator: (value) {
+                          if (value == null ||
+                              value.length != 4) {
                             return 'MM/AA';
                           }
 
@@ -1025,44 +820,24 @@ class _CardPaymentPageState
                       ),
                     ),
 
-                    const SizedBox(
-                      width: 12,
-                    ),
+                    const SizedBox(width: 12),
 
                     Expanded(
-                      child:
-                          TextFormField(
-                        controller:
-                            cvvController,
-
-                        keyboardType:
-                            TextInputType
-                                .number,
-
-                        obscureText:
-                            true,
-
+                      child: TextFormField(
+                        controller: cvvController,
+                        keyboardType: TextInputType.number,
+                        obscureText: true,
                         inputFormatters: [
-                          FilteringTextInputFormatter
-                              .digitsOnly,
-
-                           LengthLimitingTextInputFormatter(
-                            4,
-                          ),
+                          FilteringTextInputFormatter.digitsOnly,
+                          LengthLimitingTextInputFormatter(4),
                         ],
-
-                        decoration:
-                            _decoracao(
+                        decoration: _decoracao(
                           'CVV',
                           Icons.lock_outline,
                         ),
-
-                        validator:
-                            (value) {
-                          if (value ==
-                                  null ||
-                              value.length <
-                                  3) {
+                        validator: (value) {
+                          if (value == null ||
+                              value.length < 3) {
                             return 'CVV inválido';
                           }
 
@@ -1073,53 +848,27 @@ class _CardPaymentPageState
                   ],
                 ),
 
-                const SizedBox(
-                  height: 22,
-                ),
+                const SizedBox(height: 22),
 
                 Container(
-                  width:
-                      double.infinity,
-
-                  padding:
-                      const EdgeInsets.all(
-                    14,
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFFAF4),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-
-                  decoration:
-                      BoxDecoration(
-                    color:
-                        const Color(
-                      0xFFEFFAF4,
-                    ),
-
-                    borderRadius:
-                        BorderRadius.circular(
-                      14,
-                    ),
-                  ),
-
                   child: const Row(
                     children: [
                       Icon(
-                        Icons
-                            .verified_user_outlined,
-                        color:
-                            Colors.green,
+                        Icons.verified_user_outlined,
+                        color: Colors.green,
                       ),
-
-                      SizedBox(
-                        width: 9,
-                      ),
-
+                      SizedBox(width: 9),
                       Expanded(
-                        child:
-                            Text(
+                        child: Text(
                           'Pagamento processado com segurança.',
-                          style:
-                              TextStyle(
-                            fontSize:
-                                12,
+                          style: TextStyle(
+                            fontSize: 12,
                           ),
                         ),
                       ),
@@ -1127,68 +876,40 @@ class _CardPaymentPageState
                   ),
                 ),
 
-                const SizedBox(
-                  height: 22,
-                ),
+                const SizedBox(height: 22),
 
                 SizedBox(
-                  width:
-                      double.infinity,
-
+                  width: double.infinity,
                   height: 56,
-
-                  child:
-                      ElevatedButton(
+                  child: ElevatedButton(
                     onPressed:
-                        carregando
-                            ? null
-                            : _pagar,
-
-                    style:
-                        ElevatedButton
-                            .styleFrom(
-                      backgroundColor:
-                          laranja,
-
-                      foregroundColor:
-                          Colors.white,
-
+                        carregando ? null : _pagar,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: laranja,
+                      foregroundColor: Colors.white,
                       elevation: 0,
-
-                      shape:
-                          RoundedRectangleBorder(
+                      shape: RoundedRectangleBorder(
                         borderRadius:
-                            BorderRadius.circular(
-                          16,
-                        ),
+                            BorderRadius.circular(16),
                       ),
                     ),
-
-                    child:
-                        carregando
-                            ? const SizedBox(
-                                width:
-                                    24,
-                                height:
-                                    24,
-                                child:
-                                    CircularProgressIndicator(
-                                  color:
-                                      Colors.white,
-                                  strokeWidth:
-                                      2.5,
-                                ),
-                              )
-                            : Text(
-                                'PAGAR ${dinheiro(widget.total)}',
-                                style:
-                                    const TextStyle(
-                                  fontWeight:
-                                      FontWeight.w800,
-                                  fontSize:
-                                      15,
-                                ),
-                              ),
+                    child: carregando
+                        ? const SizedBox(
+                            width: 24,
+                            height: 24,
+                            child:
+                                CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2.5,
+                            ),
+                          )
+                        : Text(
+                            'PAGAR ${dinheiro(widget.total)}',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                            ),
+                          ),
                   ),
                 ),
               ],
@@ -1205,6 +926,7 @@ class _CardPaymentPageState
 // ============================================================================
 
 class CashPaymentPage extends StatefulWidget {
+  final String pedidoId;
   final double total;
   final double subtotal;
   final double taxaEntrega;
@@ -1215,6 +937,7 @@ class CashPaymentPage extends StatefulWidget {
 
   const CashPaymentPage({
     super.key,
+    required this.pedidoId,
     required this.total,
     required this.subtotal,
     required this.taxaEntrega,
@@ -1240,10 +963,6 @@ class _CashPaymentPageState
     return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 
-  // ============================================================
-  // MESMO TOKEN
-  // ============================================================
-
   Future<String?> _obterToken() async {
     final prefs =
         await SharedPreferences.getInstance();
@@ -1270,25 +989,15 @@ class _CashPaymentPageState
         continue;
       }
 
-      if (token
-          .toLowerCase()
-          .startsWith('bearer ')) {
+      if (token.toLowerCase().startsWith('bearer ')) {
         token =
             token.substring(7).trim();
       }
 
       if (token.isNotEmpty) {
-        debugPrint(
-          '🔐 TOKEN ENCONTRADO PARA PAGAMENTO: $chave',
-        );
-
         return token;
       }
     }
-
-    debugPrint(
-      '❌ NENHUM TOKEN ENCONTRADO NO STORAGE',
-    );
 
     return null;
   }
@@ -1316,6 +1025,13 @@ class _CashPaymentPageState
     );
   }
 
+  // ============================================================
+  // CONFIRMAR PEDIDO EM DINHEIRO
+  //
+  // O pedido já foi criado pelo OrderReviewScreen.
+  // Portanto NÃO criamos outro POST /orders aqui.
+  // ============================================================
+
   Future<void> _confirmarPedido() async {
     final token =
         await _obterToken();
@@ -1328,6 +1044,14 @@ class _CashPaymentPageState
       return;
     }
 
+    if (widget.pedidoId.trim().isEmpty) {
+      _mensagem(
+        'Pedido não identificado.',
+        erro: true,
+      );
+      return;
+    }
+
     if (!mounted) return;
 
     setState(() {
@@ -1335,113 +1059,21 @@ class _CashPaymentPageState
     });
 
     try {
-      final url = Uri.parse(
-        '${Api.baseUrl}/orders',
-      );
+      /*
+       * O pedido já foi criado anteriormente.
+       *
+       * Não fazemos POST /orders novamente aqui,
+       * pois isso criaria pedido duplicado.
+       *
+       * O pedido já está registrado como DINHEIRO
+       * pelo fluxo anterior.
+       */
 
-      final itens =
-          widget.itens.map((item) {
-        return {
-          'produtoId':
-              item.nome,
-          'nome':
-              item.nome,
-          'quantidade':
-              item.quantidade,
-          'preco':
-              item.preco,
-          'valor':
-              item.preco *
-                  item.quantidade,
-        };
-      }).toList();
-
-      final body = {
-        'restauranteId':
-            widget.restauranteId,
-
-        'formaPagamento':
-            'DINHEIRO',
-
-        'pagamento':
-            'DINHEIRO',
-
-        'statusPagamento':
-            'PENDING',
-
-        'subtotal':
-            widget.subtotal,
-
-        'taxaEntrega':
-            widget.taxaEntrega,
-
-        'taxaServico':
-            widget.taxaServico,
-
-        'total':
-            widget.total,
-
-        'endereco':
-            widget.endereco,
-
-        'itens':
-            itens,
-      };
-
-      final response =
-          await http.post(
-        url,
-
-        headers: {
-          'Content-Type':
-              'application/json',
-
-          'Authorization':
-              'Bearer $token',
-        },
-
-        body:
-            jsonEncode(body),
-      ).timeout(
-        const Duration(
-          seconds: 30,
-        ),
-      );
-
-      debugPrint(
-        '💵 HTTP: ${response.statusCode}',
-      );
-
-      debugPrint(
-        '💵 BODY: ${response.body}',
-      );
-
-      final dados =
-          jsonDecode(
-        response.body,
-      );
-
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300) {
-        throw Exception(
-          dados is Map
-              ? dados['erro']
-                      ?.toString() ??
-                  dados['message']
-                      ?.toString() ??
-                  'Não foi possível criar o pedido.'
-              : 'Não foi possível criar o pedido.',
-        );
-      }
-
-      if (dados is Map &&
-          dados['sucesso'] == false) {
-        throw Exception(
-          dados['erro']
-                  ?.toString() ??
-              'Não foi possível criar o pedido.',
-        );
-      }
+      debugPrint('========================================');
+      debugPrint('💵 FOODJET - PAGAMENTO EM DINHEIRO');
+      debugPrint('🆔 PEDIDO ID: ${widget.pedidoId}');
+      debugPrint('💰 TOTAL: ${widget.total}');
+      debugPrint('========================================');
 
       if (!mounted) return;
 
@@ -1461,7 +1093,6 @@ class _CashPaymentPageState
         context,
         (route) => route.isFirst,
       );
-
     } catch (e) {
       debugPrint(
         '❌ ERRO DINHEIRO: $e',
@@ -1470,14 +1101,12 @@ class _CashPaymentPageState
       if (!mounted) return;
 
       _mensagem(
-        e.toString()
-            .replaceFirst(
+        e.toString().replaceFirst(
           'Exception: ',
           '',
         ),
         erro: true,
       );
-
     } finally {
       if (mounted) {
         setState(() {
@@ -1545,7 +1174,6 @@ class _CashPaymentPageState
                     Container(
                       width: 72,
                       height: 72,
-
                       decoration:
                           const BoxDecoration(
                         color:
@@ -1553,11 +1181,9 @@ class _CashPaymentPageState
                         shape:
                             BoxShape.circle,
                       ),
-
                       child:
                           const Icon(
-                        Icons
-                            .payments_outlined,
+                        Icons.payments_outlined,
                         color:
                             laranja,
                         size: 38,
@@ -1599,7 +1225,22 @@ class _CashPaymentPageState
                     ),
 
                     const SizedBox(
-                      height: 18,
+                      height: 14,
+                    ),
+
+                    Text(
+                      'Pedido #${widget.pedidoId}',
+                      style:
+                          TextStyle(
+                        color:
+                            Colors.grey.shade600,
+                        fontSize:
+                            12,
+                      ),
+                    ),
+
+                    const SizedBox(
+                      height: 10,
                     ),
 
                     Text(
@@ -1692,11 +1333,13 @@ class _CashPaymentPageState
 // PIX CHECKOUT ASAAS
 // ============================================================================
 
-// ============================================================================
-// PIX CHECKOUT ASAAS
-// ============================================================================
-
 class PixCheckoutPage extends StatefulWidget {
+  // ============================================================
+  // PEDIDO JÁ CRIADO
+  // ============================================================
+
+  final String pedidoId;
+
   final double total;
   final double subtotal;
   final double taxaEntrega;
@@ -1707,6 +1350,7 @@ class PixCheckoutPage extends StatefulWidget {
 
   const PixCheckoutPage({
     super.key,
+    required this.pedidoId,
     required this.total,
     required this.subtotal,
     required this.taxaEntrega,
@@ -1721,9 +1365,13 @@ class PixCheckoutPage extends StatefulWidget {
       _PixCheckoutPageState();
 }
 
-class _PixCheckoutPageState extends State<PixCheckoutPage> {
-  static const Color laranja = Color(0xFFF97316);
-  static const Color verdePix = Color(0xFF00A884);
+class _PixCheckoutPageState
+    extends State<PixCheckoutPage> {
+  static const Color laranja =
+      Color(0xFFF97316);
+
+  static const Color verdePix =
+      Color(0xFF00A884);
 
   bool carregando = true;
   bool erro = false;
@@ -1731,7 +1379,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   String mensagemErro = '';
 
   // ID DO PEDIDO FOODJET
-  String? pedidoId;
+  late String pedidoId;
 
   // ID DO PAGAMENTO ASAAS
   String? pagamentoId;
@@ -1745,6 +1393,9 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   @override
   void initState() {
     super.initState();
+
+    pedidoId =
+        widget.pedidoId;
 
     _iniciarFluxoPix();
   }
@@ -1764,7 +1415,8 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   // ============================================================
 
   Future<String?> _obterToken() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs =
+        await SharedPreferences.getInstance();
 
     const chaves = [
       'token',
@@ -1774,20 +1426,25 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
     ];
 
     for (final chave in chaves) {
-      final valor = prefs.getString(chave);
+      final valor =
+          prefs.getString(chave);
 
       if (valor == null) {
         continue;
       }
 
-      var token = valor.trim();
+      var token =
+          valor.trim();
 
       if (token.isEmpty) {
         continue;
       }
 
-      if (token.toLowerCase().startsWith('bearer ')) {
-        token = token.substring(7).trim();
+      if (token
+          .toLowerCase()
+          .startsWith('bearer ')) {
+        token =
+            token.substring(7).trim();
       }
 
       if (token.isNotEmpty) {
@@ -1807,7 +1464,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   }
 
   // ============================================================
-  // DECODIFICAR RESPOSTA DO BACKEND COM DIAGNÓSTICO COMPLETO
+  // DECODIFICAR RESPOSTA
   // ============================================================
 
   dynamic _decodificarResposta(
@@ -1818,7 +1475,9 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
     debugPrint('========================================');
     debugPrint('🌐 RESPOSTA DO SERVIDOR');
     debugPrint('📍 ORIGEM: $origem');
-    debugPrint('📊 STATUS HTTP: ${response.statusCode}');
+    debugPrint(
+      '📊 STATUS HTTP: ${response.statusCode}',
+    );
     debugPrint(
       '📄 CONTENT-TYPE: ${response.headers['content-type'] ?? 'não informado'}',
     );
@@ -1827,7 +1486,8 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
     debugPrint('========================================');
     debugPrint('');
 
-    final body = response.body.trim();
+    final body =
+        response.body.trim();
 
     if (body.isEmpty) {
       throw Exception(
@@ -1838,10 +1498,21 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
     try {
       return jsonDecode(body);
     } catch (e) {
-      debugPrint('❌ ERRO AO DECODIFICAR JSON');
-      debugPrint('📍 ORIGEM: $origem');
-      debugPrint('❌ ERRO: $e');
-      debugPrint('📦 RESPOSTA RECEBIDA: $body');
+      debugPrint(
+        '❌ ERRO AO DECODIFICAR JSON',
+      );
+
+      debugPrint(
+        '📍 ORIGEM: $origem',
+      );
+
+      debugPrint(
+        '❌ ERRO: $e',
+      );
+
+      debugPrint(
+        '📦 RESPOSTA RECEBIDA: $body',
+      );
 
       throw Exception(
         '$origem: o servidor não retornou JSON válido. HTTP ${response.statusCode}.',
@@ -1850,367 +1521,216 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   }
 
   // ============================================================
-  // INICIAR FLUXO COMPLETO
+  // INICIAR PIX
   //
-  // 1. CRIA PEDIDO
-  // 2. RECEBE pedidoId
-  // 3. CRIA PIX NO ASAAS
+  // IMPORTANTE:
+  //
+  // O pedido JÁ FOI CRIADO pelo OrderReviewScreen.
+  //
+  // Portanto:
+  //
+  // NÃO fazemos POST /orders aqui.
+  //
+  // Apenas:
+  //
+  // 1. Recebemos pedidoId
+  // 2. Enviamos pedidoId para /pagamentos/pix
+  // 3. O backend cria o pagamento no Asaas
+  // 4. O webhook usa a referência do pedido
   // ============================================================
 
   Future<void> _iniciarFluxoPix() async {
-  debugPrint('🚀 ========================================');
-  debugPrint('🚀 INICIANDO FLUXO PIX');
-  debugPrint('🚀 ========================================');
-
-  debugPrint('🏪 restauranteId: ${widget.restauranteId}');
-  debugPrint('💰 subtotal: ${widget.subtotal}');
-  debugPrint('🚚 taxaEntrega: ${widget.taxaEntrega}');
-  debugPrint('⚙️ taxaServico: ${widget.taxaServico}');
-  debugPrint('💰 TOTAL: ${widget.total}');
-  debugPrint('🛒 ITENS: ${widget.itens.length}');
-  debugPrint('🌐 API BASE: ${Api.baseUrl}');
-
-  if (!mounted) return;
-
-  setState(() {
-    carregando = true;
-    erro = false;
-    mensagemErro = '';
-  });
-
-  try {
-    debugPrint('✅ Entrou no try do PIX');
-
-    if (widget.itens.isEmpty) {
-      debugPrint('❌ ERRO: carrinho vazio');
-
-      throw Exception(
-        'Seu carrinho está vazio.',
-      );
-    }
-
-    if (widget.restauranteId.trim().isEmpty) {
-      debugPrint('❌ ERRO: restauranteId vazio');
-
-      throw Exception(
-        'Restaurante não identificado.',
-      );
-    }
-
-    if (widget.total <= 0) {
-      debugPrint(
-        '❌ ERRO: total inválido: ${widget.total}',
-      );
-
-      throw Exception(
-        'O valor do pedido é inválido.',
-      );
-    }
-
-    debugPrint('✅ Validações iniciais OK');
-
-    final token = await _obterToken();
-
     debugPrint(
-      '🔐 Token retornado: ${token != null ? "SIM" : "NÃO"}',
+      '🚀 ========================================',
     );
 
-    if (token == null) {
-      throw Exception(
-        'Sessão expirada. Faça login novamente.',
-      );
-    }
-
-    debugPrint('➡️ Chamando _criarPedido()');
-
-    final id = await _criarPedido(token);
-
     debugPrint(
-      '✅ _criarPedido() terminou: $id',
+      '🚀 INICIANDO FLUXO PIX ASAAS',
     );
 
-    pedidoId = id;
-
     debugPrint(
-      '➡️ Chamando _gerarPix()',
+      '🚀 ========================================',
     );
 
-    await _gerarPix(token);
+    debugPrint(
+      '🆔 pedidoId: ${widget.pedidoId}',
+    );
 
     debugPrint(
-      '✅ _gerarPix() terminou com sucesso',
+      '🏪 restauranteId: ${widget.restauranteId}',
+    );
+
+    debugPrint(
+      '💰 subtotal: ${widget.subtotal}',
+    );
+
+    debugPrint(
+      '🚚 taxaEntrega: ${widget.taxaEntrega}',
+    );
+
+    debugPrint(
+      '⚙️ taxaServico: ${widget.taxaServico}',
+    );
+
+    debugPrint(
+      '💰 TOTAL: ${widget.total}',
+    );
+
+    debugPrint(
+      '🛒 ITENS: ${widget.itens.length}',
+    );
+
+    debugPrint(
+      '🌐 API BASE: ${Api.baseUrl}',
     );
 
     if (!mounted) return;
 
     setState(() {
-      carregando = false;
+      carregando = true;
       erro = false;
+      mensagemErro = '';
     });
 
-    debugPrint(
-      '🎉 ========================================',
-    );
-    debugPrint(
-      '🎉 PIX PREPARADO COM SUCESSO',
-    );
-    debugPrint(
-      '🎉 ========================================',
-    );
-  } catch (e, stackTrace) {
-    debugPrint(
-      '❌ ========================================',
-    );
-    debugPrint(
-      '❌ ERRO NO FLUXO PIX',
-    );
-    debugPrint(
-      '❌ ERRO: $e',
-    );
-    debugPrint(
-      '❌ STACKTRACE: $stackTrace',
-    );
-    debugPrint(
-      '❌ ========================================',
-    );
+    try {
+      // ========================================================
+      // VALIDAÇÕES
+      // ========================================================
 
-    if (!mounted) return;
-
-    setState(() {
-      carregando = false;
-      erro = true;
-      mensagemErro = e
-          .toString()
-          .replaceFirst(
-            'Exception: ',
-            '',
-          );
-    });
-  }
-}
-
-  // ============================================================
-  // CRIAR PEDIDO
-  // ============================================================
-
-  Future<String> _criarPedido(String token) async {
-    final url = Uri.parse(
-      '${Api.baseUrl}/orders',
-    );
-
-    // ----------------------------------------------------------
-    // ITENS
-    // ----------------------------------------------------------
-
-    final itens = widget.itens.map((item) {
-      return {
-        'produtoId': item.nome,
-        'nome': item.nome,
-        'quantidade': item.quantidade,
-        'preco': item.preco,
-        'valor': item.preco * item.quantidade,
-      };
-    }).toList();
-
-    // ----------------------------------------------------------
-    // BODY DO PEDIDO
-    // ----------------------------------------------------------
-
-    final body = {
-      'restauranteId': widget.restauranteId,
-
-      'formaPagamento': 'PIX',
-
-      'pagamento': 'PIX',
-
-      // O pedido fica pendente até o webhook
-      // confirmar o pagamento no Asaas.
-      'statusPagamento': 'PENDING',
-
-      'subtotal': double.parse(
-        widget.subtotal.toStringAsFixed(2),
-      ),
-
-      'taxaEntrega': double.parse(
-        widget.taxaEntrega.toStringAsFixed(2),
-      ),
-
-      'taxaServico': double.parse(
-        widget.taxaServico.toStringAsFixed(2),
-      ),
-
-      'total': double.parse(
-        widget.total.toStringAsFixed(2),
-      ),
-
-      'endereco': widget.endereco,
-
-      'itens': itens,
-    };
-
-    debugPrint(
-      '========================================',
-    );
-
-    debugPrint(
-      '🛒 FOODJET - CRIANDO PEDIDO',
-    );
-
-    debugPrint(
-      'RESTAURANTE: ${widget.restauranteId}',
-    );
-
-    debugPrint(
-      'FORMA: PIX',
-    );
-
-    debugPrint(
-      'TOTAL: ${widget.total}',
-    );
-
-    debugPrint(
-      '========================================',
-    );
-
-    final response = await http
-        .post(
-          url,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-          body: jsonEncode(body),
-        )
-        .timeout(
-          const Duration(
-            seconds: 30,
-          ),
-        );
-
-    debugPrint(
-      '🛒 CRIAR PEDIDO HTTP: ${response.statusCode}',
-    );
-
-    debugPrint(
-      '🛒 CRIAR PEDIDO BODY: ${response.body}',
-    );
-
-    final dynamic dados = _decodificarResposta(
-      response,
-      'CRIAR PEDIDO',
-    );
-
-    // ----------------------------------------------------------
-    // ERRO HTTP
-    // ----------------------------------------------------------
-
-    if (response.statusCode < 200 ||
-        response.statusCode >= 300) {
-      String mensagem =
-          'Não foi possível criar o pedido.';
-
-      if (dados is Map) {
-        mensagem =
-            dados['erro']?.toString() ??
-            dados['message']?.toString() ??
-            dados['error']?.toString() ??
-            mensagem;
-      }
-
-      throw Exception(mensagem);
-    }
-
-    // ----------------------------------------------------------
-    // ERRO DE NEGÓCIO
-    // ----------------------------------------------------------
-
-    if (dados is Map &&
-        dados['sucesso'] == false) {
-      throw Exception(
-        dados['erro']?.toString() ??
-            dados['message']?.toString() ??
-            'Não foi possível criar o pedido.',
-      );
-    }
-
-    // ----------------------------------------------------------
-    // LOCALIZAR PEDIDO ID
-    //
-    // Aceitamos os formatos mais comuns para não depender
-    // de uma única estrutura da resposta.
-    // ----------------------------------------------------------
-
-    String? id;
-
-    if (dados is Map) {
-      // Exemplo:
-      // { "pedidoId": "123" }
-      id = _stringValue(
-        dados['pedidoId'],
-      );
-
-      // Exemplo:
-      // { "id": "123" }
-      id ??= _stringValue(
-        dados['id'],
-      );
-
-      // Exemplo:
-      // { "pedido": { "id": "123" } }
-      if (id == null &&
-          dados['pedido'] is Map) {
-        final pedido = dados['pedido'];
-
-        id = _stringValue(
-          pedido['pedidoId'],
-        );
-
-        id ??= _stringValue(
-          pedido['id'],
+      if (widget.itens.isEmpty) {
+        throw Exception(
+          'Seu carrinho está vazio.',
         );
       }
 
-      // Exemplo:
-      // { "data": { "id": "123" } }
-      if (id == null &&
-          dados['data'] is Map) {
-        final data = dados['data'];
-
-        id = _stringValue(
-          data['pedidoId'],
-        );
-
-        id ??= _stringValue(
-          data['id'],
+      if (widget.restauranteId.trim().isEmpty) {
+        throw Exception(
+          'Restaurante não identificado.',
         );
       }
-    }
 
-    if (id == null || id.isEmpty) {
+      if (widget.pedidoId.trim().isEmpty) {
+        throw Exception(
+          'Pedido não identificado.',
+        );
+      }
+
+      if (widget.total <= 0) {
+        throw Exception(
+          'O valor do pedido é inválido.',
+        );
+      }
+
       debugPrint(
-        '❌ SERVIDOR NÃO RETORNOU pedidoId',
+        '✅ Validações iniciais OK',
       );
 
-      throw Exception(
-        'O pedido foi criado, mas o servidor não retornou o ID do pedido.',
+      // ========================================================
+      // TOKEN
+      // ========================================================
+
+      final token =
+          await _obterToken();
+
+      debugPrint(
+        '🔐 Token retornado: ${token != null ? "SIM" : "NÃO"}',
       );
+
+      if (token == null) {
+        throw Exception(
+          'Sessão expirada. Faça login novamente.',
+        );
+      }
+
+      // ========================================================
+      // NÃO CRIAMOS OUTRO PEDIDO
+      // ========================================================
+
+      debugPrint(
+        '✅ Pedido já existe.',
+      );
+
+      debugPrint(
+        '🆔 USANDO PEDIDO EXISTENTE: ${widget.pedidoId}',
+      );
+
+      // ========================================================
+      // GERAR PIX
+      // ========================================================
+
+      debugPrint(
+        '➡️ Chamando _gerarPix()',
+      );
+
+      await _gerarPix(token);
+
+      debugPrint(
+        '✅ _gerarPix() terminou com sucesso',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        carregando = false;
+        erro = false;
+      });
+
+      debugPrint(
+        '🎉 ========================================',
+      );
+
+      debugPrint(
+        '🎉 PIX PREPARADO COM SUCESSO',
+      );
+
+      debugPrint(
+        '🎉 ========================================',
+      );
+    } catch (e, stackTrace) {
+      debugPrint(
+        '❌ ========================================',
+      );
+
+      debugPrint(
+        '❌ ERRO NO FLUXO PIX',
+      );
+
+      debugPrint(
+        '❌ ERRO: $e',
+      );
+
+      debugPrint(
+        '❌ STACKTRACE: $stackTrace',
+      );
+
+      debugPrint(
+        '❌ ========================================',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        carregando = false;
+        erro = true;
+
+        mensagemErro = e
+            .toString()
+            .replaceFirst(
+              'Exception: ',
+              '',
+            );
+      });
     }
-
-    debugPrint(
-      '✅ pedidoId RECEBIDO: $id',
-    );
-
-    return id;
   }
 
   // ============================================================
   // GERAR PIX ASAAS
   // ============================================================
 
-  Future<void> _gerarPix(String token) async {
-    if (pedidoId == null ||
-        pedidoId!.trim().isEmpty) {
+  Future<void> _gerarPix(
+    String token,
+  ) async {
+    if (pedidoId.trim().isEmpty) {
       throw Exception(
         'Pedido não identificado para gerar o Pix.',
       );
@@ -2220,23 +1740,22 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
       '${Api.baseUrl}/pagamentos/pix',
     );
 
-    // ----------------------------------------------------------
-    // ITENS
-    // ----------------------------------------------------------
-
-    final itens = widget.itens.map((item) {
+    final itens =
+        widget.itens.map((item) {
       return {
         'produtoId': item.nome,
         'nome': item.nome,
         'quantidade': item.quantidade,
         'preco': item.preco,
-        'valor': item.preco * item.quantidade,
+        'valor':
+            item.preco *
+                item.quantidade,
       };
     }).toList();
 
-    // ----------------------------------------------------------
+    // ==========================================================
     // BODY PIX
-    // ----------------------------------------------------------
+    // ==========================================================
 
     final body = {
       'valor': double.parse(
@@ -2263,16 +1782,20 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
           widget.restauranteId,
 
       // ========================================================
-      // AQUI ESTÁ A CORREÇÃO PRINCIPAL
+      // CORREÇÃO PRINCIPAL
       // ========================================================
 
-      'pedidoId': pedidoId,
+      'pedidoId':
+          pedidoId,
 
-      'formaPagamento': 'PIX',
+      'formaPagamento':
+          'PIX',
 
-      'endereco': widget.endereco,
+      'endereco':
+          widget.endereco,
 
-      'itens': itens,
+      'itens':
+          itens,
     };
 
     debugPrint(
@@ -2284,7 +1807,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
     );
 
     debugPrint(
-      '🆔 PEDIDO ID: $pedidoId',
+      '🆔 PEDIDO FOODJET: $pedidoId',
     );
 
     debugPrint(
@@ -2296,24 +1819,33 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
     );
 
     debugPrint(
+      '📦 BODY: ${jsonEncode(body)}',
+    );
+
+    debugPrint(
       '========================================',
     );
 
-    final response = await http
-        .post(
-          url,
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': 'Bearer $token',
-          },
-          body: jsonEncode(body),
-        )
-        .timeout(
-          const Duration(
-            seconds: 30,
-          ),
-        );
+    final response =
+        await http
+            .post(
+              url,
+              headers: {
+                'Content-Type':
+                    'application/json',
+                'Accept':
+                    'application/json',
+                'Authorization':
+                    'Bearer $token',
+              },
+              body:
+                  jsonEncode(body),
+            )
+            .timeout(
+              const Duration(
+                seconds: 30,
+              ),
+            );
 
     debugPrint(
       '💠 PIX HTTP: ${response.statusCode}',
@@ -2323,18 +1855,15 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
       '💠 PIX BODY: ${response.body}',
     );
 
-    // ----------------------------------------------------------
-    // DECODIFICAR RESPOSTA
-    // ----------------------------------------------------------
-
-    final dynamic dados = _decodificarResposta(
+    final dynamic dados =
+        _decodificarResposta(
       response,
       'GERAR PIX',
     );
 
-    // ----------------------------------------------------------
+    // ==========================================================
     // ERRO HTTP
-    // ----------------------------------------------------------
+    // ==========================================================
 
     if (response.statusCode < 200 ||
         response.statusCode >= 300) {
@@ -2349,18 +1878,24 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
             detalhe;
       }
 
-      throw Exception(detalhe);
+      throw Exception(
+        detalhe,
+      );
     }
 
-    // ----------------------------------------------------------
-    // VALIDAR SUCESSO
-    // ----------------------------------------------------------
+    // ==========================================================
+    // VALIDAR MAP
+    // ==========================================================
 
     if (dados is! Map) {
       throw Exception(
         'Resposta inválida do servidor.',
       );
     }
+
+    // ==========================================================
+    // ERRO DE NEGÓCIO
+    // ==========================================================
 
     if (dados['sucesso'] == false) {
       throw Exception(
@@ -2370,60 +1905,91 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
       );
     }
 
-    // ----------------------------------------------------------
-    // PAGAMENTO ID
-    // ----------------------------------------------------------
+    // ==========================================================
+    // PAGAMENTO ASAAS
+    // ==========================================================
 
-    pagamentoId = _stringValue(
+    pagamentoId =
+        _stringValue(
       dados['pagamentoId'],
     );
 
-    pagamentoId ??= _stringValue(
+    pagamentoId ??=
+        _stringValue(
       dados['paymentId'],
     );
 
-    pagamentoId ??= _stringValue(
+    pagamentoId ??=
+        _stringValue(
       dados['id'],
     );
 
-    // ----------------------------------------------------------
+    // ==========================================================
     // DADOS PIX
-    // ----------------------------------------------------------
+    // ==========================================================
 
-    final pix = dados['pix'] is Map
-        ? dados['pix']
-        : <dynamic, dynamic>{};
+    final pix =
+        dados['pix'] is Map
+            ? dados['pix']
+            : <dynamic, dynamic>{};
 
-    pixPayload = _stringValue(
+    pixPayload =
+        _stringValue(
       pix['qrCode'],
     );
 
-    encodedImage = _stringValue(
+    encodedImage =
+        _stringValue(
       pix['qrCodeBase64'],
     );
 
-    expirationDate = _stringValue(
+    expirationDate =
+        _stringValue(
       pix['expiracao'],
     );
 
-    // Algumas respostas podem usar
-    // nomes alternativos.
-
-    pixPayload ??= _stringValue(
+    pixPayload ??=
+        _stringValue(
       pix['payload'],
     );
 
-    encodedImage ??= _stringValue(
+    encodedImage ??=
+        _stringValue(
       pix['encodedImage'],
     );
 
-    expirationDate ??= _stringValue(
+    expirationDate ??=
+        _stringValue(
       pix['expirationDate'],
     );
 
-    // ----------------------------------------------------------
-    // VALIDAR DADOS PIX
-    // ----------------------------------------------------------
+    // ==========================================================
+    // ALGUNS BACKENDS RETORNAM PIX DIRETAMENTE
+    // ==========================================================
+
+    pixPayload ??=
+        _stringValue(
+      dados['qrCode'],
+    );
+
+    encodedImage ??=
+        _stringValue(
+      dados['qrCodeBase64'],
+    );
+
+    pixPayload ??=
+        _stringValue(
+      dados['payload'],
+    );
+
+    encodedImage ??=
+        _stringValue(
+      dados['encodedImage'],
+    );
+
+    // ==========================================================
+    // VALIDAR PIX
+    // ==========================================================
 
     if ((pixPayload == null ||
             pixPayload!.isEmpty) &&
@@ -2467,12 +2033,15 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   // STRING SEGURA
   // ============================================================
 
-  String? _stringValue(dynamic valor) {
+  String? _stringValue(
+    dynamic valor,
+  ) {
     if (valor == null) {
       return null;
     }
 
-    final texto = valor.toString().trim();
+    final texto =
+        valor.toString().trim();
 
     if (texto.isEmpty) {
       return null;
@@ -2508,8 +2077,10 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
         content: Text(
           'Código Pix copiado!',
         ),
-        backgroundColor: verdePix,
-        behavior: SnackBarBehavior.floating,
+        backgroundColor:
+            verdePix,
+        behavior:
+            SnackBarBehavior.floating,
       ),
     );
   }
@@ -2524,13 +2095,18 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
       return Container(
         width: 240,
         height: 240,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
+        alignment:
+            Alignment.center,
+        decoration:
+            BoxDecoration(
           color: Colors.white,
           borderRadius:
-              BorderRadius.circular(18),
+              BorderRadius.circular(
+            18,
+          ),
         ),
-        child: const Icon(
+        child:
+            const Icon(
           Icons.qr_code_2,
           size: 110,
           color: Colors.grey,
@@ -2547,7 +2123,8 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
             base64String.split(',').last;
       }
 
-      final bytes = base64Decode(
+      final bytes =
+          base64Decode(
         base64String,
       );
 
@@ -2555,28 +2132,40 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
         width: 240,
         height: 240,
         padding:
-            const EdgeInsets.all(16),
-        decoration: BoxDecoration(
+            const EdgeInsets.all(
+          16,
+        ),
+        decoration:
+            BoxDecoration(
           color: Colors.white,
           borderRadius:
-              BorderRadius.circular(18),
+              BorderRadius.circular(
+            18,
+          ),
         ),
-        child: Image.memory(
+        child:
+            Image.memory(
           bytes,
-          fit: BoxFit.contain,
+          fit:
+              BoxFit.contain,
         ),
       );
     } catch (_) {
       return Container(
         width: 240,
         height: 240,
-        alignment: Alignment.center,
-        decoration: BoxDecoration(
+        alignment:
+            Alignment.center,
+        decoration:
+            BoxDecoration(
           color: Colors.white,
           borderRadius:
-              BorderRadius.circular(18),
+              BorderRadius.circular(
+            18,
+          ),
         ),
-        child: const Icon(
+        child:
+            const Icon(
           Icons.error_outline,
           color: Colors.red,
           size: 42,
@@ -2648,13 +2237,15 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
             'Preparando seu pagamento...',
             style: TextStyle(
               fontSize: 18,
-              fontWeight: FontWeight.bold,
+              fontWeight:
+                  FontWeight.bold,
             ),
           ),
           SizedBox(height: 8),
           Text(
-            'Criando pedido e gerando seu Pix.',
-            textAlign: TextAlign.center,
+            'Gerando seu Pix com segurança.',
+            textAlign:
+                TextAlign.center,
             style: TextStyle(
               fontSize: 13,
               color: Colors.grey,
@@ -2690,10 +2281,13 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
 
             const Text(
               'Não foi possível preparar o Pix',
-              textAlign: TextAlign.center,
-              style: TextStyle(
+              textAlign:
+                  TextAlign.center,
+              style:
+                  TextStyle(
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
 
@@ -2703,7 +2297,8 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
 
             Text(
               mensagemErro,
-              textAlign: TextAlign.center,
+              textAlign:
+                  TextAlign.center,
             ),
 
             const SizedBox(
@@ -2711,14 +2306,18 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
             ),
 
             ElevatedButton(
-              onPressed: _iniciarFluxoPix,
+              onPressed:
+                  _iniciarFluxoPix,
               style:
-                  ElevatedButton.styleFrom(
-                backgroundColor: laranja,
+                  ElevatedButton
+                      .styleFrom(
+                backgroundColor:
+                    laranja,
                 foregroundColor:
                     Colors.white,
               ),
-              child: const Text(
+              child:
+                  const Text(
                 'TENTAR NOVAMENTE',
               ),
             ),
@@ -2740,31 +2339,37 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
         crossAxisAlignment:
             CrossAxisAlignment.start,
         children: [
-          // ------------------------------------------------------
-          // SEGURANÇA
-          // ------------------------------------------------------
-
           Container(
-            width: double.infinity,
+            width:
+                double.infinity,
             padding:
                 const EdgeInsets.all(14),
-            decoration: BoxDecoration(
+            decoration:
+                BoxDecoration(
               color:
                   const Color(0xFFE4F7EF),
               borderRadius:
-                  BorderRadius.circular(13),
+                  BorderRadius.circular(
+                13,
+              ),
             ),
-            child: const Row(
+            child:
+                const Row(
               children: [
                 Icon(
                   Icons.shield_outlined,
-                  color: verdePix,
+                  color:
+                      verdePix,
                 ),
-                SizedBox(width: 10),
+                SizedBox(
+                  width: 10,
+                ),
                 Expanded(
-                  child: Text(
+                  child:
+                      Text(
                     'Pagamento seguro processado pelo Asaas.',
-                    style: TextStyle(
+                    style:
+                        TextStyle(
                       fontSize: 12,
                     ),
                   ),
@@ -2777,55 +2382,57 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
             height: 22,
           ),
 
-          // ------------------------------------------------------
-          // PEDIDO
-          // ------------------------------------------------------
-
-          if (pedidoId != null &&
-              pedidoId!.isNotEmpty)
-            Container(
-              width: double.infinity,
-              padding:
-                  const EdgeInsets.all(12),
-              margin:
-                  const EdgeInsets.only(
-                bottom: 18,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(12),
-              ),
-              child: Row(
-                children: [
-                  const Icon(
-                    Icons.receipt_long_outlined,
-                    color: laranja,
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Pedido #$pedidoId',
-                      style:
-                          const TextStyle(
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ],
+          Container(
+            width:
+                double.infinity,
+            padding:
+                const EdgeInsets.all(12),
+            margin:
+                const EdgeInsets.only(
+              bottom: 18,
+            ),
+            decoration:
+                BoxDecoration(
+              color:
+                  Colors.white,
+              borderRadius:
+                  BorderRadius.circular(
+                12,
               ),
             ),
-
-          // ------------------------------------------------------
-          // QR CODE
-          // ------------------------------------------------------
+            child:
+                Row(
+              children: [
+                const Icon(
+                  Icons.receipt_long_outlined,
+                  color:
+                      laranja,
+                ),
+                const SizedBox(
+                  width: 10,
+                ),
+                Expanded(
+                  child:
+                      Text(
+                    'Pedido #$pedidoId',
+                    style:
+                        const TextStyle(
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
 
           const Text(
             'Escaneie o QR Code',
-            style: TextStyle(
+            style:
+                TextStyle(
               fontSize: 16,
-              fontWeight: FontWeight.bold,
+              fontWeight:
+                  FontWeight.bold,
             ),
           ),
 
@@ -2834,22 +2441,21 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
           ),
 
           Center(
-            child: _qrCode(),
+            child:
+                _qrCode(),
           ),
 
           const SizedBox(
             height: 20,
           ),
 
-          // ------------------------------------------------------
-          // PIX COPIA E COLA
-          // ------------------------------------------------------
-
           const Text(
             'Ou copie o código Pix',
-            style: TextStyle(
+            style:
+                TextStyle(
               fontSize: 16,
-              fontWeight: FontWeight.bold,
+              fontWeight:
+                  FontWeight.bold,
             ),
           ),
 
@@ -2860,15 +2466,21 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
           Container(
             padding:
                 const EdgeInsets.all(13),
-            decoration: BoxDecoration(
-              color: Colors.white,
+            decoration:
+                BoxDecoration(
+              color:
+                  Colors.white,
               borderRadius:
-                  BorderRadius.circular(14),
+                  BorderRadius.circular(
+                14,
+              ),
             ),
-            child: Row(
+            child:
+                Row(
               children: [
                 Expanded(
-                  child: Text(
+                  child:
+                      Text(
                     pixPayload ??
                         'Código indisponível',
                     maxLines: 3,
@@ -2881,8 +2493,10 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
                   ),
                 ),
                 IconButton(
-                  onPressed: _copiarPix,
-                  icon: const Icon(
+                  onPressed:
+                      _copiarPix,
+                  icon:
+                      const Icon(
                     Icons.copy_outlined,
                   ),
                 ),
@@ -2894,19 +2508,20 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
             height: 18,
           ),
 
-          // ------------------------------------------------------
-          // VALORES
-          // ------------------------------------------------------
-
           Container(
             padding:
                 const EdgeInsets.all(15),
-            decoration: BoxDecoration(
-              color: Colors.white,
+            decoration:
+                BoxDecoration(
+              color:
+                  Colors.white,
               borderRadius:
-                  BorderRadius.circular(14),
+                  BorderRadius.circular(
+                14,
+              ),
             ),
-            child: Column(
+            child:
+                Column(
               children: [
                 _linha(
                   'Subtotal',
@@ -2946,7 +2561,8 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
                   dinheiro(
                     widget.total,
                   ),
-                  destaque: true,
+                  destaque:
+                      true,
                 ),
               ],
             ),
@@ -2956,32 +2572,39 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
             height: 20,
           ),
 
-          // ------------------------------------------------------
-          // INFORMAÇÃO
-          // ------------------------------------------------------
-
           Container(
-            width: double.infinity,
+            width:
+                double.infinity,
             padding:
                 const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
+            decoration:
+                BoxDecoration(
+              color:
+                  Colors.white,
               borderRadius:
-                  BorderRadius.circular(14),
+                  BorderRadius.circular(
+                14,
+              ),
             ),
-            child: const Row(
+            child:
+                const Row(
               crossAxisAlignment:
                   CrossAxisAlignment.start,
               children: [
                 Icon(
                   Icons.info_outline,
-                  color: laranja,
+                  color:
+                      laranja,
                 ),
-                SizedBox(width: 10),
+                SizedBox(
+                  width: 10,
+                ),
                 Expanded(
-                  child: Text(
+                  child:
+                      Text(
                     'Após o pagamento, o Asaas notificará o FoodJet automaticamente. O pedido será atualizado quando o pagamento for confirmado.',
-                    style: TextStyle(
+                    style:
+                        TextStyle(
                       fontSize: 12,
                       height: 1.4,
                     ),
@@ -2995,32 +2618,38 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
             height: 20,
           ),
 
-          // ------------------------------------------------------
-          // VOLTAR
-          // ------------------------------------------------------
-
           SizedBox(
-            width: double.infinity,
+            width:
+                double.infinity,
             height: 54,
-            child: ElevatedButton(
+            child:
+                ElevatedButton(
               onPressed: () {
-                Navigator.pop(context);
+                Navigator.pop(
+                  context,
+                );
               },
               style:
-                  ElevatedButton.styleFrom(
-                backgroundColor: laranja,
+                  ElevatedButton
+                      .styleFrom(
+                backgroundColor:
+                    laranja,
                 foregroundColor:
                     Colors.white,
                 elevation: 0,
                 shape:
                     RoundedRectangleBorder(
                   borderRadius:
-                      BorderRadius.circular(15),
+                      BorderRadius.circular(
+                    15,
+                  ),
                 ),
               ),
-              child: const Text(
+              child:
+                  const Text(
                 'VOLTAR AO PEDIDO',
-                style: TextStyle(
+                style:
+                    TextStyle(
                   fontWeight:
                       FontWeight.bold,
                 ),
@@ -3033,12 +2662,16 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
           ),
 
           Center(
-            child: Text(
-              expirationDate != null &&
-                      expirationDate!.isNotEmpty
+            child:
+                Text(
+              expirationDate !=
+                          null &&
+                      expirationDate!
+                          .isNotEmpty
                   ? 'QR Code válido até $expirationDate'
                   : 'Pix gerado com segurança pelo Asaas',
-              style: TextStyle(
+              style:
+                  TextStyle(
                 color:
                     Colors.grey.shade600,
                 fontSize: 10,
@@ -3059,7 +2692,9 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Scaffold(
       backgroundColor:
           const Color(0xFFF7F7F7),
@@ -3070,9 +2705,11 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
         foregroundColor:
             Colors.black87,
         elevation: 0,
-        title: const Text(
+        title:
+            const Text(
           'PIX',
-          style: TextStyle(
+          style:
+              TextStyle(
             fontWeight:
                 FontWeight.bold,
           ),
@@ -3080,11 +2717,12 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
       ),
 
       body: SafeArea(
-        child: carregando
-            ? _carregando()
-            : erro
-                ? _erro()
-                : _conteudo(),
+        child:
+            carregando
+                ? _carregando()
+                : erro
+                    ? _erro()
+                    : _conteudo(),
       ),
     );
   }

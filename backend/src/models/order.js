@@ -316,11 +316,7 @@ async function criar(pedido) {
     //
     // ==================================================
 
-    const externalReference =
-        String(
-            pedido.externalReference ||
-            `FOODJET-${id}-${Date.now()}`
-        ).trim();
+    const externalReference = String(id);
 
 
     // ==================================================

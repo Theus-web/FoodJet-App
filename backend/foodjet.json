@@ -453,6 +453,384 @@
         "mensagens": []
       },
       "criadoEm": "2026-08-30T21:31:03.619Z"
+    },
+    {
+      "id": 1787424643962,
+      "clienteId": "user_1788031295568",
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "Açai 200ml",
+          "nome": "Açai 200ml",
+          "quantidade": 1,
+          "preco": 0.01,
+          "valor": 0.01
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "12",
+        "bairro": "Bethânia",
+        "complemento": "Cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "DEBITO",
+      "pagamentoStatus": "AGUARDANDO",
+      "statusPagamento": "pending",
+      "pagamentoAprovado": false,
+      "subtotal": 0.01,
+      "taxaServico": 0.0015,
+      "total": 5.0115,
+      "precisaTroco": false,
+      "trocoPara": null,
+      "valorTroco": 0,
+      "externalReference": "FOODJET-1788125744911",
+      "referenciaPagamento": "FOODJET-1788125744911",
+      "status": "AGUARDANDO_RESTAURANTE",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "criadoEm": "2026-08-30T21:35:44.990Z"
+    },
+    {
+      "id": 1787424643963,
+      "clienteId": "user_1788031295568",
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "Açai 200ml",
+          "nome": "Açai 200ml",
+          "quantidade": 1,
+          "preco": 0.01,
+          "valor": 0.01
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "12",
+        "bairro": "Bethânia",
+        "complemento": "Cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "PIX",
+      "pagamentoStatus": "PENDENTE",
+      "statusPagamento": "pending",
+      "pagamentoAprovado": false,
+      "subtotal": 0.01,
+      "taxaServico": 0,
+      "total": 5.01,
+      "precisaTroco": false,
+      "trocoPara": null,
+      "valorTroco": 0,
+      "externalReference": "FOODJET-1788199753010",
+      "referenciaPagamento": "FOODJET-1788199753010",
+      "status": "AGUARDANDO_RESTAURANTE",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "criadoEm": "2026-08-31T18:09:13.019Z"
+    },
+    {
+      "id": 1787424643964,
+      "clienteId": "user_1788031295568",
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "Açai 200ml",
+          "nome": "Açai 200ml",
+          "quantidade": 1,
+          "preco": 0.01,
+          "valor": 0.01
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "12",
+        "bairro": "Bethânia",
+        "complemento": "Cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "PIX",
+      "pagamentoStatus": "PENDENTE",
+      "statusPagamento": "pending",
+      "pagamentoAprovado": false,
+      "subtotal": 0.01,
+      "taxaServico": 0.0015,
+      "total": 5.0115,
+      "precisaTroco": false,
+      "trocoPara": null,
+      "valorTroco": 0,
+      "externalReference": "FOODJET-1788199919218",
+      "referenciaPagamento": "FOODJET-1788199919218",
+      "status": "AGUARDANDO_RESTAURANTE",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "criadoEm": "2026-08-31T18:11:59.278Z"
+    },
+    {
+      "id": 1787424643965,
+      "clienteId": "user_1788031295568",
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "Açai 200ml",
+          "nome": "Açai 200ml",
+          "quantidade": 1,
+          "preco": 0.01,
+          "valor": 0.01
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "12",
+        "bairro": "Bethânia",
+        "complemento": "Cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "PIX",
+      "pagamentoStatus": "PENDENTE",
+      "statusPagamento": "pending",
+      "pagamentoAprovado": false,
+      "subtotal": 0.01,
+      "taxaServico": 0.0015,
+      "total": 5.0115,
+      "precisaTroco": false,
+      "trocoPara": null,
+      "valorTroco": 0,
+      "externalReference": "FOODJET-1788200445708",
+      "referenciaPagamento": "FOODJET-1788200445708",
+      "status": "AGUARDANDO_RESTAURANTE",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "criadoEm": "2026-08-31T18:20:45.995Z"
+    },
+    {
+      "id": 1787424643966,
+      "clienteId": "user_1788031295568",
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "Açai 200ml",
+          "nome": "Açai 200ml",
+          "quantidade": 1,
+          "preco": 0.01,
+          "valor": 0.01
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "12",
+        "bairro": "Bethânia",
+        "complemento": "Cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "PIX",
+      "pagamentoStatus": "PENDENTE",
+      "statusPagamento": "pending",
+      "pagamentoAprovado": false,
+      "subtotal": 0.01,
+      "taxaServico": 0.0015,
+      "total": 5.0115,
+      "precisaTroco": false,
+      "trocoPara": null,
+      "valorTroco": 0,
+      "externalReference": "FOODJET-1788202278611",
+      "referenciaPagamento": "FOODJET-1788202278611",
+      "status": "AGUARDANDO_RESTAURANTE",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "criadoEm": "2026-08-31T18:51:18.840Z"
+    },
+    {
+      "id": 1787424643967,
+      "clienteId": "user_1788031295568",
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "Açai 200ml",
+          "nome": "Açai 200ml",
+          "quantidade": 1,
+          "preco": 0.01,
+          "valor": 0.01
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "12",
+        "bairro": "Bethânia",
+        "complemento": "Cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "PIX",
+      "pagamentoStatus": "PENDENTE",
+      "statusPagamento": "pending",
+      "pagamentoAprovado": false,
+      "subtotal": 0.01,
+      "taxaServico": 0.0015,
+      "total": 5.0115,
+      "precisaTroco": false,
+      "trocoPara": null,
+      "valorTroco": 0,
+      "externalReference": "FOODJET-1788204757333",
+      "referenciaPagamento": "FOODJET-1788204757333",
+      "status": "AGUARDANDO_RESTAURANTE",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "criadoEm": "2026-08-31T19:32:37.577Z"
+    },
+    {
+      "id": 1787424643968,
+      "clienteId": "user_1788031295568",
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "Açai 200ml",
+          "nome": "Açai 200ml",
+          "quantidade": 1,
+          "preco": 0.01,
+          "valor": 0.01
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "12",
+        "bairro": "Bethânia",
+        "complemento": "Cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "PIX",
+      "pagamentoStatus": "PENDENTE",
+      "statusPagamento": "pending",
+      "pagamentoAprovado": false,
+      "subtotal": 0.01,
+      "taxaServico": 0,
+      "total": 5.01,
+      "precisaTroco": false,
+      "trocoPara": null,
+      "valorTroco": 0,
+      "externalReference": "1787424643968",
+      "referenciaPagamento": "1787424643968",
+      "status": "AGUARDANDO_RESTAURANTE",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "criadoEm": "2026-08-31T20:34:35.664Z"
+    },
+    {
+      "id": 1787424643969,
+      "clienteId": "user_1788031295568",
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "Açai 200ml",
+          "nome": "Açai 200ml",
+          "quantidade": 1,
+          "preco": 0.01,
+          "valor": 0.01
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "12",
+        "bairro": "Bethânia",
+        "complemento": "Cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "PIX",
+      "pagamentoStatus": "PENDENTE",
+      "statusPagamento": "pending",
+      "pagamentoAprovado": false,
+      "subtotal": 0.01,
+      "taxaServico": 0,
+      "total": 5.01,
+      "precisaTroco": false,
+      "trocoPara": null,
+      "valorTroco": 0,
+      "externalReference": "1787424643969",
+      "referenciaPagamento": "1787424643969",
+      "status": "AGUARDANDO_RESTAURANTE",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "criadoEm": "2026-08-31T20:38:38.653Z"
+    },
+    {
+      "id": 1787424643970,
+      "clienteId": "user_1788031295568",
+      "restauranteId": "rest_1786542500158",
+      "itens": [
+        {
+          "produtoId": "Açai 200ml",
+          "nome": "Açai 200ml",
+          "quantidade": 1,
+          "preco": 0.01,
+          "valor": 0.01
+        }
+      ],
+      "endereco": {
+        "cep": "35164-365",
+        "rua": "Rua Cruzeiro",
+        "numero": "12",
+        "bairro": "Bethânia",
+        "complemento": "Cs",
+        "cidade": "Ipatinga",
+        "estado": "MG"
+      },
+      "pagamento": "PIX",
+      "pagamentoStatus": "PENDENTE",
+      "statusPagamento": "pending",
+      "pagamentoAprovado": false,
+      "subtotal": 0.01,
+      "taxaServico": 0,
+      "total": 5.01,
+      "precisaTroco": false,
+      "trocoPara": null,
+      "valorTroco": 0,
+      "externalReference": "1787424643970",
+      "referenciaPagamento": "1787424643970",
+      "status": "AGUARDANDO_RESTAURANTE",
+      "suporte": {
+        "aberto": false,
+        "status": "FECHADO",
+        "mensagens": []
+      },
+      "criadoEm": "2026-08-31T20:42:31.803Z"
     }
   ],
   "entregadores": [

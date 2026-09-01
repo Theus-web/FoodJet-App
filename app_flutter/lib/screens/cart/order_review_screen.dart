@@ -34,27 +34,16 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   static const Color laranja = Color(0xFFF97316);
   static const Color fundo = Color(0xFFF6F7F9);
 
-  // ============================================================
-  // TAXAS
-  // ============================================================
-
   final double taxaEntrega = 5.0;
-
-  // 15% de taxa de serviço
   final double percentualTaxaServico = 0.15;
 
   late String formaPagamento;
 
-  // ============================================================
-  // TROCO
-  // ============================================================
-
   bool precisaTroco = false;
+  bool enviandoPedido = false;
 
   final TextEditingController trocoController =
       TextEditingController();
-
-  bool enviandoPedido = false;
 
   @override
   void initState() {
@@ -95,7 +84,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   }
 
   // ============================================================
-  // VALOR DO TROCO
+  // TROCO
   // ============================================================
 
   double? get valorTrocoPara {
@@ -121,6 +110,36 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     return double.tryParse(valor);
   }
 
+  bool validarTroco() {
+    if (formaPagamento != "DINHEIRO") {
+      return true;
+    }
+
+    if (!precisaTroco) {
+      return true;
+    }
+
+    final valor = valorTrocoPara;
+
+    if (valor == null) {
+      mostrarMensagem(
+        "Informe o valor para o qual precisa de troco.",
+        erro: true,
+      );
+      return false;
+    }
+
+    if (valor < totalPedido) {
+      mostrarMensagem(
+        "O valor informado deve ser maior ou igual ao total do pedido.",
+        erro: true,
+      );
+      return false;
+    }
+
+    return true;
+  }
+
   // ============================================================
   // ENDEREÇO
   // ============================================================
@@ -133,6 +152,451 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
       "${widget.endereco["cidade"] ?? ""} - ${widget.endereco["estado"] ?? ""}",
       widget.endereco["cep"] ?? "",
     ].where((e) => e.trim().isNotEmpty).join("\n");
+  }
+
+  // ============================================================
+  // TOKEN
+  // ============================================================
+
+  Future<String> obterToken() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    final tokens = [
+      prefs.getString("token"),
+      prefs.getString("jwt"),
+      prefs.getString("access_token"),
+      prefs.getString("auth_token"),
+    ];
+
+    for (final token in tokens) {
+      if (token != null && token.trim().isNotEmpty) {
+        return token.trim();
+      }
+    }
+
+    return "";
+  }
+
+  // ============================================================
+  // ITENS
+  // ============================================================
+
+  List<Map<String, dynamic>> prepararItens() {
+    return widget.itens.map((item) {
+      return {
+        "produtoId": item.nome,
+        "nome": item.nome,
+        "quantidade": item.quantidade,
+        "preco": item.preco,
+        "valor": item.preco * item.quantidade,
+      };
+    }).toList();
+  }
+
+  // ============================================================
+  // CRIAR PEDIDO
+  //
+  // IMPORTANTE:
+  // O backend FoodJet usa:
+  //
+  // POST /api/orders
+  //
+  // NÃO:
+  // /api/pedidos
+  // ============================================================
+
+  Future<Map<String, dynamic>?> criarPedido() async {
+    final token = await obterToken();
+
+    if (token.isEmpty) {
+      mostrarMensagem(
+        "Sessão expirada. Faça login novamente.",
+        erro: true,
+      );
+      return null;
+    }
+
+    final url = Uri.parse(
+      "${Api.baseUrl}/orders",
+    );
+
+    final valorTroco = formaPagamento == "DINHEIRO"
+        ? valorTrocoPara
+        : null;
+
+    final body = {
+      "restauranteId": widget.restauranteId,
+      "itens": prepararItens(),
+      "endereco": widget.endereco,
+      "pagamento": formaPagamento,
+      "subtotal": widget.subtotal,
+      "taxaServico": taxaServico,
+      "taxaEntrega": taxaEntrega,
+      "total": totalPedido,
+      "precisaTroco":
+          formaPagamento == "DINHEIRO"
+              ? precisaTroco
+              : false,
+      "trocoPara": valorTroco,
+      "valorTroco":
+          valorTroco != null
+              ? valorTroco - totalPedido
+              : 0,
+    };
+
+    debugPrint("");
+    debugPrint("========================================");
+    debugPrint("📦 FOODJET - CRIAR PEDIDO");
+    debugPrint("========================================");
+    debugPrint("POST: $url");
+    debugPrint("RESTAURANTE: ${widget.restauranteId}");
+    debugPrint("PAGAMENTO: $formaPagamento");
+    debugPrint("SUBTOTAL: ${widget.subtotal}");
+    debugPrint("TAXA SERVIÇO: $taxaServico");
+    debugPrint("TAXA ENTREGA: $taxaEntrega");
+    debugPrint("TOTAL: $totalPedido");
+    debugPrint("BODY:");
+    debugPrint(jsonEncode(body));
+    debugPrint("========================================");
+
+    try {
+      final response = await http
+          .post(
+            url,
+            headers: {
+              "Content-Type": "application/json",
+              "Accept": "application/json",
+              "Authorization": "Bearer $token",
+            },
+            body: jsonEncode(body),
+          )
+          .timeout(
+            const Duration(seconds: 30),
+          );
+
+      debugPrint("");
+      debugPrint("========================================");
+      debugPrint("📥 RESPOSTA DO BACKEND");
+      debugPrint("========================================");
+      debugPrint("STATUS: ${response.statusCode}");
+      debugPrint("BODY: ${response.body}");
+      debugPrint("========================================");
+
+      Map<String, dynamic> dados = {};
+
+      try {
+        final decoded = jsonDecode(response.body);
+
+        if (decoded is Map) {
+          dados = Map<String, dynamic>.from(decoded);
+        }
+      } catch (e) {
+        debugPrint(
+          "⚠️ Backend não retornou JSON: $e",
+        );
+      }
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+        final erro =
+            dados["erro"] ??
+            dados["mensagem"] ??
+            dados["message"] ??
+            "Não foi possível criar o pedido.";
+
+        mostrarMensagem(
+          erro.toString(),
+          erro: true,
+        );
+
+        return null;
+      }
+
+      // Aceita sucesso=true quando o controller retorna isso.
+      // Também aceita uma resposta contendo pedido/pedidoId,
+      // evitando falso erro caso o backend não envie sucesso.
+      final sucessoExplicito =
+          dados["sucesso"] == true;
+
+      final possuiPedido =
+          dados["pedido"] != null ||
+          dados["pedidoId"] != null;
+
+      if (!sucessoExplicito && !possuiPedido) {
+        final erro =
+            dados["erro"] ??
+            dados["mensagem"] ??
+            dados["message"] ??
+            "Não foi possível criar o pedido.";
+
+        mostrarMensagem(
+          erro.toString(),
+          erro: true,
+        );
+
+        return null;
+      }
+
+      return dados;
+    } catch (e) {
+      debugPrint("");
+      debugPrint("========================================");
+      debugPrint("❌ ERRO AO CRIAR PEDIDO");
+      debugPrint("========================================");
+      debugPrint("$e");
+      debugPrint("========================================");
+
+      mostrarMensagem(
+        "Erro ao conectar com o servidor.",
+        erro: true,
+      );
+
+      return null;
+    }
+  }
+
+  // ============================================================
+  // PEGAR ID
+  // ============================================================
+
+  dynamic extrairPedidoId(
+    Map<String, dynamic> dados,
+  ) {
+    final pedido = dados["pedido"];
+
+    if (pedido is Map) {
+      final id = pedido["id"];
+
+      if (id != null) {
+        return id;
+      }
+
+      final pedidoId = pedido["_id"];
+
+      if (pedidoId != null) {
+        return pedidoId;
+      }
+    }
+
+    if (dados["pedidoId"] != null) {
+      return dados["pedidoId"];
+    }
+
+    if (dados["id"] != null) {
+      return dados["id"];
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // FLUXO PIX
+  // ============================================================
+
+  Future<void> criarPedidoParaPix() async {
+    final dados = await criarPedido();
+
+    if (dados == null) {
+      return;
+    }
+
+    final pedidoId = extrairPedidoId(dados);
+
+    if (pedidoId == null) {
+      debugPrint(
+        "❌ Pedido criado, mas ID não encontrado.",
+      );
+
+      mostrarMensagem(
+        "O pedido foi criado, mas o servidor não retornou o ID.",
+        erro: true,
+      );
+
+      return;
+    }
+
+    final pedidoIdString =
+        pedidoId.toString().trim();
+
+    debugPrint("");
+    debugPrint("========================================");
+    debugPrint("✅ PEDIDO CRIADO");
+    debugPrint("🆔 ID: $pedidoIdString");
+    debugPrint("========================================");
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PaymentScreen(
+          endereco: widget.endereco,
+          itens: widget.itens,
+          subtotal: widget.subtotal,
+          restauranteId: widget.restauranteId,
+          taxaEntrega: taxaEntrega,
+          taxaServico: taxaServico,
+          formaPagamento: "PIX",
+          pedidoId: pedidoIdString,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // FLUXO PAGAMENTO LOCAL
+  // ============================================================
+
+  Future<void> criarPedidoPagamentoLocal() async {
+    final dados = await criarPedido();
+
+    if (dados == null) {
+      return;
+    }
+
+    final pedidoId = extrairPedidoId(dados);
+
+    if (pedidoId == null) {
+      mostrarMensagem(
+        "Pedido criado, mas o ID não foi retornado.",
+        erro: true,
+      );
+      return;
+    }
+
+    if (!mounted) {
+      return;
+    }
+
+    String mensagem;
+
+    if (formaPagamento == "DINHEIRO") {
+      mensagem =
+          "Pedido confirmado! Pagamento em dinheiro na entrega.";
+    } else if (formaPagamento == "DEBITO") {
+      mensagem =
+          "Pedido confirmado! Pagamento no cartão de débito na entrega.";
+    } else {
+      mensagem = "Pedido confirmado!";
+    }
+
+    mostrarMensagem(mensagem);
+
+    await Future.delayed(
+      const Duration(milliseconds: 500),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OrderTrackingScreen(
+          pedidoId:
+              int.tryParse(
+                    pedidoId.toString(),
+                  ) ??
+                  0,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // IR PARA PAGAMENTO
+  // ============================================================
+
+  Future<void> _irParaPagamento() async {
+    if (enviandoPedido) {
+      return;
+    }
+
+    if (widget.itens.isEmpty) {
+      mostrarMensagem(
+        "Seu carrinho está vazio.",
+        erro: true,
+      );
+      return;
+    }
+
+    if (widget.restauranteId.trim().isEmpty) {
+      mostrarMensagem(
+        "Restaurante não identificado.",
+        erro: true,
+      );
+      return;
+    }
+
+    if (totalPedido <= 0) {
+      mostrarMensagem(
+        "O valor do pedido é inválido.",
+        erro: true,
+      );
+      return;
+    }
+
+    if (!validarTroco()) {
+      return;
+    }
+
+    setState(() {
+      enviandoPedido = true;
+    });
+
+    try {
+      // ========================================================
+      // PIX
+      // ========================================================
+
+      if (formaPagamento == "PIX") {
+        await criarPedidoParaPix();
+        return;
+      }
+
+      // ========================================================
+      // DÉBITO
+      // ========================================================
+
+      if (formaPagamento == "DEBITO") {
+        await criarPedidoPagamentoLocal();
+        return;
+      }
+
+      // ========================================================
+      // DINHEIRO
+      // ========================================================
+
+      if (formaPagamento == "DINHEIRO") {
+        await criarPedidoPagamentoLocal();
+        return;
+      }
+
+      // ========================================================
+      // CRÉDITO
+      // ========================================================
+
+      if (formaPagamento == "CREDITO") {
+        mostrarMensagem(
+          "Pagamento com cartão de crédito será preparado.",
+        );
+        return;
+      }
+
+      mostrarMensagem(
+        "Forma de pagamento inválida.",
+        erro: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          enviandoPedido = false;
+        });
+      }
+    }
   }
 
   // ============================================================
@@ -200,7 +664,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Text(
                   item.nome,
@@ -220,7 +685,9 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
             ),
           ),
           Text(
-            dinheiro(item.preco * item.quantidade),
+            dinheiro(
+              item.preco * item.quantidade,
+            ),
             style: const TextStyle(
               fontWeight: FontWeight.bold,
             ),
@@ -237,14 +704,16 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   Widget enderecoEntrega() {
     return cardPadrao(
       Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           Container(
             width: 46,
             height: 46,
             decoration: BoxDecoration(
               color: const Color(0xFFFFE8D8),
-              borderRadius: BorderRadius.circular(14),
+              borderRadius:
+                  BorderRadius.circular(14),
             ),
             child: const Icon(
               Icons.location_on_outlined,
@@ -254,7 +723,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 const Text(
                   "Endereço de entrega",
@@ -280,7 +750,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   }
 
   // ============================================================
-  // OPÇÃO DE PAGAMENTO
+  // OPÇÃO PAGAMENTO
   // ============================================================
 
   Widget opcaoPagamento({
@@ -290,7 +760,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     required IconData icone,
     required Color cor,
   }) {
-    final selecionado = formaPagamento == valor;
+    final selecionado =
+        formaPagamento == valor;
 
     return InkWell(
       borderRadius: BorderRadius.circular(14),
@@ -313,7 +784,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           color: selecionado
               ? laranja.withValues(alpha: 0.05)
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius:
+              BorderRadius.circular(14),
         ),
         child: Row(
           children: [
@@ -321,8 +793,10 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: cor.withValues(alpha: 0.10),
-                borderRadius: BorderRadius.circular(14),
+                color:
+                    cor.withValues(alpha: 0.10),
+                borderRadius:
+                    BorderRadius.circular(14),
               ),
               child: Icon(
                 icone,
@@ -332,7 +806,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Text(
                     titulo,
@@ -362,7 +837,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                 setState(() {
                   formaPagamento = v;
 
-                  if (formaPagamento != "DINHEIRO") {
+                  if (formaPagamento !=
+                      "DINHEIRO") {
                     precisaTroco = false;
                     trocoController.clear();
                   }
@@ -376,7 +852,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   }
 
   // ============================================================
-  // FORMAS DE PAGAMENTO
+  // PAGAMENTOS
   // ============================================================
 
   Widget pagamentos() {
@@ -386,7 +862,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           opcaoPagamento(
             valor: "PIX",
             titulo: "Pix",
-            subtitulo: "Pagamento instantâneo",
+            subtitulo:
+                "Pagamento instantâneo",
             icone: Icons.pix,
             cor: const Color(0xFF00A884),
           ),
@@ -396,7 +873,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           opcaoPagamento(
             valor: "CREDITO",
             titulo: "Cartão de Crédito",
-            subtitulo: "Pagamento seguro pelo Asaas",
+            subtitulo:
+                "Pagamento seguro pelo Asaas",
             icone: Icons.credit_card,
             cor: Colors.blue,
           ),
@@ -406,8 +884,10 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           opcaoPagamento(
             valor: "DEBITO",
             titulo: "Cartão de Débito",
-            subtitulo: "Pagamento na entrega",
-            icone: Icons.credit_card_outlined,
+            subtitulo:
+                "Pagamento na entrega",
+            icone:
+                Icons.credit_card_outlined,
             cor: Colors.indigo,
           ),
 
@@ -416,8 +896,10 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           opcaoPagamento(
             valor: "DINHEIRO",
             titulo: "Dinheiro",
-            subtitulo: "Pague quando receber o pedido",
-            icone: Icons.payments_outlined,
+            subtitulo:
+                "Pague quando receber o pedido",
+            icone:
+                Icons.payments_outlined,
             cor: laranja,
           ),
         ],
@@ -426,7 +908,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   }
 
   // ============================================================
-  // OPÇÃO DE TROCO
+  // TROCO
   // ============================================================
 
   Widget opcaoTroco() {
@@ -436,7 +918,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
     return cardPadrao(
       Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           const Text(
             "Precisa de troco?",
@@ -445,9 +928,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               fontWeight: FontWeight.bold,
             ),
           ),
-
           const SizedBox(height: 5),
-
           Text(
             "Informe se precisa que o entregador leve troco.",
             style: TextStyle(
@@ -455,9 +936,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               fontSize: 12,
             ),
           ),
-
           const SizedBox(height: 14),
-
           Row(
             children: [
               Expanded(
@@ -468,30 +947,38 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                       trocoController.clear();
                     });
                   },
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius:
+                      BorderRadius.circular(14),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
+                    padding:
+                        const EdgeInsets.symmetric(
                       vertical: 14,
                       horizontal: 12,
                     ),
                     decoration: BoxDecoration(
                       color: !precisaTroco
-                          ? laranja.withValues(alpha: 0.08)
+                          ? laranja.withValues(
+                              alpha: 0.08,
+                            )
                           : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius:
+                          BorderRadius.circular(14),
                       border: Border.all(
                         color: !precisaTroco
                             ? laranja
                             : Colors.black12,
-                        width: !precisaTroco ? 1.5 : 1,
+                        width:
+                            !precisaTroco ? 1.5 : 1,
                       ),
                     ),
                     child: Row(
                       children: [
                         Icon(
                           !precisaTroco
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_off,
+                              ? Icons
+                                  .radio_button_checked
+                              : Icons
+                                  .radio_button_off,
                           color: !precisaTroco
                               ? laranja
                               : Colors.grey,
@@ -501,7 +988,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                           child: Text(
                             "Não",
                             style: TextStyle(
-                              fontWeight: FontWeight.w600,
+                              fontWeight:
+                                  FontWeight.w600,
                             ),
                           ),
                         ),
@@ -510,9 +998,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(width: 10),
-
               Expanded(
                 child: InkWell(
                   onTap: () {
@@ -520,30 +1006,38 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                       precisaTroco = true;
                     });
                   },
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius:
+                      BorderRadius.circular(14),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(
+                    padding:
+                        const EdgeInsets.symmetric(
                       vertical: 14,
                       horizontal: 12,
                     ),
                     decoration: BoxDecoration(
                       color: precisaTroco
-                          ? laranja.withValues(alpha: 0.08)
+                          ? laranja.withValues(
+                              alpha: 0.08,
+                            )
                           : Colors.grey.shade50,
-                      borderRadius: BorderRadius.circular(14),
+                      borderRadius:
+                          BorderRadius.circular(14),
                       border: Border.all(
                         color: precisaTroco
                             ? laranja
                             : Colors.black12,
-                        width: precisaTroco ? 1.5 : 1,
+                        width:
+                            precisaTroco ? 1.5 : 1,
                       ),
                     ),
                     child: Row(
                       children: [
                         Icon(
                           precisaTroco
-                              ? Icons.radio_button_checked
-                              : Icons.radio_button_off,
+                              ? Icons
+                                  .radio_button_checked
+                              : Icons
+                                  .radio_button_off,
                           color: precisaTroco
                               ? laranja
                               : Colors.grey,
@@ -553,7 +1047,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                           child: Text(
                             "Sim",
                             style: TextStyle(
-                              fontWeight: FontWeight.w600,
+                              fontWeight:
+                                  FontWeight.w600,
                             ),
                           ),
                         ),
@@ -564,10 +1059,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               ),
             ],
           ),
-
           if (precisaTroco) ...[
             const SizedBox(height: 16),
-
             TextField(
               controller: trocoController,
               keyboardType:
@@ -585,26 +1078,31 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius:
+                      BorderRadius.circular(12),
                 ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
+                enabledBorder:
+                    OutlineInputBorder(
+                  borderRadius:
+                      BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(
                     color: Colors.black12,
                   ),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(
+                focusedBorder:
+                    OutlineInputBorder(
+                  borderRadius:
+                      BorderRadius.circular(12),
+                  borderSide:
+                      const BorderSide(
                     color: laranja,
                     width: 2,
                   ),
                 ),
               ),
             ),
-
             const SizedBox(height: 8),
-
             Text(
               "Total do pedido: ${dinheiro(totalPedido)}",
               style: TextStyle(
@@ -612,7 +1110,6 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                 fontSize: 12,
               ),
             ),
-
             if (valorTrocoPara != null &&
                 valorTrocoPara! >= totalPedido) ...[
               const SizedBox(height: 5),
@@ -641,20 +1138,24 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     bool destaque = false,
   }) {
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      mainAxisAlignment:
+          MainAxisAlignment.spaceBetween,
       children: [
         Text(
           titulo,
           style: TextStyle(
             fontSize: destaque ? 15 : 13,
-            fontWeight:
-                destaque ? FontWeight.bold : FontWeight.w500,
+            fontWeight: destaque
+                ? FontWeight.bold
+                : FontWeight.w500,
           ),
         ),
         Text(
           dinheiro(valor),
           style: TextStyle(
-            color: destaque ? laranja : Colors.black87,
+            color: destaque
+                ? laranja
+                : Colors.black87,
             fontWeight: FontWeight.bold,
             fontSize: destaque ? 18 : 13,
           ),
@@ -671,26 +1172,21 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
             "Subtotal dos produtos",
             widget.subtotal,
           ),
-
           const SizedBox(height: 12),
-
           linhaResumo(
             "Taxa de serviço",
             taxaServico,
           ),
-
           const SizedBox(height: 12),
-
           linhaResumo(
             "Taxa de entrega",
             taxaEntrega,
           ),
-
           const Padding(
-            padding: EdgeInsets.symmetric(vertical: 14),
+            padding:
+                EdgeInsets.symmetric(vertical: 14),
             child: Divider(height: 1),
           ),
-
           linhaResumo(
             "Total do pedido",
             totalPedido,
@@ -711,7 +1207,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFF0FBF5),
-        borderRadius: BorderRadius.circular(15),
+        borderRadius:
+            BorderRadius.circular(15),
         border: Border.all(
           color: const Color(0xFFD8F1E1),
         ),
@@ -747,532 +1244,17 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   }) {
     if (!mounted) return;
 
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context)
+        .hideCurrentSnackBar();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(mensagem),
         backgroundColor:
             erro ? Colors.red.shade700 : laranja,
-        behavior: SnackBarBehavior.floating,
+        behavior:
+            SnackBarBehavior.floating,
       ),
-    );
-  }
-
-  // ============================================================
-  // VALIDAR TROCO
-  // ============================================================
-
-  bool validarTroco() {
-    if (formaPagamento != "DINHEIRO") {
-      return true;
-    }
-
-    if (!precisaTroco) {
-      return true;
-    }
-
-    final valor = valorTrocoPara;
-
-    if (valor == null) {
-      mostrarMensagem(
-        "Informe o valor para o qual precisa de troco.",
-        erro: true,
-      );
-      return false;
-    }
-
-    if (valor < totalPedido) {
-      mostrarMensagem(
-        "O valor informado para o troco deve ser maior ou igual ao total do pedido.",
-        erro: true,
-      );
-      return false;
-    }
-
-    return true;
-  }
-
-  // ============================================================
-  // BUSCAR CLIENTE AUTENTICADO
-  // ============================================================
-
-  Future<String> obterClienteId() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final ids = [
-      prefs.getString("clienteId"),
-      prefs.getString("cliente_id"),
-      prefs.getString("userId"),
-      prefs.getString("user_id"),
-      prefs.getString("idUsuario"),
-      prefs.getString("usuarioId"),
-    ];
-
-    for (final id in ids) {
-      if (id != null && id.trim().isNotEmpty) {
-        return id.trim();
-      }
-    }
-
-    return "";
-  }
-
-  // ============================================================
-  // OBTER TOKEN
-  // ============================================================
-
-  Future<String> obterToken() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final tokens = [
-      prefs.getString("token"),
-      prefs.getString("jwt"),
-      prefs.getString("access_token"),
-      prefs.getString("auth_token"),
-    ];
-
-    for (final token in tokens) {
-      if (token != null && token.trim().isNotEmpty) {
-        return token.trim();
-      }
-    }
-
-    return "";
-  }
-
-  // ============================================================
-  // CRIAR PEDIDO DIRETAMENTE
-  //
-  // Usado para DINHEIRO e DÉBITO.
-  // ============================================================
-
-  Future<void> criarPedidoDireto() async {
-  if (enviandoPedido) {
-    return;
-  }
-
-  setState(() {
-    enviandoPedido = true;
-  });
-
-  try {
-    final token = await obterToken();
-
-    // ==========================================================
-    // TOKEN OBRIGATÓRIO
-    // ==========================================================
-
-    if (token.isEmpty) {
-      mostrarMensagem(
-        "Sessão expirada. Faça login novamente.",
-        erro: true,
-      );
-
-      return;
-    }
-
-    final url = Uri.parse(
-      "${Api.baseUrl}/orders",
-    );
-
-    // ==========================================================
-    // ITENS
-    // ==========================================================
-
-    final itensEnviar = widget.itens.map((item) {
-      return {
-        "produtoId": item.nome,
-        "nome": item.nome,
-        "quantidade": item.quantidade,
-        "preco": item.preco,
-        "valor": item.preco * item.quantidade,
-      };
-    }).toList();
-
-    // ==========================================================
-    // TROCO
-    // ==========================================================
-
-    final valorTroco = formaPagamento == "DINHEIRO"
-        ? valorTrocoPara
-        : null;
-
-    // ==========================================================
-    // BODY
-    //
-    // NÃO ENVIA MAIS clienteId.
-    //
-    // O backend vai descobrir o cliente através
-    // do JWT -> req.usuario.id
-    // ==========================================================
-
-    final body = {
-      "restauranteId": widget.restauranteId,
-
-      "itens": itensEnviar,
-
-      "endereco": widget.endereco,
-
-      "pagamento": formaPagamento,
-
-      "subtotal": widget.subtotal,
-
-      "taxaServico": taxaServico,
-
-      "taxaEntrega": taxaEntrega,
-
-      "total": totalPedido,
-
-      "precisaTroco":
-          formaPagamento == "DINHEIRO"
-              ? precisaTroco
-              : false,
-
-      "trocoPara":
-          valorTroco,
-
-      "valorTroco":
-          valorTroco != null
-              ? valorTroco - totalPedido
-              : 0,
-
-      "externalReference":
-          "FOODJET-${DateTime.now().millisecondsSinceEpoch}",
-    };
-
-    // ==========================================================
-    // LOG
-    // ==========================================================
-
-    debugPrint(
-      "========================================",
-    );
-
-    debugPrint(
-      "📦 CRIANDO PEDIDO FOODJET",
-    );
-
-    debugPrint(
-      "URL: $url",
-    );
-
-    debugPrint(
-      "RESTAURANTE: ${widget.restauranteId}",
-    );
-
-    debugPrint(
-      "PAGAMENTO: $formaPagamento",
-    );
-
-    debugPrint(
-      "TOTAL: $totalPedido",
-    );
-
-    debugPrint(
-      "PRECISA TROCO: $precisaTroco",
-    );
-
-    debugPrint(
-      "TROCO PARA: $valorTroco",
-    );
-
-    debugPrint(
-      "BODY: ${jsonEncode(body)}",
-    );
-
-    debugPrint(
-      "TOKEN: ${token.isNotEmpty ? "PRESENTE" : "AUSENTE"}",
-    );
-
-    debugPrint(
-      "========================================",
-    );
-
-    // ==========================================================
-    // HEADERS
-    // ==========================================================
-
-    final headers = <String, String>{
-      "Content-Type": "application/json",
-      "Authorization": "Bearer $token",
-    };
-
-    // ==========================================================
-    // POST
-    // ==========================================================
-
-    final response = await http.post(
-      url,
-      headers: headers,
-      body: jsonEncode(body),
-    );
-
-    // ==========================================================
-    // RESPOSTA
-    // ==========================================================
-
-    debugPrint(
-      "========================================",
-    );
-
-    debugPrint(
-      "📥 RESPOSTA CRIAR PEDIDO",
-    );
-
-    debugPrint(
-      "STATUS HTTP: ${response.statusCode}",
-    );
-
-    debugPrint(
-      "BODY: ${response.body}",
-    );
-
-    debugPrint(
-      "========================================",
-    );
-
-    Map<String, dynamic> dados = {};
-
-    try {
-      final decoded = jsonDecode(
-        response.body,
-      );
-
-      if (decoded is Map) {
-        dados = Map<String, dynamic>.from(
-          decoded,
-        );
-      }
-    } catch (_) {
-      // Resposta não JSON.
-    }
-
-    // ==========================================================
-    // SUCESSO
-    // ==========================================================
-
-    if (response.statusCode >= 200 &&
-        response.statusCode < 300 &&
-        dados["sucesso"] == true) {
-
-      final pedido = dados["pedido"];
-
-      dynamic pedidoId;
-
-      if (pedido is Map) {
-        pedidoId = pedido["id"];
-      }
-
-      pedidoId ??= dados["pedidoId"];
-
-      if (pedidoId == null) {
-        mostrarMensagem(
-          "Pedido criado, mas o ID não foi retornado.",
-          erro: true,
-        );
-
-        return;
-      }
-
-      // ========================================================
-      // MENSAGEM
-      // ========================================================
-
-      if (formaPagamento == "DINHEIRO") {
-        mostrarMensagem(
-          "Pedido confirmado! Pagamento em dinheiro na entrega.",
-        );
-      } else if (formaPagamento == "DEBITO") {
-        mostrarMensagem(
-          "Pedido confirmado! Pagamento no cartão de débito na entrega.",
-        );
-      } else {
-        mostrarMensagem(
-          "Pedido confirmado!",
-        );
-      }
-
-      await Future.delayed(
-        const Duration(
-          milliseconds: 500,
-        ),
-      );
-
-      if (!mounted) {
-        return;
-      }
-
-      // ========================================================
-      // ACOMPANHAMENTO
-      // ========================================================
-
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => OrderTrackingScreen(
-            pedidoId:
-                int.tryParse(
-                  pedidoId.toString(),
-                ) ??
-                0,
-          ),
-        ),
-      );
-
-      return;
-    }
-
-    // ==========================================================
-    // ERRO
-    // ==========================================================
-
-    final erro =
-        dados["erro"] ??
-        dados["mensagem"] ??
-        "Não foi possível confirmar o pedido.";
-
-    mostrarMensagem(
-      erro.toString(),
-      erro: true,
-    );
-
-  } catch (error) {
-
-    debugPrint(
-      "❌ ERRO CRIAR PEDIDO: $error",
-    );
-
-    mostrarMensagem(
-      "Erro ao conectar com o servidor.",
-      erro: true,
-    );
-
-  } finally {
-
-    if (mounted) {
-      setState(() {
-        enviandoPedido = false;
-      });
-    }
-
-  }
-}
-
-  // ============================================================
-  // IR PARA PAGAMENTO
-  // ============================================================
-
-  void _irParaPagamento() {
-    if (enviandoPedido) {
-      return;
-    }
-
-    if (widget.itens.isEmpty) {
-      mostrarMensagem(
-        "Seu carrinho está vazio.",
-        erro: true,
-      );
-      return;
-    }
-
-    if (widget.restauranteId.trim().isEmpty) {
-      mostrarMensagem(
-        "Restaurante não identificado.",
-        erro: true,
-      );
-      return;
-    }
-
-    if (totalPedido <= 0) {
-      mostrarMensagem(
-        "O valor do pedido é inválido.",
-        erro: true,
-      );
-      return;
-    }
-
-    // ==========================================================
-    // VALIDAR TROCO
-    // ==========================================================
-
-    if (!validarTroco()) {
-      return;
-    }
-
-    // ==========================================================
-    // PIX
-    // ==========================================================
-
-    if (formaPagamento == "PIX") {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PaymentScreen(
-            endereco: widget.endereco,
-            itens: widget.itens,
-            subtotal: widget.subtotal,
-            restauranteId: widget.restauranteId,
-            taxaEntrega: taxaEntrega,
-            taxaServico: taxaServico,
-            formaPagamento: "PIX",
-          ),
-        ),
-      );
-
-      return;
-    }
-
-    // ==========================================================
-    // CRÉDITO
-    // ==========================================================
-
-    if (formaPagamento == "CREDITO") {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => PaymentScreen(
-            endereco: widget.endereco,
-            itens: widget.itens,
-            subtotal: widget.subtotal,
-            restauranteId: widget.restauranteId,
-            taxaEntrega: taxaEntrega,
-            taxaServico: taxaServico,
-            formaPagamento: "CREDITO",
-          ),
-        ),
-      );
-
-      return;
-    }
-
-    // ==========================================================
-    // DÉBITO
-    //
-    // Cria o pedido diretamente.
-    // Pagamento acontece na entrega.
-    // ==========================================================
-
-    if (formaPagamento == "DEBITO") {
-      criarPedidoDireto();
-      return;
-    }
-
-    // ==========================================================
-    // DINHEIRO
-    //
-    // Cria o pedido diretamente.
-    // Pagamento acontece na entrega.
-    // ==========================================================
-
-    if (formaPagamento == "DINHEIRO") {
-      criarPedidoDireto();
-      return;
-    }
-
-    mostrarMensagem(
-      "Forma de pagamento inválida.",
-      erro: true,
     );
   }
 
@@ -1282,18 +1264,16 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bool pagamentoLocal =
+    final pagamentoLocal =
         formaPagamento == "DINHEIRO" ||
         formaPagamento == "DEBITO";
 
     return Scaffold(
       backgroundColor: fundo,
-
       appBar: AppBar(
         backgroundColor: Colors.white,
         foregroundColor: Colors.black87,
         elevation: 0,
-        centerTitle: false,
         title: const Text(
           "Pagamento",
           style: TextStyle(
@@ -1302,14 +1282,15 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           ),
         ),
       ),
-
       body: SafeArea(
         child: Column(
           children: [
             Expanded(
               child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.fromLTRB(
+                physics:
+                    const BouncingScrollPhysics(),
+                padding:
+                    const EdgeInsets.fromLTRB(
                   18,
                   12,
                   18,
@@ -1323,62 +1304,47 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                       "Confira seu pedido",
                       style: TextStyle(
                         fontSize: 23,
-                        fontWeight: FontWeight.w800,
+                        fontWeight:
+                            FontWeight.w800,
                       ),
                     ),
-
                     const SizedBox(height: 5),
-
                     Text(
                       "Revise os detalhes antes de realizar o pagamento.",
                       style: TextStyle(
-                        color: Colors.grey.shade600,
+                        color:
+                            Colors.grey.shade600,
                         fontSize: 13,
                       ),
                     ),
-
                     const SizedBox(height: 22),
-
                     titulo("Itens do pedido"),
-
                     cardPadrao(
                       Column(
                         children: [
-                          for (final item in widget.itens)
+                          for (final item
+                              in widget.itens)
                             itemPedido(item),
                         ],
                       ),
                     ),
-
                     titulo("Endereço de entrega"),
-
                     enderecoEntrega(),
-
                     titulo("Forma de pagamento"),
-
                     pagamentos(),
-
                     opcaoTroco(),
-
                     titulo("Resumo do pedido"),
-
                     resumoPedido(),
-
                     seguranca(),
-
                     const SizedBox(height: 20),
                   ],
                 ),
               ),
             ),
-
-            // ==================================================
-            // RODAPÉ
-            // ==================================================
-
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.fromLTRB(
+              padding:
+                  const EdgeInsets.fromLTRB(
                 18,
                 13,
                 18,
@@ -1392,44 +1358,47 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color:
-                        Colors.black.withValues(alpha: 0.08),
+                    color: Colors.black.withValues(
+                      alpha: 0.08,
+                    ),
                     blurRadius: 18,
-                    offset: const Offset(0, -5),
+                    offset:
+                        const Offset(0, -5),
                   ),
                 ],
               ),
-
               child: SafeArea(
                 top: false,
                 child: Column(
                   children: [
                     Row(
                       mainAxisAlignment:
-                          MainAxisAlignment.spaceBetween,
+                          MainAxisAlignment
+                              .spaceBetween,
                       children: [
                         const Text(
                           "Total a pagar",
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.black54,
+                            fontWeight:
+                                FontWeight.w600,
+                            color:
+                                Colors.black54,
                           ),
                         ),
-
                         Text(
                           dinheiro(totalPedido),
-                          style: const TextStyle(
+                          style:
+                              const TextStyle(
                             fontSize: 21,
-                            fontWeight: FontWeight.w900,
+                            fontWeight:
+                                FontWeight.w900,
                             color: laranja,
                           ),
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 11),
-
                     SizedBox(
                       width: double.infinity,
                       height: 56,
@@ -1438,16 +1407,20 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                             enviandoPedido
                                 ? null
                                 : _irParaPagamento,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: laranja,
+                        style:
+                            ElevatedButton.styleFrom(
+                          backgroundColor:
+                              laranja,
                           disabledBackgroundColor:
                               Colors.grey.shade400,
-                          foregroundColor: Colors.white,
+                          foregroundColor:
+                              Colors.white,
                           elevation: 0,
                           shape:
                               RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius.circular(16),
+                                BorderRadius
+                                    .circular(16),
                           ),
                         ),
                         child: enviandoPedido
@@ -1457,25 +1430,29 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                                 child:
                                     CircularProgressIndicator(
                                   strokeWidth: 2.5,
-                                  color: Colors.white,
+                                  color:
+                                      Colors.white,
                                 ),
                               )
                             : Row(
                                 mainAxisAlignment:
-                                    MainAxisAlignment.center,
+                                    MainAxisAlignment
+                                        .center,
                                 children: [
                                   Icon(
                                     pagamentoLocal
                                         ? Icons
                                             .check_circle_outline
-                                        : Icons.lock_outline,
+                                        : Icons
+                                            .lock_outline,
                                     size: 20,
                                   ),
-
-                                  const SizedBox(width: 9),
-
+                                  const SizedBox(
+                                    width: 9,
+                                  ),
                                   Text(
-                                    formaPagamento == "PIX"
+                                    formaPagamento ==
+                                            "PIX"
                                         ? "PAGAR COM PIX"
                                         : formaPagamento ==
                                                 "CREDITO"
@@ -1492,9 +1469,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                               ),
                       ),
                     ),
-
                     const SizedBox(height: 9),
-
                     Row(
                       mainAxisAlignment:
                           MainAxisAlignment.center,
@@ -1506,9 +1481,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                           color:
                               Colors.green.shade600,
                         ),
-
                         const SizedBox(width: 5),
-
                         Text(
                           "Ambiente 100% seguro",
                           style: TextStyle(
@@ -1529,4 +1502,3 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     );
   }
 }
-
