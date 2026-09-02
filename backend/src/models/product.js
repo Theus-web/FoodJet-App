@@ -1,21 +1,169 @@
-const { db } = require("../config/database");
+const { pool } = require("../config/database");
 
 // ============================================================
 // CRIAR
 // ============================================================
 
 async function criar(produto) {
-    await db.read();
 
-    if (!db.data.produtos) {
-        db.data.produtos = [];
+    if (!produto || typeof produto !== "object") {
+        throw new Error(
+            "Dados do produto são obrigatórios."
+        );
     }
 
-    db.data.produtos.push(produto);
+    const id = produto.id
+        ? String(produto.id)
+        : String(Date.now());
 
-    await db.write();
+    const restauranteId =
+        produto.restauranteId !== undefined &&
+        produto.restauranteId !== null
+            ? String(produto.restauranteId)
+            : null;
 
-    return produto;
+    const nome =
+        produto.nome !== undefined &&
+        produto.nome !== null
+            ? String(produto.nome)
+            : null;
+
+    const descricao =
+        produto.descricao !== undefined &&
+        produto.descricao !== null
+            ? String(produto.descricao)
+            : null;
+
+    const preco =
+        produto.preco !== undefined &&
+        produto.preco !== null
+            ? Number(produto.preco)
+            : 0;
+
+    const categoria =
+        produto.categoria !== undefined &&
+        produto.categoria !== null
+            ? String(produto.categoria)
+            : null;
+
+    const imagem =
+        produto.imagem !== undefined &&
+        produto.imagem !== null
+            ? produto.imagem
+            : null;
+
+    const disponivel =
+        produto.disponivel !== undefined
+            ? Boolean(produto.disponivel)
+            : true;
+
+    const destaque =
+        produto.destaque !== undefined
+            ? Boolean(produto.destaque)
+            : false;
+
+    const criadoEm =
+        produto.criadoEm
+            ? new Date(produto.criadoEm)
+            : new Date();
+
+    const atualizadoEm =
+        produto.atualizadoEm
+            ? new Date(produto.atualizadoEm)
+            : new Date();
+
+    // ========================================================
+    // PRESERVAR DADOS COMPLETOS
+    // ========================================================
+
+    const dados = {
+        ...produto,
+        id,
+        restauranteId,
+        nome,
+        descricao,
+        preco,
+        categoria,
+        imagem,
+        disponivel,
+        destaque,
+        criadoEm: criadoEm.toISOString(),
+        atualizadoEm: atualizadoEm.toISOString(),
+    };
+
+    // ========================================================
+    // INSERT
+    // ========================================================
+
+    const resultado = await pool.query(
+        `
+        INSERT INTO produtos (
+            id,
+            restaurante_id,
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criado_em,
+            atualizado_em,
+            dados
+        )
+        VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11,
+            $12
+        )
+        RETURNING
+            id,
+            restaurante_id AS "restauranteId",
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            id,
+            restauranteId,
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criadoEm,
+            atualizadoEm,
+            dados,
+        ]
+    );
+
+    const novoProduto =
+        montarProduto(resultado.rows[0]);
+
+    console.log(
+        "🍕 PRODUTO CRIADO:",
+        novoProduto.id
+    );
+
+    return novoProduto;
 }
 
 // ============================================================
@@ -23,14 +171,30 @@ async function criar(produto) {
 // ============================================================
 
 async function listar() {
-    await db.read();
 
-    if (!db.data.produtos) {
-        db.data.produtos = [];
-        await db.write();
-    }
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            restaurante_id AS "restauranteId",
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        FROM produtos
+        ORDER BY criado_em ASC NULLS LAST
+        `
+    );
 
-    return db.data.produtos;
+    return resultado.rows.map(
+        montarProduto
+    );
 }
 
 // ============================================================
@@ -38,78 +202,282 @@ async function listar() {
 // ============================================================
 
 async function buscarPorId(id) {
-    await db.read();
 
-    if (!db.data.produtos) {
+    if (
+        id === undefined ||
+        id === null ||
+        String(id).trim() === ""
+    ) {
         return null;
     }
 
-    return db.data.produtos.find(
-        (produto) =>
-            produto.id.toString() === id.toString()
-    ) || null;
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            restaurante_id AS "restauranteId",
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        FROM produtos
+        WHERE id = $1
+        LIMIT 1
+        `,
+        [
+            String(id)
+        ]
+    );
+
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarProduto(
+        resultado.rows[0]
+    );
 }
 
 // ============================================================
 // ATUALIZAR
 // ============================================================
 
-async function atualizar(id, dados) {
-    await db.read();
+async function atualizar(
+    id,
+    dados
+) {
 
-    if (!db.data.produtos) {
-        db.data.produtos = [];
-    }
+    const produto =
+        await buscarPorId(id);
 
-    const indice =
-        db.data.produtos.findIndex(
-            (produto) =>
-                produto.id.toString() ===
-                id.toString()
-        );
-
-    if (indice === -1) {
+    if (!produto) {
         return null;
     }
 
-    db.data.produtos[indice] = {
-        ...db.data.produtos[indice],
+    if (
+        !dados ||
+        typeof dados !== "object"
+    ) {
+        return produto;
+    }
+
+    const produtoAtualizado = {
+        ...produto,
         ...dados,
-        id: db.data.produtos[indice].id,
+        id: produto.id,
     };
 
-    await db.write();
+    const atualizadoEm =
+        new Date();
 
-    return db.data.produtos[indice];
+    produtoAtualizado.atualizadoEm =
+        atualizadoEm.toISOString();
+
+    // ========================================================
+    // CAMPOS
+    // ========================================================
+
+    const restauranteId =
+        produtoAtualizado.restauranteId !== undefined &&
+        produtoAtualizado.restauranteId !== null
+            ? String(produtoAtualizado.restauranteId)
+            : null;
+
+    const nome =
+        produtoAtualizado.nome !== undefined &&
+        produtoAtualizado.nome !== null
+            ? String(produtoAtualizado.nome)
+            : null;
+
+    const descricao =
+        produtoAtualizado.descricao !== undefined &&
+        produtoAtualizado.descricao !== null
+            ? String(produtoAtualizado.descricao)
+            : null;
+
+    const preco =
+        produtoAtualizado.preco !== undefined &&
+        produtoAtualizado.preco !== null
+            ? Number(produtoAtualizado.preco)
+            : 0;
+
+    const categoria =
+        produtoAtualizado.categoria !== undefined &&
+        produtoAtualizado.categoria !== null
+            ? String(produtoAtualizado.categoria)
+            : null;
+
+    const imagem =
+        produtoAtualizado.imagem !== undefined
+            ? produtoAtualizado.imagem
+            : null;
+
+    const disponivel =
+        produtoAtualizado.disponivel !== undefined
+            ? Boolean(produtoAtualizado.disponivel)
+            : true;
+
+    const destaque =
+        produtoAtualizado.destaque !== undefined
+            ? Boolean(produtoAtualizado.destaque)
+            : false;
+
+    // ========================================================
+    // PRESERVAR DADOS EXTRAS
+    // ========================================================
+
+    const dadosAtualizados = {
+        ...(produto.dados || {}),
+        ...produtoAtualizado,
+
+        id: produto.id,
+
+        restauranteId,
+
+        nome,
+
+        descricao,
+
+        preco,
+
+        categoria,
+
+        imagem,
+
+        disponivel,
+
+        destaque,
+
+        atualizadoEm:
+            atualizadoEm.toISOString(),
+    };
+
+    // ========================================================
+    // UPDATE
+    // ========================================================
+
+    const resultado = await pool.query(
+        `
+        UPDATE produtos
+        SET
+            restaurante_id = $1,
+            nome = $2,
+            descricao = $3,
+            preco = $4,
+            categoria = $5,
+            imagem = $6,
+            disponivel = $7,
+            destaque = $8,
+            atualizado_em = $9,
+            dados = $10
+        WHERE id = $11
+        RETURNING
+            id,
+            restaurante_id AS "restauranteId",
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            restauranteId,
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            atualizadoEm,
+            dadosAtualizados,
+            String(id),
+        ]
+    );
+
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarProduto(
+        resultado.rows[0]
+    );
 }
 
 // ============================================================
 // ATUALIZAR IMAGEM
 // ============================================================
 
-async function atualizarImagem(id, imagem) {
-    await db.read();
+async function atualizarImagem(
+    id,
+    imagem
+) {
 
-    if (!db.data.produtos) {
-        db.data.produtos = [];
-    }
+    const produto =
+        await buscarPorId(id);
 
-    const indice =
-        db.data.produtos.findIndex(
-            (produto) =>
-                produto.id.toString() ===
-                id.toString()
-        );
-
-    if (indice === -1) {
+    if (!produto) {
         return null;
     }
 
-    db.data.produtos[indice].imagem = imagem;
+    const atualizadoEm =
+        new Date();
 
-    await db.write();
+    const dadosAtualizados = {
+        ...(produto.dados || {}),
+        imagem,
+        atualizadoEm:
+            atualizadoEm.toISOString(),
+    };
 
-    return db.data.produtos[indice];
+    const resultado = await pool.query(
+        `
+        UPDATE produtos
+        SET
+            imagem = $1,
+            atualizado_em = $2,
+            dados = $3
+        WHERE id = $4
+        RETURNING
+            id,
+            restaurante_id AS "restauranteId",
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            imagem,
+            atualizadoEm,
+            dadosAtualizados,
+            String(id),
+        ]
+    );
+
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarProduto(
+        resultado.rows[0]
+    );
 }
 
 // ============================================================
@@ -120,29 +488,134 @@ async function atualizarDisponibilidade(
     id,
     disponivel
 ) {
-    await db.read();
 
-    if (!db.data.produtos) {
-        db.data.produtos = [];
-    }
+    const produto =
+        await buscarPorId(id);
 
-    const indice =
-        db.data.produtos.findIndex(
-            (produto) =>
-                produto.id.toString() ===
-                id.toString()
-        );
-
-    if (indice === -1) {
+    if (!produto) {
         return null;
     }
 
-    db.data.produtos[indice].disponivel =
+    const novaDisponibilidade =
         Boolean(disponivel);
 
-    await db.write();
+    const atualizadoEm =
+        new Date();
 
-    return db.data.produtos[indice];
+    const dadosAtualizados = {
+        ...(produto.dados || {}),
+        disponivel:
+            novaDisponibilidade,
+        atualizadoEm:
+            atualizadoEm.toISOString(),
+    };
+
+    const resultado = await pool.query(
+        `
+        UPDATE produtos
+        SET
+            disponivel = $1,
+            atualizado_em = $2,
+            dados = $3
+        WHERE id = $4
+        RETURNING
+            id,
+            restaurante_id AS "restauranteId",
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            novaDisponibilidade,
+            atualizadoEm,
+            dadosAtualizados,
+            String(id),
+        ]
+    );
+
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarProduto(
+        resultado.rows[0]
+    );
+}
+
+// ============================================================
+// ATUALIZAR DESTAQUE
+// ============================================================
+
+async function atualizarDestaque(
+    id,
+    destaque
+) {
+
+    const produto =
+        await buscarPorId(id);
+
+    if (!produto) {
+        return null;
+    }
+
+    const novoDestaque =
+        Boolean(destaque);
+
+    const atualizadoEm =
+        new Date();
+
+    const dadosAtualizados = {
+        ...(produto.dados || {}),
+        destaque:
+            novoDestaque,
+        atualizadoEm:
+            atualizadoEm.toISOString(),
+    };
+
+    const resultado = await pool.query(
+        `
+        UPDATE produtos
+        SET
+            destaque = $1,
+            atualizado_em = $2,
+            dados = $3
+        WHERE id = $4
+        RETURNING
+            id,
+            restaurante_id AS "restauranteId",
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            novoDestaque,
+            atualizadoEm,
+            dadosAtualizados,
+            String(id),
+        ]
+    );
+
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarProduto(
+        resultado.rows[0]
+    );
 }
 
 // ============================================================
@@ -150,59 +623,81 @@ async function atualizarDisponibilidade(
 // ============================================================
 
 async function excluir(id) {
-    await db.read();
 
-    if (!db.data.produtos) {
+    const resultado = await pool.query(
+        `
+        DELETE FROM produtos
+        WHERE id = $1
+        RETURNING
+            id,
+            restaurante_id AS "restauranteId",
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            String(id)
+        ]
+    );
+
+    if (resultado.rows.length === 0) {
         return null;
     }
 
-    const indice =
-        db.data.produtos.findIndex(
-            (produto) =>
-                produto.id.toString() ===
-                id.toString()
-        );
-
-    if (indice === -1) {
-        return null;
-    }
-
-    const removido =
-        db.data.produtos.splice(
-            indice,
-            1
-        )[0];
-
-    await db.write();
-
-    return removido;
+    return montarProduto(
+        resultado.rows[0]
+    );
 }
-
-module.exports = {
-    criar,
-    listar,
-    buscarPorId,
-    atualizar,
-    atualizarImagem,
-    atualizarDisponibilidade,
-    excluir,
-};
 
 // ============================================================
 // LISTAR POR RESTAURANTE
 // ============================================================
 
-async function listarPorRestaurante(restauranteId) {
-    await db.read();
+async function listarPorRestaurante(
+    restauranteId
+) {
 
-    if (!db.data.produtos) {
-        db.data.produtos = [];
+    if (
+        restauranteId === undefined ||
+        restauranteId === null ||
+        String(restauranteId).trim() === ""
+    ) {
+        return [];
     }
 
-    return db.data.produtos.filter(
-        (produto) =>
-            Number(produto.restauranteId) ===
-            Number(restauranteId)
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            restaurante_id AS "restauranteId",
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        FROM produtos
+        WHERE restaurante_id = $1
+        ORDER BY criado_em ASC NULLS LAST
+        `,
+        [
+            String(restauranteId)
+        ]
+    );
+
+    return resultado.rows.map(
+        montarProduto
     );
 }
 
@@ -214,17 +709,43 @@ async function listarPorCategoria(
     restauranteId,
     categoria
 ) {
-    await db.read();
 
-    if (!db.data.produtos) {
-        db.data.produtos = [];
+    if (
+        restauranteId === undefined ||
+        restauranteId === null ||
+        String(restauranteId).trim() === ""
+    ) {
+        return [];
     }
 
-    return db.data.produtos.filter(
-        (produto) =>
-            Number(produto.restauranteId) ===
-                Number(restauranteId) &&
-            produto.categoria === categoria
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            restaurante_id AS "restauranteId",
+            nome,
+            descricao,
+            preco,
+            categoria,
+            imagem,
+            disponivel,
+            destaque,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        FROM produtos
+        WHERE restaurante_id = $1
+          AND categoria = $2
+        ORDER BY criado_em ASC NULLS LAST
+        `,
+        [
+            String(restauranteId),
+            categoria,
+        ]
+    );
+
+    return resultado.rows.map(
+        montarProduto
     );
 }
 
@@ -232,60 +753,121 @@ async function listarPorCategoria(
 // CONTAR PRODUTOS
 // ============================================================
 
-async function contar(restauranteId) {
-    await db.read();
-
-    if (!db.data.produtos) {
-        db.data.produtos = [];
-    }
-
-    return db.data.produtos.filter(
-        (produto) =>
-            Number(produto.restauranteId) ===
-            Number(restauranteId)
-    ).length;
-}
-
-async function atualizarDestaque(
-    id,
-    destaque
+async function contar(
+    restauranteId
 ) {
 
-    await db.read();
-
-    const indice =
-        db.data.produtos.findIndex(
-
-            p =>
-            p.id.toString() ===
-            id.toString()
-
-        );
-
-    if(indice == -1){
-
-        return null;
-
+    if (
+        restauranteId === undefined ||
+        restauranteId === null ||
+        String(restauranteId).trim() === ""
+    ) {
+        return 0;
     }
 
-    db.data.produtos[indice].destaque =
-        destaque;
+    const resultado = await pool.query(
+        `
+        SELECT COUNT(*)::int AS total
+        FROM produtos
+        WHERE restaurante_id = $1
+        `,
+        [
+            String(restauranteId)
+        ]
+    );
 
-    await db.write();
-
-    return db.data.produtos[indice];
-
+    return resultado.rows[0].total;
 }
+
+// ============================================================
+// MONTAR PRODUTO
+// ============================================================
+
+function montarProduto(row) {
+
+    if (!row) {
+        return null;
+    }
+
+    const dados =
+        row.dados &&
+        typeof row.dados === "object"
+            ? row.dados
+            : {};
+
+    return {
+
+        ...dados,
+
+        id: row.id,
+
+        restauranteId:
+            row.restauranteId,
+
+        nome:
+            row.nome,
+
+        descricao:
+            row.descricao,
+
+        preco:
+            row.preco !== null
+                ? Number(row.preco)
+                : 0,
+
+        categoria:
+            row.categoria,
+
+        imagem:
+            row.imagem,
+
+        disponivel:
+            row.disponivel,
+
+        destaque:
+            row.destaque,
+
+        criadoEm:
+            row.criadoEm
+                ? new Date(
+                    row.criadoEm
+                ).toISOString()
+                : null,
+
+        atualizadoEm:
+            row.atualizadoEm
+                ? new Date(
+                    row.atualizadoEm
+                ).toISOString()
+                : null,
+    };
+}
+
+// ============================================================
+// EXPORTAÇÕES
+// ============================================================
 
 module.exports = {
 
     criar,
-    listar,
-    buscarPorId,
-    atualizar,
-    atualizarImagem,
-    atualizarDisponibilidade,
-    atualizarDestaque,
-    excluir
 
+    listar,
+
+    buscarPorId,
+
+    atualizar,
+
+    atualizarImagem,
+
+    atualizarDisponibilidade,
+
+    atualizarDestaque,
+
+    excluir,
+
+    listarPorRestaurante,
+
+    listarPorCategoria,
+
+    contar,
 };

@@ -1,4 +1,4 @@
-const { db } = require("../config/database");
+const { pool } = require("../config/database");
 
 // ============================================================
 // DASHBOARD DO RESTAURANTE
@@ -11,23 +11,6 @@ exports.resumo = async (req, res) => {
         console.log("================================");
         console.log("📊 CARREGANDO DASHBOARD");
         console.log("================================");
-
-        // ====================================================
-        // CARREGAR BANCO
-        // ====================================================
-
-        await db.read();
-
-        db.data ||= {};
-
-        db.data.pedidos ||= [];
-        db.data.restaurantes ||= [];
-        db.data.produtos ||= [];
-        db.data.usuarios ||= [];
-
-        const pedidos = db.data.pedidos;
-        const restaurantes = db.data.restaurantes;
-        const produtos = db.data.produtos;
 
         // ====================================================
         // IDENTIFICAR RESTAURANTE
@@ -44,26 +27,251 @@ exports.resumo = async (req, res) => {
         );
 
         // ====================================================
-        // FILTRAR PEDIDOS DO RESTAURANTE
+        // CONSULTAS BASE
         // ====================================================
 
-        let pedidosRestaurante = pedidos;
+        let pedidosQuery;
+        let produtosQuery;
+        let restauranteQuery;
 
         if (restauranteId) {
 
-            pedidosRestaurante =
-                pedidos.filter(pedido =>
+            pedidosQuery = pool.query(
+                `
+                SELECT
+                    id,
+                    restaurante_id,
+                    total,
+                    status,
+                    criado_em,
+                    atualizado_em,
+                    dados
+                FROM pedidos
+                WHERE restaurante_id = $1
+                ORDER BY criado_em DESC
+                `,
+                [String(restauranteId)]
+            );
 
-                    String(pedido.restauranteId) ===
-                    String(restauranteId)
+            produtosQuery = pool.query(
+                `
+                SELECT
+                    id,
+                    restaurante_id,
+                    nome,
+                    disponivel,
+                    criado_em,
+                    atualizado_em,
+                    dados
+                FROM produtos
+                WHERE restaurante_id = $1
+                ORDER BY criado_em DESC
+                `,
+                [String(restauranteId)]
+            );
 
-                );
+            restauranteQuery = pool.query(
+                `
+                SELECT
+                    id,
+                    nome,
+                    categoria,
+                    status,
+                    online,
+                    aberto,
+                    criado_em,
+                    atualizado_em,
+                    dados
+                FROM restaurantes
+                WHERE id = $1
+                LIMIT 1
+                `,
+                [String(restauranteId)]
+            );
 
+        } else {
+
+            pedidosQuery = pool.query(
+                `
+                SELECT
+                    id,
+                    restaurante_id,
+                    total,
+                    status,
+                    criado_em,
+                    atualizado_em,
+                    dados
+                FROM pedidos
+                ORDER BY criado_em DESC
+                `
+            );
+
+            produtosQuery = pool.query(
+                `
+                SELECT
+                    id,
+                    restaurante_id,
+                    nome,
+                    disponivel,
+                    criado_em,
+                    atualizado_em,
+                    dados
+                FROM produtos
+                ORDER BY criado_em DESC
+                `
+            );
+
+            restauranteQuery = Promise.resolve({
+                rows: []
+            });
+        }
+
+        const [
+            pedidosResultado,
+            produtosResultado,
+            restauranteResultado
+        ] = await Promise.all([
+            pedidosQuery,
+            produtosQuery,
+            restauranteQuery
+        ]);
+
+        // ====================================================
+        // CONVERTER PEDIDOS
+        // ====================================================
+
+        const pedidos =
+            pedidosResultado.rows.map(row => {
+
+                const dados =
+                    row.dados &&
+                    typeof row.dados === "object"
+                        ? row.dados
+                        : {};
+
+                return {
+                    ...dados,
+
+                    id: row.id,
+
+                    restauranteId:
+                        row.restaurante_id,
+
+                    total:
+                        Number(row.total || 0),
+
+                    status:
+                        row.status,
+
+                    criadoEm:
+                        row.criado_em
+                            ? new Date(
+                                row.criado_em
+                            ).toISOString()
+                            : dados.criadoEm,
+
+                    atualizadoEm:
+                        row.atualizado_em
+                            ? new Date(
+                                row.atualizado_em
+                            ).toISOString()
+                            : dados.atualizadoEm
+                };
+
+            });
+
+        // ====================================================
+        // CONVERTER PRODUTOS
+        // ====================================================
+
+        const produtos =
+            produtosResultado.rows.map(row => {
+
+                const dados =
+                    row.dados &&
+                    typeof row.dados === "object"
+                        ? row.dados
+                        : {};
+
+                return {
+                    ...dados,
+
+                    id: row.id,
+
+                    restauranteId:
+                        row.restaurante_id,
+
+                    nome:
+                        row.nome,
+
+                    disponivel:
+                        row.disponivel !== false,
+
+                    criadoEm:
+                        row.criado_em
+                            ? new Date(
+                                row.criado_em
+                            ).toISOString()
+                            : dados.criadoEm,
+
+                    atualizadoEm:
+                        row.atualizado_em
+                            ? new Date(
+                                row.atualizado_em
+                            ).toISOString()
+                            : dados.atualizadoEm
+                };
+
+            });
+
+        // ====================================================
+        // CONVERTER RESTAURANTE
+        // ====================================================
+
+        let restaurante = null;
+
+        if (
+            restauranteResultado.rows.length > 0
+        ) {
+
+            const row =
+                restauranteResultado.rows[0];
+
+            const dados =
+                row.dados &&
+                typeof row.dados === "object"
+                    ? row.dados
+                    : {};
+
+            restaurante = {
+                ...dados,
+
+                id: row.id,
+                nome: row.nome,
+                categoria: row.categoria,
+                status: row.status,
+                online: row.online,
+                aberto: row.aberto,
+
+                criadoEm:
+                    row.criado_em
+                        ? new Date(
+                            row.criado_em
+                        ).toISOString()
+                        : dados.criadoEm,
+
+                atualizadoEm:
+                    row.atualizado_em
+                        ? new Date(
+                            row.atualizado_em
+                        ).toISOString()
+                        : dados.atualizadoEm
+            };
         }
 
         console.log(
             "📦 PEDIDOS ENCONTRADOS:",
-            pedidosRestaurante.length
+            pedidos.length
         );
 
         // ====================================================
@@ -99,7 +307,7 @@ exports.resumo = async (req, res) => {
         // ====================================================
 
         const pedidosHoje =
-            pedidosRestaurante.filter(pedido => {
+            pedidos.filter(pedido => {
 
                 const dataPedido =
                     pedido.criadoEm ||
@@ -134,7 +342,9 @@ exports.resumo = async (req, res) => {
                         ).toUpperCase();
 
                     // Pedidos cancelados não entram
-                    if (status === "CANCELADO") {
+                    if (
+                        status === "CANCELADO"
+                    ) {
                         return total;
                     }
 
@@ -164,7 +374,7 @@ exports.resumo = async (req, res) => {
         ];
 
         const pedidosPendentes =
-            pedidosRestaurante.filter(
+            pedidos.filter(
                 pedido =>
                     statusPendentes.includes(
                         String(
@@ -188,7 +398,7 @@ exports.resumo = async (req, res) => {
         ];
 
         const pedidosEmPreparo =
-            pedidosRestaurante.filter(
+            pedidos.filter(
                 pedido =>
                     statusPreparacao.includes(
                         String(
@@ -202,7 +412,7 @@ exports.resumo = async (req, res) => {
         // ====================================================
 
         const pedidosProntos =
-            pedidosRestaurante.filter(
+            pedidos.filter(
                 pedido =>
                     String(
                         pedido.status || ""
@@ -214,7 +424,7 @@ exports.resumo = async (req, res) => {
         // ====================================================
 
         const pedidosEmEntrega =
-            pedidosRestaurante.filter(
+            pedidos.filter(
                 pedido => {
 
                     const status =
@@ -238,7 +448,7 @@ exports.resumo = async (req, res) => {
         // ====================================================
 
         const pedidosConcluidos =
-            pedidosRestaurante.filter(
+            pedidos.filter(
                 pedido => {
 
                     const status =
@@ -264,7 +474,7 @@ exports.resumo = async (req, res) => {
         // ====================================================
 
         const pedidosCancelados =
-            pedidosRestaurante.filter(
+            pedidos.filter(
                 pedido =>
                     String(
                         pedido.status || ""
@@ -277,7 +487,7 @@ exports.resumo = async (req, res) => {
         // ====================================================
 
         const vendasTotais =
-            pedidosRestaurante.reduce(
+            pedidos.reduce(
                 (total, pedido) => {
 
                     const status =
@@ -285,7 +495,9 @@ exports.resumo = async (req, res) => {
                             pedido.status || ""
                         ).toUpperCase();
 
-                    if (status === "CANCELADO") {
+                    if (
+                        status === "CANCELADO"
+                    ) {
                         return total;
                     }
 
@@ -301,48 +513,14 @@ exports.resumo = async (req, res) => {
             );
 
         // ====================================================
-        // PRODUTOS DO RESTAURANTE
+        // PRODUTOS ATIVOS
         // ====================================================
 
-        let produtosRestaurante =
-            produtos;
-
-        if (restauranteId) {
-
-            produtosRestaurante =
-                produtos.filter(produto =>
-
-                    String(
-                        produto.restauranteId
-                    ) ===
-                    String(restauranteId)
-
-                );
-
-        }
-
         const produtosAtivos =
-            produtosRestaurante.filter(
+            produtos.filter(
                 produto =>
                     produto.disponivel !== false
             ).length;
-
-        // ====================================================
-        // RESTAURANTE
-        // ====================================================
-
-        let restaurante = null;
-
-        if (restauranteId) {
-
-            restaurante =
-                restaurantes.find(
-                    item =>
-                        String(item.id) ===
-                        String(restauranteId)
-                ) || null;
-
-        }
 
         // ====================================================
         // RESPOSTA
@@ -393,10 +571,10 @@ exports.resumo = async (req, res) => {
             pedidosCancelados,
 
             totalPedidos:
-                pedidosRestaurante.length,
+                pedidos.length,
 
             totalProdutos:
-                produtosRestaurante.length,
+                produtos.length,
 
             produtosAtivos
 
@@ -421,9 +599,7 @@ exports.resumo = async (req, res) => {
             "❌ ERRO API DASHBOARD:"
         );
 
-        console.error(
-            error
-        );
+        console.error(error);
 
         console.error(
             "================================"

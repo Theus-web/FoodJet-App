@@ -1,4 +1,3 @@
-
 const asaasService =
     require("../services/asaasService");
 
@@ -223,6 +222,30 @@ function validarDadosCliente({
 
 
 // ============================================================
+// VALIDAR VALOR
+// ============================================================
+
+function validarValor(valor) {
+
+    const valorNumerico =
+        Number(valor);
+
+    if (
+        !Number.isFinite(valorNumerico) ||
+        valorNumerico <= 0
+    ) {
+        throw new Error(
+            "Valor do pagamento inválido."
+        );
+    }
+
+    return Number(
+        valorNumerico.toFixed(2)
+    );
+}
+
+
+// ============================================================
 // BUSCAR PEDIDO
 // ============================================================
 
@@ -234,7 +257,7 @@ async function buscarPedidoObrigatorio(pedidoId) {
         String(pedidoId).trim() === ""
     ) {
         throw new Error(
-            "Pedido não informado. Crie o pedido antes de gerar o pagamento."
+            "Pedido não informado."
         );
     }
 
@@ -246,68 +269,15 @@ async function buscarPedidoObrigatorio(pedidoId) {
         idString
     );
 
-    let pedido = null;
-
-    // --------------------------------------------------------
-    // PRIMEIRA TENTATIVA
-    // --------------------------------------------------------
-
-    try {
-
-        pedido =
-            await Order.buscarPorId(
-                pedidoId
-            );
-
-    } catch (erro) {
-
-        console.warn(
-            "⚠️ Order.buscarPorId falhou:",
-            erro?.message || erro
+    const pedido =
+        await Order.buscarPorId(
+            pedidoId
         );
-    }
-
-    if (pedido) {
-
-        console.log(
-            "✅ PEDIDO ENCONTRADO:",
-            pedido.id
-        );
-
-        return pedido;
-    }
-
-    // --------------------------------------------------------
-    // SEGUNDA TENTATIVA
-    // --------------------------------------------------------
-
-    try {
-
-        const pedidos =
-            await Order.listar();
-
-        if (Array.isArray(pedidos)) {
-
-            pedido =
-                pedidos.find(
-                    item =>
-                        String(item.id).trim() ===
-                        idString
-                );
-        }
-
-    } catch (erro) {
-
-        console.warn(
-            "⚠️ ERRO LISTANDO PEDIDOS:",
-            erro?.message || erro
-        );
-    }
 
     if (!pedido) {
 
         throw new Error(
-            `Pedido ${idString} não encontrado no banco.`
+            `Pedido ${idString} não encontrado no PostgreSQL.`
         );
     }
 
@@ -317,6 +287,218 @@ async function buscarPedidoObrigatorio(pedidoId) {
     );
 
     return pedido;
+}
+
+
+// ============================================================
+// CRIAR PEDIDO QUANDO O FLUTTER AINDA NÃO POSSUI PEDIDO ID
+// ============================================================
+//
+// O checkout atual envia pedidoId: null.
+//
+// Nesse caso:
+// Flutter
+//   ↓
+// /pagamentos/pix
+//   ↓
+// cria pedido no PostgreSQL
+//   ↓
+// recebe ID do pedido
+//   ↓
+// cria cobrança Asaas usando esse mesmo ID
+//
+// Assim o externalReference do Asaas fica igual ao pedido.
+// ============================================================
+
+async function criarPedidoSeNecessario(
+    usuario,
+    body
+) {
+
+    const pedidoId =
+        body.pedidoId;
+
+    // --------------------------------------------------------
+    // JÁ EXISTE PEDIDO
+    // --------------------------------------------------------
+
+    if (
+        pedidoId !== undefined &&
+        pedidoId !== null &&
+        String(pedidoId).trim() !== ""
+    ) {
+
+        const pedido =
+            await buscarPedidoObrigatorio(
+                pedidoId
+            );
+
+        return {
+            pedido,
+            criadoAgora: false,
+        };
+    }
+
+    // --------------------------------------------------------
+    // DADOS NECESSÁRIOS PARA CRIAR PEDIDO
+    // --------------------------------------------------------
+
+    const restauranteId =
+        body.restauranteId ||
+        body.restaurantId ||
+        null;
+
+    if (
+        restauranteId === undefined ||
+        restauranteId === null ||
+        String(restauranteId).trim() === ""
+    ) {
+        throw new Error(
+            "Restaurante não informado para criar o pedido."
+        );
+    }
+
+    const itens =
+        Array.isArray(body.itens)
+            ? body.itens
+            : [];
+
+    if (itens.length === 0) {
+        throw new Error(
+            "Nenhum item foi informado no pedido."
+        );
+    }
+
+    // --------------------------------------------------------
+    // VALORES
+    // --------------------------------------------------------
+
+    const subtotal =
+        validarValor(
+            body.subtotal ??
+            body.valor ??
+            body.total
+        );
+
+    const taxaServico =
+        Number(
+            Number(
+                body.taxaServico ?? 0
+            ).toFixed(2)
+        );
+
+    const taxaEntrega =
+        Number(
+            Number(
+                body.taxaEntrega ?? 0
+            ).toFixed(2)
+        );
+
+    const totalInformado =
+        body.total !== undefined &&
+        body.total !== null
+            ? Number(body.total)
+            : subtotal + taxaServico + taxaEntrega;
+
+    const total =
+        validarValor(
+            totalInformado
+        );
+
+    // --------------------------------------------------------
+    // ENDEREÇO
+    // --------------------------------------------------------
+
+    const endereco =
+        body.endereco ||
+        null;
+
+    // --------------------------------------------------------
+    // PAGAMENTO
+    // --------------------------------------------------------
+
+    const pagamento =
+        String(
+            body.pagamento ||
+            "PIX"
+        ).toUpperCase();
+
+    // --------------------------------------------------------
+    // CRIAR PEDIDO
+    // --------------------------------------------------------
+
+    console.log("");
+    console.log(
+        "📦 PEDIDO AINDA NÃO EXISTE."
+    );
+    console.log(
+        "📦 CRIANDO PEDIDO NO POSTGRESQL..."
+    );
+
+    const pedidoCriado =
+        await Order.criar({
+
+            clienteId:
+                String(usuario.id),
+
+            restauranteId:
+                String(restauranteId),
+
+            itens,
+
+            endereco,
+
+            pagamento,
+
+            subtotal,
+
+            taxaServico,
+
+            taxaEntrega,
+
+            total,
+
+            precisaTroco:
+                false,
+
+            trocoPara:
+                null,
+
+            valorTroco:
+                0,
+
+            status:
+                "AGUARDANDO_RESTAURANTE",
+
+            pagamentoStatus:
+                "PENDENTE",
+
+            statusPagamento:
+                "pending",
+
+            pagamentoAprovado:
+                false,
+        });
+
+    if (
+        !pedidoCriado ||
+        pedidoCriado.id === undefined ||
+        pedidoCriado.id === null
+    ) {
+        throw new Error(
+            "Não foi possível criar o pedido no PostgreSQL."
+        );
+    }
+
+    console.log(
+        "✅ PEDIDO CRIADO NO POSTGRESQL:",
+        pedidoCriado.id
+    );
+
+    return {
+        pedido: pedidoCriado,
+        criadoAgora: true,
+    };
 }
 
 
@@ -343,36 +525,7 @@ function obterReferencia(pedido) {
 
 
 // ============================================================
-// VALIDAR VALOR
-// ============================================================
-
-function validarValor(valor) {
-
-    const valorNumerico =
-        Number(valor);
-
-    if (
-        !Number.isFinite(valorNumerico) ||
-        valorNumerico <= 0
-    ) {
-        throw new Error(
-            "Valor do pagamento inválido."
-        );
-    }
-
-    return Number(
-        valorNumerico.toFixed(2)
-    );
-}
-
-
-// ============================================================
 // VALIDAR DONO DO PEDIDO
-// ============================================================
-//
-// Segurança importante:
-//
-// O usuário autenticado só pode pagar o próprio pedido.
 // ============================================================
 
 function validarClienteDoPedido(
@@ -404,11 +557,91 @@ function validarClienteDoPedido(
 
 
 // ============================================================
+// ATUALIZAR PEDIDO COM PAGAMENTO ASAAS
+// ============================================================
+
+async function vincularPagamentoAoPedido(
+    pedido,
+    pagamento
+) {
+
+    const pagamentoId =
+        pagamento?.id ||
+        null;
+
+    if (!pagamentoId) {
+        return pedido;
+    }
+
+    console.log(
+        "🔗 VINCULANDO ASAAS AO PEDIDO:",
+        pedido.id
+    );
+
+    const dadosAtualizados = {
+
+        pagamentoId:
+
+            pagamentoId,
+
+        paymentId:
+
+            pagamentoId,
+
+        asaasPaymentId:
+
+            pagamentoId,
+
+        externalReference:
+
+            pagamento?.externalReference ||
+            String(pedido.id),
+
+        referenciaPagamento:
+
+            pagamento?.externalReference ||
+            String(pedido.id),
+
+        pagamentoStatus:
+
+            pagamento?.status ||
+            "PENDING",
+
+        statusPagamento:
+
+            String(
+                pagamento?.status ||
+                "PENDING"
+            ).toLowerCase(),
+
+        pagamentoAprovado:
+
+            false,
+    };
+
+    const pedidoAtualizado =
+        await Order.atualizarDadosPedido(
+            pedido.id,
+            dadosAtualizados
+        );
+
+    console.log(
+        "✅ PEDIDO VINCULADO AO PAGAMENTO ASAAS"
+    );
+
+    return pedidoAtualizado ||
+        pedido;
+}
+
+
+// ============================================================
 // PIX
 // POST /pagamentos/pix
 // ============================================================
 
 async function gerarPix(req, res) {
+
+    let pedido = null;
 
     try {
 
@@ -439,22 +672,25 @@ async function gerarPix(req, res) {
 
         const {
             valor,
-            pedidoId,
         } = body;
 
         console.log(
-            "🆔 PEDIDO ID:",
-            pedidoId
+            "🆔 PEDIDO RECEBIDO:",
+            body.pedidoId
         );
 
         // ----------------------------------------------------
         // PEDIDO
         // ----------------------------------------------------
 
-        const pedido =
-            await buscarPedidoObrigatorio(
-                pedidoId
+        const resultadoPedido =
+            await criarPedidoSeNecessario(
+                usuario,
+                body
             );
+
+        pedido =
+            resultadoPedido.pedido;
 
         // ----------------------------------------------------
         // GARANTIR QUE O PEDIDO É DO CLIENTE
@@ -477,7 +713,10 @@ async function gerarPix(req, res) {
         // ----------------------------------------------------
 
         const valorFinal =
-            validarValor(valor);
+            validarValor(
+                valor ??
+                pedido.total
+            );
 
         // ----------------------------------------------------
         // CLIENTE
@@ -580,6 +819,16 @@ async function gerarPix(req, res) {
         );
 
         // ----------------------------------------------------
+        // VINCULAR ASAAS AO PEDIDO
+        // ----------------------------------------------------
+
+        pedido =
+            await vincularPagamentoAoPedido(
+                pedido,
+                pagamento
+            );
+
+        // ----------------------------------------------------
         // QR CODE
         // ----------------------------------------------------
 
@@ -673,6 +922,14 @@ async function gerarPix(req, res) {
             erro
         );
 
+        if (pedido) {
+
+            console.error(
+                "📦 PEDIDO ENVOLVIDO:",
+                pedido.id
+            );
+        }
+
         if (erro?.response?.data) {
 
             console.error(
@@ -721,6 +978,8 @@ async function gerarPix(req, res) {
 
 async function gerarCartao(req, res) {
 
+    let pedido = null;
+
     try {
 
         console.log("");
@@ -742,13 +1001,16 @@ async function gerarCartao(req, res) {
 
         const {
             valor,
-            pedidoId,
         } = body;
 
-        const pedido =
-            await buscarPedidoObrigatorio(
-                pedidoId
+        const resultadoPedido =
+            await criarPedidoSeNecessario(
+                usuario,
+                body
             );
+
+        pedido =
+            resultadoPedido.pedido;
 
         validarClienteDoPedido(
             pedido,
@@ -759,7 +1021,10 @@ async function gerarCartao(req, res) {
             obterReferencia(pedido);
 
         const valorFinal =
-            validarValor(valor);
+            validarValor(
+                valor ??
+                pedido.total
+            );
 
         const dadosCliente =
             prepararDadosCliente(
@@ -804,9 +1069,21 @@ async function gerarCartao(req, res) {
                     String(usuario.id),
             });
 
+        if (!pagamento?.id) {
+
+            throw new Error(
+                "O Asaas não retornou o ID do pagamento com cartão."
+            );
+        }
+
+        await vincularPagamentoAoPedido(
+            pedido,
+            pagamento
+        );
+
         console.log(
             "✅ CARTÃO CRIADO:",
-            pagamento?.id
+            pagamento.id
         );
 
         return res.status(201).json({
@@ -814,10 +1091,10 @@ async function gerarCartao(req, res) {
             sucesso: true,
 
             pagamentoId:
-                pagamento?.id,
+                pagamento.id,
 
             paymentId:
-                pagamento?.id,
+                pagamento.id,
 
             pedidoId:
                 pedido.id,
@@ -900,6 +1177,8 @@ async function gerarCartao(req, res) {
 
 async function gerarDebito(req, res) {
 
+    let pedido = null;
+
     try {
 
         console.log("");
@@ -921,13 +1200,16 @@ async function gerarDebito(req, res) {
 
         const {
             valor,
-            pedidoId,
         } = body;
 
-        const pedido =
-            await buscarPedidoObrigatorio(
-                pedidoId
+        const resultadoPedido =
+            await criarPedidoSeNecessario(
+                usuario,
+                body
             );
+
+        pedido =
+            resultadoPedido.pedido;
 
         validarClienteDoPedido(
             pedido,
@@ -938,7 +1220,10 @@ async function gerarDebito(req, res) {
             obterReferencia(pedido);
 
         const valorFinal =
-            validarValor(valor);
+            validarValor(
+                valor ??
+                pedido.total
+            );
 
         const dadosCliente =
             prepararDadosCliente(
@@ -983,9 +1268,21 @@ async function gerarDebito(req, res) {
                     String(usuario.id),
             });
 
+        if (!pagamento?.id) {
+
+            throw new Error(
+                "O Asaas não retornou o ID do pagamento com débito."
+            );
+        }
+
+        await vincularPagamentoAoPedido(
+            pedido,
+            pagamento
+        );
+
         console.log(
             "✅ DÉBITO CRIADO:",
-            pagamento?.id
+            pagamento.id
         );
 
         return res.status(201).json({
@@ -993,10 +1290,10 @@ async function gerarDebito(req, res) {
             sucesso: true,
 
             pagamentoId:
-                pagamento?.id,
+                pagamento.id,
 
             paymentId:
-                pagamento?.id,
+                pagamento.id,
 
             pedidoId:
                 pedido.id,
@@ -1111,11 +1408,6 @@ async function consultar(req, res) {
                 pagamentoId
             );
 
-        // ----------------------------------------------------
-        // Se o pagamento possui referência, podemos tentar
-        // conferir o pedido correspondente.
-        // ----------------------------------------------------
-
         const externalReference =
             pagamento?.externalReference ||
             "";
@@ -1141,7 +1433,7 @@ async function consultar(req, res) {
         }
 
         // ----------------------------------------------------
-        // Segurança
+        // SEGURANÇA
         // ----------------------------------------------------
 
         if (
@@ -1277,4 +1569,3 @@ module.exports = {
     consultar,
 
 };
-

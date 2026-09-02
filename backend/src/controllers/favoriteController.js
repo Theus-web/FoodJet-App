@@ -1,24 +1,11 @@
-const { db } = require("../config/database");
-
-// ============================================================
-// GARANTIR FAVORITOS
-// ============================================================
-
-function garantirFavoritos() {
-    if (!db.data) {
-        db.data = {};
-    }
-
-    if (!Array.isArray(db.data.favoritos)) {
-        db.data.favoritos = [];
-    }
-}
+const { pool } = require("../config/database");
 
 // ============================================================
 // NORMALIZAR ID
 // ============================================================
 
 function normalizarId(valor) {
+
     if (
         valor === null ||
         valor === undefined
@@ -30,20 +17,76 @@ function normalizarId(valor) {
 }
 
 // ============================================================
+// MONTAR FAVORITO
+// ============================================================
+
+function montarFavorito(row) {
+
+    if (!row) {
+        return null;
+    }
+
+    const dados =
+        row.dados &&
+        typeof row.dados === "object"
+            ? row.dados
+            : {};
+
+    return {
+        ...dados,
+
+        id: row.id,
+
+        usuarioId:
+            row.usuario_id,
+
+        restauranteId:
+            row.restaurante_id,
+
+        nome:
+            row.nome || "",
+
+        descricao:
+            row.descricao || "",
+
+        avaliacao:
+            row.avaliacao || "5.0",
+
+        logo:
+            row.logo || "",
+
+        imagem:
+            row.imagem || "",
+
+        imagemUrl:
+            row.imagem_url || "",
+
+        logoBase64:
+            row.logo_base64 || "",
+
+        criadoEm:
+            row.criado_em
+                ? new Date(
+                    row.criado_em
+                ).toISOString()
+                : dados.criadoEm
+    };
+}
+
+// ============================================================
 // LISTAR FAVORITOS
 // ============================================================
 
 async function listar(req, res) {
+
     try {
-        await db.read();
 
-        garantirFavoritos();
-
-        const usuarioId = normalizarId(
-            req.usuario?.id ??
-            req.usuario?._id ??
-            req.usuario?.usuarioId
-        );
+        const usuarioId =
+            normalizarId(
+                req.usuario?.id ??
+                req.usuario?._id ??
+                req.usuario?.usuarioId
+            );
 
         console.log(
             "========================================"
@@ -59,27 +102,49 @@ async function listar(req, res) {
         );
 
         console.log(
-            "TOTAL FAVORITOS:",
-            db.data.favoritos.length
-        );
-
-        console.log(
             "========================================"
         );
 
         if (!usuarioId) {
+
             return res.status(401).json({
-                erro: "Usuário não identificado.",
+                erro:
+                    "Usuário não identificado."
             });
         }
 
-        const favoritos =
-            db.data.favoritos.filter(
-                (item) =>
-                    normalizarId(
-                        item.usuarioId
-                    ) === usuarioId
+        const resultado =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    usuario_id,
+                    restaurante_id,
+                    nome,
+                    descricao,
+                    avaliacao,
+                    logo,
+                    imagem,
+                    imagem_url,
+                    logo_base64,
+                    criado_em,
+                    dados
+                FROM favoritos
+                WHERE usuario_id = $1
+                ORDER BY criado_em DESC
+                `,
+                [usuarioId]
             );
+
+        const favoritos =
+            resultado.rows.map(
+                montarFavorito
+            );
+
+        console.log(
+            "TOTAL FAVORITOS:",
+            favoritos.length
+        );
 
         return res.status(200).json(
             favoritos
@@ -93,8 +158,10 @@ async function listar(req, res) {
         );
 
         return res.status(500).json({
-            erro: "Erro ao listar favoritos.",
-            detalhes: error.message,
+            erro:
+                "Erro ao listar favoritos.",
+            detalhes:
+                error.message
         });
     }
 }
@@ -104,10 +171,8 @@ async function listar(req, res) {
 // ============================================================
 
 async function salvar(req, res) {
-    try {
-        await db.read();
 
-        garantirFavoritos();
+    try {
 
         // ------------------------------------------------------
         // USUÁRIO
@@ -143,8 +208,10 @@ async function salvar(req, res) {
         // ------------------------------------------------------
 
         if (!usuarioId) {
+
             return res.status(401).json({
-                erro: "Usuário não identificado.",
+                erro:
+                    "Usuário não identificado."
             });
         }
 
@@ -173,8 +240,10 @@ async function salvar(req, res) {
         // ------------------------------------------------------
 
         if (!restauranteId) {
+
             return res.status(400).json({
-                erro: "ID do restaurante obrigatório.",
+                erro:
+                    "ID do restaurante obrigatório."
             });
         }
 
@@ -183,17 +252,24 @@ async function salvar(req, res) {
         // ------------------------------------------------------
 
         const existe =
-            db.data.favoritos.find(
-                (favorito) =>
-                    normalizarId(
-                        favorito.usuarioId
-                    ) === usuarioId &&
-                    normalizarId(
-                        favorito.restauranteId
-                    ) === restauranteId
+            await pool.query(
+                `
+                SELECT
+                    id
+                FROM favoritos
+                WHERE usuario_id = $1
+                  AND restaurante_id = $2
+                LIMIT 1
+                `,
+                [
+                    usuarioId,
+                    restauranteId
+                ]
             );
 
-        if (existe) {
+        if (
+            existe.rows.length > 0
+        ) {
 
             console.log(
                 "❤️ RESTAURANTE JÁ É FAVORITO"
@@ -203,7 +279,7 @@ async function salvar(req, res) {
                 sucesso: true,
                 favorito: true,
                 mensagem:
-                    "Restaurante já está nos favoritos.",
+                    "Restaurante já está nos favoritos."
             });
         }
 
@@ -211,7 +287,11 @@ async function salvar(req, res) {
         // CRIAR FAVORITO
         // ------------------------------------------------------
 
+        const agora =
+            new Date().toISOString();
+
         const novoFavorito = {
+
             id:
                 `${usuarioId}_${restauranteId}`,
 
@@ -267,18 +347,82 @@ async function salvar(req, res) {
                 "",
 
             criadoEm:
-                new Date().toISOString(),
+                agora
         };
 
         // ------------------------------------------------------
-        // SALVAR
+        // SALVAR NO POSTGRESQL
         // ------------------------------------------------------
 
-        db.data.favoritos.push(
-            novoFavorito
-        );
+        await pool.query(
+            `
+            INSERT INTO favoritos (
+                id,
+                usuario_id,
+                restaurante_id,
+                nome,
+                descricao,
+                avaliacao,
+                logo,
+                imagem,
+                imagem_url,
+                logo_base64,
+                criado_em,
+                dados
+            )
+            VALUES (
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                $6,
+                $7,
+                $8,
+                $9,
+                $10,
+                $11,
+                $12::jsonb
+            )
+            ON CONFLICT (id)
+            DO UPDATE SET
+                nome = EXCLUDED.nome,
+                descricao = EXCLUDED.descricao,
+                avaliacao = EXCLUDED.avaliacao,
+                logo = EXCLUDED.logo,
+                imagem = EXCLUDED.imagem,
+                imagem_url = EXCLUDED.imagem_url,
+                logo_base64 = EXCLUDED.logo_base64,
+                dados = EXCLUDED.dados
+            `,
+            [
+                novoFavorito.id,
 
-        await db.write();
+                novoFavorito.usuarioId,
+
+                novoFavorito.restauranteId,
+
+                novoFavorito.nome,
+
+                novoFavorito.descricao,
+
+                novoFavorito.avaliacao,
+
+                novoFavorito.logo,
+
+                novoFavorito.imagem,
+
+                novoFavorito.imagemUrl,
+
+                novoFavorito.logoBase64,
+
+                novoFavorito.criadoEm,
+
+                JSON.stringify(
+                    novoFavorito
+                )
+            ]
+        );
 
         console.log(
             "❤️ FAVORITO SALVO COM SUCESSO"
@@ -294,11 +438,6 @@ async function salvar(req, res) {
         );
 
         console.log(
-            "TOTAL FAVORITOS:",
-            db.data.favoritos.length
-        );
-
-        console.log(
             "========================================"
         );
 
@@ -308,7 +447,7 @@ async function salvar(req, res) {
             mensagem:
                 "Favorito salvo com sucesso.",
             dados:
-                novoFavorito,
+                novoFavorito
         });
 
     } catch (error) {
@@ -323,7 +462,7 @@ async function salvar(req, res) {
             erro:
                 "Erro ao salvar favorito.",
             detalhes:
-                error.message,
+                error.message
         });
     }
 }
@@ -333,10 +472,8 @@ async function salvar(req, res) {
 // ============================================================
 
 async function remover(req, res) {
-    try {
-        await db.read();
 
-        garantirFavoritos();
+    try {
 
         const usuarioId =
             normalizarId(
@@ -369,48 +506,37 @@ async function remover(req, res) {
         );
 
         if (!usuarioId) {
+
             return res.status(401).json({
                 erro:
-                    "Usuário não identificado.",
+                    "Usuário não identificado."
             });
         }
 
         if (!restauranteId) {
+
             return res.status(400).json({
                 erro:
-                    "ID do restaurante obrigatório.",
+                    "ID do restaurante obrigatório."
             });
         }
 
-        const quantidadeAntes =
-            db.data.favoritos.length;
-
-        db.data.favoritos =
-            db.data.favoritos.filter(
-                (item) =>
-                    !(
-                        normalizarId(
-                            item.usuarioId
-                        ) === usuarioId &&
-                        normalizarId(
-                            item.restauranteId
-                        ) === restauranteId
-                    )
+        const resultado =
+            await pool.query(
+                `
+                DELETE FROM favoritos
+                WHERE usuario_id = $1
+                  AND restaurante_id = $2
+                `,
+                [
+                    usuarioId,
+                    restauranteId
+                ]
             );
 
-        const quantidadeDepois =
-            db.data.favoritos.length;
-
-        await db.write();
-
         console.log(
-            "FAVORITOS ANTES:",
-            quantidadeAntes
-        );
-
-        console.log(
-            "FAVORITOS DEPOIS:",
-            quantidadeDepois
+            "FAVORITOS REMOVIDOS:",
+            resultado.rowCount
         );
 
         console.log(
@@ -425,7 +551,7 @@ async function remover(req, res) {
             sucesso: true,
             favorito: false,
             mensagem:
-                "Favorito removido.",
+                "Favorito removido."
         });
 
     } catch (error) {
@@ -439,7 +565,7 @@ async function remover(req, res) {
             erro:
                 "Erro ao remover favorito.",
             detalhes:
-                error.message,
+                error.message
         });
     }
 }
@@ -451,5 +577,5 @@ async function remover(req, res) {
 module.exports = {
     listar,
     salvar,
-    remover,
+    remover
 };

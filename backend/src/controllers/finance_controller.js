@@ -1,73 +1,292 @@
-const { db } = require("../database/db");
+const { pool } = require("../config/database");
 
 // =====================================================
-// FUNÇÕES AUXILIARES
+// GARANTIR TABELA DE REPASSES
 // =====================================================
 
-function garantirEstrutura() {
-    if (!db.data) {
-        db.data = {};
+async function garantirEstrutura() {
+
+    await pool.query(`
+        CREATE TABLE IF NOT EXISTS repasses (
+            id TEXT PRIMARY KEY,
+
+            restaurante_id TEXT NOT NULL,
+
+            valor NUMERIC(12,2) NOT NULL DEFAULT 0,
+
+            metodo TEXT DEFAULT 'PIX',
+
+            chave TEXT,
+
+            status TEXT DEFAULT 'PENDENTE',
+
+            automatico BOOLEAN DEFAULT FALSE,
+
+            aprovado_automaticamente BOOLEAN DEFAULT FALSE,
+
+            data TIMESTAMPTZ DEFAULT NOW(),
+
+            atualizado_em TIMESTAMPTZ DEFAULT NOW(),
+
+            mensagem TEXT,
+
+            dados JSONB DEFAULT '{}'::jsonb
+        )
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_repasses_restaurante
+        ON repasses(restaurante_id)
+    `);
+
+    await pool.query(`
+        CREATE INDEX IF NOT EXISTS idx_repasses_status
+        ON repasses(status)
+    `);
+}
+
+
+// =====================================================
+// MONTAR REPASSE
+// =====================================================
+
+function montarRepasse(row) {
+
+    if (!row) {
+        return null;
     }
 
-    db.data.pedidos ||= [];
-    db.data.repasses ||= [];
-    db.data.restaurantes ||= [];
-    db.data.usuarios ||= [];
+    let dados = {};
+
+    if (row.dados) {
+
+        try {
+
+            dados =
+                typeof row.dados === "string"
+                    ? JSON.parse(row.dados)
+                    : row.dados;
+
+        } catch {
+
+            dados = {};
+
+        }
+    }
+
+    return {
+        ...dados,
+
+        id: row.id,
+
+        restauranteId:
+            row.restaurante_id !== null &&
+            row.restaurante_id !== undefined
+                ? String(row.restaurante_id)
+                : dados.restauranteId,
+
+        valor:
+            Number(row.valor || 0),
+
+        metodo:
+            row.metodo || dados.metodo || "PIX",
+
+        chave:
+            row.chave || dados.chave,
+
+        status:
+            row.status || dados.status || "PENDENTE",
+
+        automatico:
+            Boolean(
+                row.automatico ??
+                dados.automatico ??
+                false
+            ),
+
+        aprovadoAutomaticamente:
+            Boolean(
+                row.aprovado_automaticamente ??
+                dados.aprovadoAutomaticamente ??
+                false
+            ),
+
+        data:
+            row.data
+                ? new Date(row.data).toISOString()
+                : dados.data,
+
+        atualizadoEm:
+            row.atualizado_em
+                ? new Date(row.atualizado_em).toISOString()
+                : dados.atualizadoEm,
+
+        mensagem:
+            row.mensagem ??
+            dados.mensagem
+    };
 }
+
+
+// =====================================================
+// BUSCAR REPASSES DO RESTAURANTE
+// =====================================================
+
+async function buscarRepasses(restauranteId) {
+
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            restaurante_id,
+            valor,
+            metodo,
+            chave,
+            status,
+            automatico,
+            aprovado_automaticamente,
+            data,
+            atualizado_em,
+            mensagem,
+            dados
+        FROM repasses
+        WHERE restaurante_id = $1
+        ORDER BY data DESC
+        `,
+        [String(restauranteId)]
+    );
+
+    return resultado.rows.map(montarRepasse);
+}
+
 
 // =====================================================
 // CALCULAR SALDO DO RESTAURANTE
 // =====================================================
 
-function calcularSaldo(restauranteId) {
-    garantirEstrutura();
+async function calcularSaldo(restauranteId) {
 
-    const pedidos = db.data.pedidos.filter(
-        pedido =>
-            String(pedido.restauranteId) ===
-            String(restauranteId)
+    const id = String(restauranteId);
+
+    // -------------------------------------------------
+    // PEDIDOS CONCLUÍDOS
+    // -------------------------------------------------
+
+    const pedidosResult = await pool.query(
+        `
+        SELECT
+            id,
+            total,
+            status,
+            restaurante_id,
+            dados
+        FROM pedidos
+        WHERE restaurante_id = $1
+        `,
+        [id]
     );
 
-    const concluidos = pedidos.filter(
-        pedido =>
-            pedido.status === "CONCLUIDO" ||
-            pedido.status === "FINALIZADO"
-    );
+    const pedidos =
+        pedidosResult.rows.map(row => {
 
-    const faturamento = concluidos.reduce(
-        (total, pedido) =>
-            total + Number(pedido.total || 0),
-        0
-    );
+            let dados = {};
 
-    const movimentacoes = db.data.repasses.filter(
-        repasse =>
-            String(repasse.restauranteId) ===
-            String(restauranteId)
-    );
+            if (row.dados) {
 
-    const pagos = movimentacoes
-        .filter(
-            repasse =>
-                repasse.status === "PAGO" ||
-                repasse.status === "PROCESSANDO" ||
-                repasse.status === "PENDENTE"
-        )
-        .reduce(
-            (total, repasse) =>
-                total + Number(repasse.valor || 0),
+                try {
+
+                    dados =
+                        typeof row.dados === "string"
+                            ? JSON.parse(row.dados)
+                            : row.dados;
+
+                } catch {
+
+                    dados = {};
+
+                }
+            }
+
+            return {
+                ...dados,
+
+                id: row.id,
+
+                restauranteId:
+                    row.restaurante_id,
+
+                total:
+                    Number(row.total || 0),
+
+                status:
+                    row.status || dados.status
+            };
+        });
+
+    const concluidos =
+        pedidos.filter(
+            pedido =>
+                pedido.status === "CONCLUIDO" ||
+                pedido.status === "FINALIZADO"
+        );
+
+
+    // -------------------------------------------------
+    // FATURAMENTO
+    // -------------------------------------------------
+
+    const faturamento =
+        concluidos.reduce(
+            (total, pedido) =>
+                total +
+                Number(pedido.total || 0),
             0
         );
+
+
+    // -------------------------------------------------
+    // REPASSES
+    // -------------------------------------------------
+
+    const movimentacoes =
+        await buscarRepasses(id);
+
+
+    const pagos =
+        movimentacoes
+            .filter(
+                repasse =>
+                    repasse.status === "PAGO" ||
+                    repasse.status === "PROCESSANDO" ||
+                    repasse.status === "PENDENTE"
+            )
+            .reduce(
+                (total, repasse) =>
+                    total +
+                    Number(repasse.valor || 0),
+                0
+            );
+
+
+    // -------------------------------------------------
+    // SALDO
+    // -------------------------------------------------
 
     const saldoDisponivel =
         faturamento - pagos;
 
+
     return {
+
         faturamento,
+
         saldoDisponivel,
-        pedidosConcluidos: concluidos.length
+
+        pedidosConcluidos:
+            concluidos.length
     };
 }
+
 
 // =====================================================
 // RESUMO FINANCEIRO
@@ -78,18 +297,77 @@ exports.resumo = async (req, res) => {
 
     try {
 
-        const { restauranteId } = req.params;
+        const {
+            restauranteId
+        } = req.params;
 
-        await db.read();
 
-        garantirEstrutura();
+        await garantirEstrutura();
+
+
+        // =================================================
+        // PEDIDOS
+        // =================================================
+
+        const pedidosResult =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    total,
+                    status,
+                    restaurante_id,
+                    dados
+                FROM pedidos
+                WHERE restaurante_id = $1
+                `,
+                [String(restauranteId)]
+            );
+
 
         const pedidos =
-            db.data.pedidos.filter(
-                pedido =>
-                    String(pedido.restauranteId) ===
-                    String(restauranteId)
-            );
+            pedidosResult.rows.map(row => {
+
+                let dados = {};
+
+                if (row.dados) {
+
+                    try {
+
+                        dados =
+                            typeof row.dados === "string"
+                                ? JSON.parse(row.dados)
+                                : row.dados;
+
+                    } catch {
+
+                        dados = {};
+
+                    }
+                }
+
+                return {
+
+                    ...dados,
+
+                    id: row.id,
+
+                    restauranteId:
+                        row.restaurante_id,
+
+                    total:
+                        Number(row.total || 0),
+
+                    status:
+                        row.status ||
+                        dados.status
+                };
+            });
+
+
+        // =================================================
+        // CONCLUÍDOS
+        // =================================================
 
         const concluidos =
             pedidos.filter(
@@ -98,6 +376,7 @@ exports.resumo = async (req, res) => {
                     pedido.status === "FINALIZADO"
             );
 
+
         // =================================================
         // FATURAMENTO
         // =================================================
@@ -105,86 +384,101 @@ exports.resumo = async (req, res) => {
         const faturamentoTotal =
             concluidos.reduce(
                 (total, pedido) =>
-                    total + Number(pedido.total || 0),
+                    total +
+                    Number(pedido.total || 0),
                 0
             );
+
+
+        // =================================================
+        // REPASSES
+        // =================================================
+
+        const repasses =
+            await buscarRepasses(
+                restauranteId
+            );
+
 
         // =================================================
         // REPASSES PAGOS
         // =================================================
 
         const repassesPagos =
-            db.data.repasses.filter(
+            repasses.filter(
                 repasse =>
-                    String(repasse.restauranteId) ===
-                    String(restauranteId) &&
                     repasse.status === "PAGO"
             );
+
 
         const totalRepassado =
             repassesPagos.reduce(
                 (total, repasse) =>
-                    total + Number(repasse.valor || 0),
+                    total +
+                    Number(repasse.valor || 0),
                 0
             );
+
 
         // =================================================
         // SAQUES PROCESSANDO
         // =================================================
 
         const saquesProcessando =
-            db.data.repasses.filter(
+            repasses.filter(
                 repasse =>
-                    String(repasse.restauranteId) ===
-                    String(restauranteId) &&
                     repasse.status === "PROCESSANDO"
             );
+
 
         const totalProcessando =
             saquesProcessando.reduce(
                 (total, repasse) =>
-                    total + Number(repasse.valor || 0),
+                    total +
+                    Number(repasse.valor || 0),
                 0
             );
 
+
         // =================================================
         // SAQUES PENDENTES
-        // Compatibilidade com registros antigos
         // =================================================
 
         const saquesPendentes =
-            db.data.repasses.filter(
+            repasses.filter(
                 repasse =>
-                    String(repasse.restauranteId) ===
-                    String(restauranteId) &&
                     repasse.status === "PENDENTE"
             );
+
 
         const totalPendente =
             saquesPendentes.reduce(
                 (total, repasse) =>
-                    total + Number(repasse.valor || 0),
+                    total +
+                    Number(repasse.valor || 0),
                 0
             );
+
 
         // =================================================
         // SAQUES COM ERRO
         // =================================================
 
         const saquesComErro =
-            db.data.repasses.filter(
+            repasses.filter(
                 repasse =>
-                    String(repasse.restauranteId) ===
-                    String(restauranteId) &&
                     repasse.status === "ERRO"
             );
+
 
         const totalErro =
             saquesComErro.reduce(
                 (total, repasse) =>
-                    total + Number(repasse.valor || 0),
+                    total +
+                    Number(repasse.valor || 0),
                 0
             );
+
 
         // =================================================
         // SALDO DISPONÍVEL
@@ -196,6 +490,7 @@ exports.resumo = async (req, res) => {
             totalProcessando -
             totalPendente;
 
+
         // =================================================
         // TICKET MÉDIO
         // =================================================
@@ -203,30 +498,21 @@ exports.resumo = async (req, res) => {
         const pedidosConcluidos =
             concluidos.length;
 
+
         const ticketMedio =
             pedidosConcluidos > 0
                 ? faturamentoTotal /
-                pedidosConcluidos
+                  pedidosConcluidos
                 : 0;
+
 
         // =================================================
         // HISTÓRICO
         // =================================================
 
         const historico =
-            db.data.repasses
-                .filter(
-                    repasse =>
-                        String(
-                            repasse.restauranteId
-                        ) ===
-                        String(restauranteId)
-                )
-                .sort(
-                    (a, b) =>
-                        new Date(b.data) -
-                        new Date(a.data)
-                );
+            repasses;
+
 
         // =================================================
         // RESPOSTA
@@ -298,6 +584,7 @@ exports.resumo = async (req, res) => {
     }
 };
 
+
 // =====================================================
 // SOLICITAR SAQUE AUTOMÁTICO
 // POST /api/finance/:restauranteId/saque
@@ -307,8 +594,10 @@ exports.solicitarSaque = async (req, res) => {
 
     try {
 
-        const { restauranteId } =
-            req.params;
+        const {
+            restauranteId
+        } = req.params;
+
 
         const {
             valor,
@@ -316,9 +605,9 @@ exports.solicitarSaque = async (req, res) => {
             chave
         } = req.body;
 
-        await db.read();
 
-        garantirEstrutura();
+        await garantirEstrutura();
+
 
         // =================================================
         // VALIDAR VALOR
@@ -326,6 +615,7 @@ exports.solicitarSaque = async (req, res) => {
 
         const valorSaque =
             Number(valor);
+
 
         if (
             !Number.isFinite(valorSaque) ||
@@ -341,6 +631,7 @@ exports.solicitarSaque = async (req, res) => {
 
             });
         }
+
 
         // =================================================
         // VALOR MÍNIMO
@@ -358,12 +649,14 @@ exports.solicitarSaque = async (req, res) => {
             });
         }
 
+
         // =================================================
         // VALIDAR MÉTODO
         // =================================================
 
         const metodoPagamento =
             metodo || "PIX";
+
 
         if (
             metodoPagamento !== "PIX"
@@ -379,12 +672,12 @@ exports.solicitarSaque = async (req, res) => {
             });
         }
 
+
         // =================================================
         // VALIDAR CHAVE PIX
         // =================================================
 
         if (
-            !chave ||
             !chave ||
             chave.toString().trim() === ""
         ) {
@@ -399,17 +692,20 @@ exports.solicitarSaque = async (req, res) => {
             });
         }
 
+
         // =================================================
         // CALCULAR SALDO
         // =================================================
 
         const financeiro =
-            calcularSaldo(
+            await calcularSaldo(
                 restauranteId
             );
 
+
         const saldoDisponivel =
             financeiro.saldoDisponivel;
+
 
         // =================================================
         // VERIFICAR SALDO
@@ -435,20 +731,25 @@ exports.solicitarSaque = async (req, res) => {
             });
         }
 
+
         // =================================================
-        // CRIAR SAQUE AUTOMÁTICO
+        // CRIAR SAQUE
         // =================================================
 
         const agora =
             new Date();
 
+
+        const id =
+            `saque_${Date.now()}`;
+
+
         const repasse = {
 
-            id:
-                `saque_${Date.now()}`,
+            id,
 
             restauranteId:
-                restauranteId,
+                String(restauranteId),
 
             valor:
                 Number(
@@ -481,15 +782,58 @@ exports.solicitarSaque = async (req, res) => {
 
         };
 
+
         // =================================================
-        // SALVAR
+        // SALVAR POSTGRESQL
         // =================================================
 
-        db.data.repasses.push(
-            repasse
+        await pool.query(
+            `
+            INSERT INTO repasses (
+                id,
+                restaurante_id,
+                valor,
+                metodo,
+                chave,
+                status,
+                automatico,
+                aprovado_automaticamente,
+                data,
+                atualizado_em,
+                mensagem,
+                dados
+            )
+            VALUES (
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                $6,
+                $7,
+                $8,
+                $9,
+                $10,
+                $11,
+                $12::jsonb
+            )
+            `,
+            [
+                repasse.id,
+                repasse.restauranteId,
+                repasse.valor,
+                repasse.metodo,
+                repasse.chave,
+                repasse.status,
+                repasse.automatico,
+                repasse.aprovadoAutomaticamente,
+                repasse.data,
+                repasse.atualizadoEm,
+                repasse.mensagem,
+                JSON.stringify(repasse)
+            ]
         );
 
-        await db.write();
 
         console.log(
             "💰 SAQUE AUTOMÁTICO SOLICITADO"
@@ -513,6 +857,7 @@ exports.solicitarSaque = async (req, res) => {
         console.log(
             "⚡ Status: PROCESSANDO"
         );
+
 
         // =================================================
         // RESPOSTA
@@ -563,6 +908,7 @@ exports.solicitarSaque = async (req, res) => {
     }
 };
 
+
 // =====================================================
 // MARCAR SAQUE COMO PAGO
 // POST /api/finance/saque/:saqueId/pago
@@ -572,21 +918,41 @@ exports.marcarComoPago = async (req, res) => {
 
     try {
 
-        const { saqueId } =
-            req.params;
+        const {
+            saqueId
+        } = req.params;
 
-        await db.read();
 
-        garantirEstrutura();
+        await garantirEstrutura();
 
-        const repasse =
-            db.data.repasses.find(
-                item =>
-                    String(item.id) ===
-                    String(saqueId)
+
+        const resultado =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    restaurante_id,
+                    valor,
+                    metodo,
+                    chave,
+                    status,
+                    automatico,
+                    aprovado_automaticamente,
+                    data,
+                    atualizado_em,
+                    mensagem,
+                    dados
+                FROM repasses
+                WHERE id = $1
+                LIMIT 1
+                `,
+                [String(saqueId)]
             );
 
-        if (!repasse) {
+
+        if (
+            resultado.rows.length === 0
+        ) {
 
             return res.status(404).json({
 
@@ -598,9 +964,15 @@ exports.marcarComoPago = async (req, res) => {
             });
         }
 
+
+        const repasse =
+            montarRepasse(
+                resultado.rows[0]
+            );
+
+
         if (
-            repasse.status ===
-            "PAGO"
+            repasse.status === "PAGO"
         ) {
 
             return res.status(400).json({
@@ -613,16 +985,67 @@ exports.marcarComoPago = async (req, res) => {
             });
         }
 
-        repasse.status =
-            "PAGO";
 
-        repasse.atualizadoEm =
-            new Date().toISOString();
+        const atualizadoEm =
+            new Date();
 
-        repasse.mensagem =
+
+        const mensagem =
             "Pagamento realizado com sucesso.";
 
-        await db.write();
+
+        const atualizado =
+            await pool.query(
+                `
+                UPDATE repasses
+
+                SET
+                    status = 'PAGO',
+                    atualizado_em = $1,
+                    mensagem = $2,
+                    dados =
+                        COALESCE(dados, '{}'::jsonb)
+                        ||
+                        jsonb_build_object(
+                            'status',
+                            'PAGO',
+                            'atualizadoEm',
+                            $3::text,
+                            'mensagem',
+                            $4::text
+                        )
+
+                WHERE id = $5
+
+                RETURNING
+                    id,
+                    restaurante_id,
+                    valor,
+                    metodo,
+                    chave,
+                    status,
+                    automatico,
+                    aprovado_automaticamente,
+                    data,
+                    atualizado_em,
+                    mensagem,
+                    dados
+                `,
+                [
+                    atualizadoEm,
+                    mensagem,
+                    atualizadoEm.toISOString(),
+                    mensagem,
+                    String(saqueId)
+                ]
+            );
+
+
+        const novoRepasse =
+            montarRepasse(
+                atualizado.rows[0]
+            );
+
 
         return res.json({
 
@@ -631,7 +1054,8 @@ exports.marcarComoPago = async (req, res) => {
             mensagem:
                 "Saque marcado como pago.",
 
-            repasse
+            repasse:
+                novoRepasse
 
         });
 
@@ -656,33 +1080,56 @@ exports.marcarComoPago = async (req, res) => {
     }
 };
 
+
 // =====================================================
 // MARCAR SAQUE COMO ERRO
+// POST /api/finance/saque/:saqueId/erro
 // =====================================================
 
 exports.marcarComoErro = async (req, res) => {
 
     try {
 
-        const { saqueId } =
-            req.params;
+        const {
+            saqueId
+        } = req.params;
+
 
         const {
             motivo
         } = req.body;
 
-        await db.read();
 
-        garantirEstrutura();
+        await garantirEstrutura();
 
-        const repasse =
-            db.data.repasses.find(
-                item =>
-                    String(item.id) ===
-                    String(saqueId)
+
+        const resultado =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    restaurante_id,
+                    valor,
+                    metodo,
+                    chave,
+                    status,
+                    automatico,
+                    aprovado_automaticamente,
+                    data,
+                    atualizado_em,
+                    mensagem,
+                    dados
+                FROM repasses
+                WHERE id = $1
+                LIMIT 1
+                `,
+                [String(saqueId)]
             );
 
-        if (!repasse) {
+
+        if (
+            resultado.rows.length === 0
+        ) {
 
             return res.status(404).json({
 
@@ -694,17 +1141,68 @@ exports.marcarComoErro = async (req, res) => {
             });
         }
 
-        repasse.status =
-            "ERRO";
 
-        repasse.atualizadoEm =
-            new Date().toISOString();
+        const atualizadoEm =
+            new Date();
 
-        repasse.mensagem =
+
+        const mensagem =
             motivo ||
             "Não foi possível processar o pagamento.";
 
-        await db.write();
+
+        const atualizado =
+            await pool.query(
+                `
+                UPDATE repasses
+
+                SET
+                    status = 'ERRO',
+                    atualizado_em = $1,
+                    mensagem = $2,
+                    dados =
+                        COALESCE(dados, '{}'::jsonb)
+                        ||
+                        jsonb_build_object(
+                            'status',
+                            'ERRO',
+                            'atualizadoEm',
+                            $3::text,
+                            'mensagem',
+                            $4::text
+                        )
+
+                WHERE id = $5
+
+                RETURNING
+                    id,
+                    restaurante_id,
+                    valor,
+                    metodo,
+                    chave,
+                    status,
+                    automatico,
+                    aprovado_automaticamente,
+                    data,
+                    atualizado_em,
+                    mensagem,
+                    dados
+                `,
+                [
+                    atualizadoEm,
+                    mensagem,
+                    atualizadoEm.toISOString(),
+                    mensagem,
+                    String(saqueId)
+                ]
+            );
+
+
+        const repasse =
+            montarRepasse(
+                atualizado.rows[0]
+            );
+
 
         return res.json({
 

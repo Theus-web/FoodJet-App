@@ -1,185 +1,180 @@
-const path = require("path");
+const { Pool } = require("pg");
 
-const { Low } = require("lowdb");
-const { JSONFile } = require("lowdb/node");
-
-// ============================================================
-// CAMINHO DO BANCO
-// ============================================================
-
-const caminhoBanco = path.join(
-    __dirname,
-    "..",
-    "..",
-    "foodjet.json"
-);
-
-console.log(
-    "📂 BANCO UTILIZADO:",
-    caminhoBanco
-);
+require("dotenv").config();
 
 // ============================================================
-// ADAPTER
+// CONFIGURAÇÃO POSTGRESQL
 // ============================================================
 
-const adapter = new JSONFile(
-    caminhoBanco
-);
-
-// ============================================================
-// DADOS PADRÃO
-// ============================================================
-
-const dadosPadrao = {
-    usuarios: [],
-    restaurantes: [],
-    produtos: [],
-    pedidos: [],
-    entregadores: [],
-    pagamentos: [],
-    promocoes: [],
-    favoritos: [],
-};
-
-
-// ============================================================
-// BANCO LOWDB
-// ============================================================
-
-const db = new Low(
-    adapter,
-    dadosPadrao
-);
-
-// ============================================================
-// GARANTIR ESTRUTURA DO BANCO
-// ============================================================
-
-function garantirEstrutura() {
-
-    if (!db.data) {
-        db.data = {};
-    }
-
-    if (!Array.isArray(db.data.usuarios)) {
-        db.data.usuarios = [];
-    }
-
-    if (!Array.isArray(db.data.restaurantes)) {
-        db.data.restaurantes = [];
-    }
-
-    if (!Array.isArray(db.data.produtos)) {
-        db.data.produtos = [];
-    }
-
-    if (!Array.isArray(db.data.pedidos)) {
-        db.data.pedidos = [];
-    }
-
-    if (!Array.isArray(db.data.entregadores)) {
-        db.data.entregadores = [];
-    }
-
-    if (!Array.isArray(db.data.pagamentos)) {
-        db.data.pagamentos = [];
-    }
-
-    if (!Array.isArray(db.data.promocoes)) {
-        db.data.promocoes = [];
-    }
-
- 
-    if (!Array.isArray(db.data.favoritos)) {
-        db.data.favoritos = [];
-    }
+if (!process.env.DATABASE_URL) {
+    throw new Error(
+        "❌ DATABASE_URL não encontrada nas variáveis de ambiente."
+    );
 }
 
+const pool = new Pool({
+    connectionString: process.env.DATABASE_URL,
+
+    ssl: {
+        rejectUnauthorized: false,
+    },
+
+    max: 10,
+
+    idleTimeoutMillis: 30000,
+
+    connectionTimeoutMillis: 10000,
+});
+
 // ============================================================
-// CONECTAR BANCO
+// STATUS DA CONEXÃO
 // ============================================================
 
 let bancoConectado = false;
 
+// ============================================================
+// CONECTAR
+// ============================================================
+
 async function conectar() {
-
     try {
-
-        await db.read();
-
-        garantirEstrutura();
+        await pool.query("SELECT NOW()");
 
         if (!bancoConectado) {
-
-            await db.write();
-
             bancoConectado = true;
 
-            console.log(
-                "🗄️ Banco FoodJet conectado"
-            );
+            console.log("");
+            console.log("========================================");
+            console.log("🗄️ BANCO FOODJET");
+            console.log("========================================");
+            console.log("✅ PostgreSQL conectado");
 
-            console.log(
-                "👥 USUÁRIOS NO BANCO:",
-                db.data.usuarios.length
-            );
+            try {
+                const usuarios = await pool.query(
+                    "SELECT COUNT(*)::int AS total FROM usuarios"
+                );
 
-            console.log(
-                "🏪 RESTAURANTES NO BANCO:",
-                db.data.restaurantes.length
-            );
+                const restaurantes = await pool.query(
+                    "SELECT COUNT(*)::int AS total FROM restaurantes"
+                );
 
-            console.log(
-                "🍕 PRODUTOS NO BANCO:",
-                db.data.produtos.length
-            );
+                const produtos = await pool.query(
+                    "SELECT COUNT(*)::int AS total FROM produtos"
+                );
 
-            console.log(
-                "📦 PEDIDOS NO BANCO:",
-                db.data.pedidos.length
-            );
+                const pedidos = await pool.query(
+                    "SELECT COUNT(*)::int AS total FROM pedidos"
+                );
 
-            console.log(
-                "🏍️ ENTREGADORES NO BANCO:",
-                db.data.entregadores.length
-            );
+                const entregadores = await pool.query(
+                    "SELECT COUNT(*)::int AS total FROM entregadores"
+                );
 
-            console.log(
-                "💳 PAGAMENTOS NO BANCO:",
-                db.data.pagamentos.length
-            );
+                const pagamentos = await pool.query(
+                    "SELECT COUNT(*)::int AS total FROM pagamentos"
+                );
 
-            console.log(
-                "❤️ FAVORITOS NO BANCO:",
-                db.data.favoritos.length
-            );
+                const favoritos = await pool.query(
+                    "SELECT COUNT(*)::int AS total FROM favoritos"
+                );
+
+                console.log(
+                    "👥 USUÁRIOS NO POSTGRESQL:",
+                    usuarios.rows[0].total
+                );
+
+                console.log(
+                    "🏪 RESTAURANTES NO POSTGRESQL:",
+                    restaurantes.rows[0].total
+                );
+
+                console.log(
+                    "🍕 PRODUTOS NO POSTGRESQL:",
+                    produtos.rows[0].total
+                );
+
+                console.log(
+                    "📦 PEDIDOS NO POSTGRESQL:",
+                    pedidos.rows[0].total
+                );
+
+                console.log(
+                    "🏍️ ENTREGADORES NO POSTGRESQL:",
+                    entregadores.rows[0].total
+                );
+
+                console.log(
+                    "💳 PAGAMENTOS NO POSTGRESQL:",
+                    pagamentos.rows[0].total
+                );
+
+                console.log(
+                    "❤️ FAVORITOS NO POSTGRESQL:",
+                    favoritos.rows[0].total
+                );
+
+                console.log(
+                    "========================================"
+                );
+
+                console.log("");
+
+            } catch (erroContagem) {
+
+                console.error(
+                    "⚠️ PostgreSQL conectado, mas não foi possível consultar todas as tabelas."
+                );
+
+                console.error(
+                    erroContagem.message
+                );
+            }
         }
 
-        return db;
+        return pool;
 
-    } catch (error) {
+    } catch (erro) {
 
+        console.error("");
         console.error(
-            "❌ ERRO AO CONECTAR BANCO FOODJET:"
+            "========================================"
         );
 
-        console.error(error);
+        console.error(
+            "❌ ERRO AO CONECTAR BANCO FOODJET"
+        );
 
-        throw error;
+        console.error(
+            "========================================"
+        );
+
+        console.error(erro);
+
+        console.error("");
+
+        throw erro;
     }
 }
+
+// ============================================================
+// ERROS DO POOL
+// ============================================================
+
+pool.on("error", (erro) => {
+
+    console.error(
+        "❌ Erro inesperado no pool PostgreSQL:"
+    );
+
+    console.error(erro);
+
+});
 
 // ============================================================
 // EXPORTAR
 // ============================================================
 
 module.exports = {
-
-    db,
-
+    pool,
     conectar,
-
-    garantirEstrutura
-
 };

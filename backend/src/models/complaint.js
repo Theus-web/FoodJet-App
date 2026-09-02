@@ -1,19 +1,52 @@
-const { db } = require("../config/database");
+const { pool } = require("../config/database");
 
 // ======================================================
 // GARANTIR ESTRUTURA
 // ======================================================
 
 async function garantirEstrutura() {
-    await db.read();
+    await pool.query("SELECT 1");
+}
 
-    if (!db.data) {
-        db.data = {};
+// ======================================================
+// MONTAR RECLAMAÇÃO
+// ======================================================
+
+function montarReclamacao(row) {
+
+    if (!row) {
+        return null;
     }
 
-    if (!Array.isArray(db.data.reclamacoes)) {
-        db.data.reclamacoes = [];
-    }
+    const dados =
+        row.dados &&
+        typeof row.dados === "object"
+            ? row.dados
+            : {};
+
+    return {
+        ...dados,
+
+        id: row.id,
+
+        pedidoId: row.pedido_id,
+
+        clienteId: row.cliente_id,
+
+        restauranteId: row.restaurante_id,
+
+        status: row.status,
+
+        resposta: row.resposta,
+
+        criadoEm: row.criado_em
+            ? new Date(row.criado_em).toISOString()
+            : dados.criadoEm,
+
+        atualizadoEm: row.atualizado_em
+            ? new Date(row.atualizado_em).toISOString()
+            : dados.atualizadoEm
+    };
 }
 
 // ======================================================
@@ -21,11 +54,104 @@ async function garantirEstrutura() {
 // ======================================================
 
 async function criar(reclamacao) {
+
     await garantirEstrutura();
 
-    db.data.reclamacoes.push(reclamacao);
+    if (
+        !reclamacao ||
+        typeof reclamacao !== "object"
+    ) {
+        throw new Error(
+            "Dados da reclamação inválidos."
+        );
+    }
 
-    await db.write();
+    if (
+        reclamacao.id === undefined ||
+        reclamacao.id === null
+    ) {
+        throw new Error(
+            "ID da reclamação é obrigatório."
+        );
+    }
+
+    const agora =
+        reclamacao.criadoEm ||
+        new Date().toISOString();
+
+    const atualizadoEm =
+        reclamacao.atualizadoEm ||
+        agora;
+
+    const dados = {
+        ...reclamacao,
+        criadoEm: agora,
+        atualizadoEm
+    };
+
+    await pool.query(
+        `
+        INSERT INTO reclamacoes (
+            id,
+            pedido_id,
+            cliente_id,
+            restaurante_id,
+            status,
+            resposta,
+            criado_em,
+            atualizado_em,
+            dados
+        )
+        VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9::jsonb
+        )
+        ON CONFLICT (id)
+        DO UPDATE SET
+            pedido_id = EXCLUDED.pedido_id,
+            cliente_id = EXCLUDED.cliente_id,
+            restaurante_id = EXCLUDED.restaurante_id,
+            status = EXCLUDED.status,
+            resposta = EXCLUDED.resposta,
+            atualizado_em = EXCLUDED.atualizado_em,
+            dados = EXCLUDED.dados
+        `,
+        [
+            reclamacao.id,
+
+            reclamacao.pedidoId !== undefined &&
+            reclamacao.pedidoId !== null
+                ? String(reclamacao.pedidoId)
+                : null,
+
+            reclamacao.clienteId !== undefined &&
+            reclamacao.clienteId !== null
+                ? String(reclamacao.clienteId)
+                : null,
+
+            reclamacao.restauranteId !== undefined &&
+            reclamacao.restauranteId !== null
+                ? String(reclamacao.restauranteId)
+                : null,
+
+            reclamacao.status || "ABERTA",
+
+            reclamacao.resposta || null,
+
+            agora,
+
+            atualizadoEm,
+
+            JSON.stringify(dados)
+        ]
+    );
 
     return reclamacao;
 }
@@ -35,9 +161,29 @@ async function criar(reclamacao) {
 // ======================================================
 
 async function listar() {
+
     await garantirEstrutura();
 
-    return db.data.reclamacoes;
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            pedido_id,
+            cliente_id,
+            restaurante_id,
+            status,
+            resposta,
+            criado_em,
+            atualizado_em,
+            dados
+        FROM reclamacoes
+        ORDER BY criado_em DESC
+        `
+    );
+
+    return resultado.rows.map(
+        montarReclamacao
+    );
 }
 
 // ======================================================
@@ -45,12 +191,36 @@ async function listar() {
 // ======================================================
 
 async function buscarPorId(id) {
+
     await garantirEstrutura();
 
-    return (
-        db.data.reclamacoes.find(
-            item => Number(item.id) === Number(id)
-        ) || null
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            pedido_id,
+            cliente_id,
+            restaurante_id,
+            status,
+            resposta,
+            criado_em,
+            atualizado_em,
+            dados
+        FROM reclamacoes
+        WHERE id = $1
+        LIMIT 1
+        `,
+        [id]
+    );
+
+    if (
+        resultado.rows.length === 0
+    ) {
+        return null;
+    }
+
+    return montarReclamacao(
+        resultado.rows[0]
     );
 }
 
@@ -59,11 +229,30 @@ async function buscarPorId(id) {
 // ======================================================
 
 async function listarPorPedido(pedidoId) {
+
     await garantirEstrutura();
 
-    return db.data.reclamacoes.filter(
-        item =>
-            Number(item.pedidoId) === Number(pedidoId)
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            pedido_id,
+            cliente_id,
+            restaurante_id,
+            status,
+            resposta,
+            criado_em,
+            atualizado_em,
+            dados
+        FROM reclamacoes
+        WHERE pedido_id = $1
+        ORDER BY criado_em DESC
+        `,
+        [String(pedidoId)]
+    );
+
+    return resultado.rows.map(
+        montarReclamacao
     );
 }
 
@@ -72,12 +261,30 @@ async function listarPorPedido(pedidoId) {
 // ======================================================
 
 async function listarPorCliente(clienteId) {
+
     await garantirEstrutura();
 
-    return db.data.reclamacoes.filter(
-        item =>
-            String(item.clienteId) ===
-            String(clienteId)
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            pedido_id,
+            cliente_id,
+            restaurante_id,
+            status,
+            resposta,
+            criado_em,
+            atualizado_em,
+            dados
+        FROM reclamacoes
+        WHERE cliente_id = $1
+        ORDER BY criado_em DESC
+        `,
+        [String(clienteId)]
+    );
+
+    return resultado.rows.map(
+        montarReclamacao
     );
 }
 
@@ -85,13 +292,33 @@ async function listarPorCliente(clienteId) {
 // BUSCAR RECLAMAÇÕES DO RESTAURANTE
 // ======================================================
 
-async function listarPorRestaurante(restauranteId) {
+async function listarPorRestaurante(
+    restauranteId
+) {
+
     await garantirEstrutura();
 
-    return db.data.reclamacoes.filter(
-        item =>
-            String(item.restauranteId) ===
-            String(restauranteId)
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            pedido_id,
+            cliente_id,
+            restaurante_id,
+            status,
+            resposta,
+            criado_em,
+            atualizado_em,
+            dados
+        FROM reclamacoes
+        WHERE restaurante_id = $1
+        ORDER BY criado_em DESC
+        `,
+        [String(restauranteId)]
+    );
+
+    return resultado.rows.map(
+        montarReclamacao
     );
 }
 
@@ -99,32 +326,68 @@ async function listarPorRestaurante(restauranteId) {
 // ATUALIZAR STATUS
 // ======================================================
 
-async function atualizarStatus(id, status, resposta) {
+async function atualizarStatus(
+    id,
+    status,
+    resposta
+) {
+
     await garantirEstrutura();
 
-    const index =
-        db.data.reclamacoes.findIndex(
-            item =>
-                Number(item.id) === Number(id)
-        );
+    const atual =
+        await buscarPorId(id);
 
-    if (index === -1) {
+    if (!atual) {
         return null;
     }
 
-    db.data.reclamacoes[index].status = status;
-
-    if (resposta) {
-        db.data.reclamacoes[index].resposta =
-            resposta;
-    }
-
-    db.data.reclamacoes[index].atualizadoEm =
+    const atualizadoEm =
         new Date().toISOString();
 
-    await db.write();
+    const reclamacaoAtualizada = {
+        ...atual,
 
-    return db.data.reclamacoes[index];
+        status,
+
+        ...(resposta
+            ? { resposta }
+            : {}),
+
+        atualizadoEm
+    };
+
+    const dados = {
+        ...reclamacaoAtualizada
+    };
+
+    await pool.query(
+        `
+        UPDATE reclamacoes
+        SET
+            status = $2,
+            resposta = $3,
+            atualizado_em = $4,
+            dados = $5::jsonb
+        WHERE id = $1
+        `,
+        [
+            id,
+
+            status,
+
+            resposta !== undefined &&
+            resposta !== null &&
+            resposta !== ""
+                ? resposta
+                : atual.resposta || null,
+
+            atualizadoEm,
+
+            JSON.stringify(dados)
+        ]
+    );
+
+    return reclamacaoAtualizada;
 }
 
 // ======================================================

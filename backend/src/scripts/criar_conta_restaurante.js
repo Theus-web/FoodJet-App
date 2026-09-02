@@ -1,5 +1,5 @@
 const bcrypt = require("bcrypt");
-const { db } = require("../config/database");
+const { pool } = require("../config/database");
 
 async function criarContaRestaurante() {
     try {
@@ -12,38 +12,25 @@ async function criarContaRestaurante() {
         const senha = "123456";
 
         // ID DO RESTAURANTE EXISTENTE
-        const restauranteId = 1784400784535;
+        const restauranteId = "1784400784535";
 
         // ==========================================
-        // CARREGAR BANCO
+        // VERIFICAR RESTAURANTE NO POSTGRESQL
         // ==========================================
 
-        await db.read();
+        const restauranteResult = await pool.query(
+            `
+            SELECT
+                id,
+                nome
+            FROM restaurantes
+            WHERE id = $1
+            LIMIT 1
+            `,
+            [restauranteId]
+        );
 
-        if (!db.data) {
-            db.data = {};
-        }
-
-        if (!db.data.usuarios) {
-            db.data.usuarios = [];
-        }
-
-        if (!db.data.restaurantes) {
-            db.data.restaurantes = [];
-        }
-
-        // ==========================================
-        // VERIFICAR RESTAURANTE
-        // ==========================================
-
-        const restaurante =
-            db.data.restaurantes.find(
-                item =>
-                    String(item.id) ===
-                    String(restauranteId)
-            );
-
-        if (!restaurante) {
+        if (restauranteResult.rows.length === 0) {
             console.log(
                 "ERRO: Restaurante não encontrado."
             );
@@ -56,29 +43,43 @@ async function criarContaRestaurante() {
             return;
         }
 
+        const restaurante =
+            restauranteResult.rows[0];
+
         console.log(
             "RESTAURANTE ENCONTRADO:",
             restaurante.nome
         );
 
         // ==========================================
-        // VERIFICAR E-MAIL
+        // NORMALIZAR E-MAIL
         // ==========================================
 
         const emailNormalizado =
             email.trim().toLowerCase();
 
-        const usuarioExistente =
-            db.data.usuarios.find(
-                usuario =>
-                    usuario.email &&
-                    usuario.email
-                        .trim()
-                        .toLowerCase() ===
-                    emailNormalizado
+        // ==========================================
+        // VERIFICAR E-MAIL NO POSTGRESQL
+        // ==========================================
+
+        const usuarioExistenteResult =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    email,
+                    tipo
+                FROM usuarios
+                WHERE LOWER(TRIM(email)) = $1
+                LIMIT 1
+                `,
+                [emailNormalizado]
             );
 
-        if (usuarioExistente) {
+        if (usuarioExistenteResult.rows.length > 0) {
+            const usuarioExistente =
+                usuarioExistenteResult.rows[0];
+
             console.log(
                 "ERRO: E-mail já cadastrado."
             );
@@ -101,7 +102,7 @@ async function criarContaRestaurante() {
         // ==========================================
 
         const novoUsuarioId =
-            Date.now();
+            String(Date.now());
 
         // ==========================================
         // CRIPTOGRAFAR SENHA
@@ -114,27 +115,56 @@ async function criarContaRestaurante() {
             );
 
         // ==========================================
-        // CRIAR CONTA
+        // DADOS DO USUÁRIO
         // ==========================================
 
-        const novoUsuario = {
+        const dadosUsuario = {
             id: novoUsuarioId,
-            nome: nome,
+            nome,
             email: emailNormalizado,
-            senha: senhaHash,
             tipo: "RESTAURANTE",
-            restauranteId: restauranteId
+            restauranteId,
         };
 
         // ==========================================
-        // SALVAR
+        // CRIAR CONTA NO POSTGRESQL
         // ==========================================
 
-        db.data.usuarios.push(
-            novoUsuario
+        await pool.query(
+            `
+            INSERT INTO usuarios (
+                id,
+                nome,
+                email,
+                senha,
+                tipo,
+                restaurante_id,
+                dados,
+                criado_em,
+                atualizado_em
+            )
+            VALUES (
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                $6,
+                $7::jsonb,
+                NOW(),
+                NOW()
+            )
+            `,
+            [
+                novoUsuarioId,
+                nome,
+                emailNormalizado,
+                senhaHash,
+                "RESTAURANTE",
+                restauranteId,
+                JSON.stringify(dadosUsuario),
+            ]
         );
-
-        await db.write();
 
         // ==========================================
         // RESULTADO
@@ -155,17 +185,17 @@ async function criarContaRestaurante() {
 
         console.log(
             "ID:",
-            novoUsuario.id
+            novoUsuarioId
         );
 
         console.log(
             "NOME:",
-            novoUsuario.nome
+            nome
         );
 
         console.log(
             "EMAIL:",
-            novoUsuario.email
+            emailNormalizado
         );
 
         console.log(
@@ -175,12 +205,12 @@ async function criarContaRestaurante() {
 
         console.log(
             "TIPO:",
-            novoUsuario.tipo
+            "RESTAURANTE"
         );
 
         console.log(
             "RESTAURANTE ID:",
-            novoUsuario.restauranteId
+            restauranteId
         );
 
         console.log(
@@ -194,6 +224,15 @@ async function criarContaRestaurante() {
         );
 
         console.error(erro);
+
+    } finally {
+
+        // ==========================================
+        // ENCERRAR CONEXÃO
+        // ==========================================
+
+        await pool.end();
+
     }
 }
 

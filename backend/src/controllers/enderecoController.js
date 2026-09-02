@@ -1,4 +1,4 @@
-```javascript
+
 const User = require("../models/user");
 
 // ==========================================
@@ -423,4 +423,4 @@ exports.definirPrincipal = async (req, res) => {
         });
     }
 };
-```
+

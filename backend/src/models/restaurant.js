@@ -1,26 +1,4 @@
-const { db } = require("../config/database");
-
-// ============================================================
-// GARANTIR ESTRUTURA DO BANCO
-// ============================================================
-
-async function prepararBanco() {
-
-    await db.read();
-
-    if (!db.data) {
-        db.data = {};
-    }
-
-    db.data.usuarios ||= [];
-    db.data.restaurantes ||= [];
-    db.data.produtos ||= [];
-    db.data.pedidos ||= [];
-    db.data.entregadores ||= [];
-    db.data.pagamentos ||= [];
-
-    await db.write();
-}
+const { pool } = require("../config/database");
 
 // ============================================================
 // CRIAR RESTAURANTE
@@ -28,28 +6,176 @@ async function prepararBanco() {
 
 exports.criar = async (restaurante) => {
 
-    await prepararBanco();
-
     if (!restaurante || typeof restaurante !== "object") {
         throw new Error(
             "Dados do restaurante são obrigatórios."
         );
     }
 
-    if (!restaurante.id) {
-        restaurante.id = `rest_${Date.now()}`;
-    }
+    // ========================================================
+    // ID
+    // ========================================================
 
-    db.data.restaurantes.push(restaurante);
+    const id = restaurante.id
+        ? String(restaurante.id)
+        : `rest_${Date.now()}`;
 
-    await db.write();
+    // ========================================================
+    // DADOS PRINCIPAIS
+    // ========================================================
+
+    const nome =
+        restaurante.nome !== undefined &&
+        restaurante.nome !== null
+            ? String(restaurante.nome).trim()
+            : null;
+
+    const cnpj =
+        restaurante.cnpj !== undefined &&
+        restaurante.cnpj !== null
+            ? String(restaurante.cnpj).trim()
+            : null;
+
+    const categoria =
+        restaurante.categoria !== undefined &&
+        restaurante.categoria !== null
+            ? String(restaurante.categoria).trim()
+            : null;
+
+    const status =
+        restaurante.status !== undefined &&
+        restaurante.status !== null
+            ? String(restaurante.status)
+            : null;
+
+    const online =
+        restaurante.online !== undefined
+            ? Boolean(restaurante.online)
+            : status === "ABERTO";
+
+    const aberto =
+        restaurante.aberto !== undefined
+            ? Boolean(restaurante.aberto)
+            : status === "ABERTO";
+
+    // ========================================================
+    // DATAS
+    // ========================================================
+
+    const criadoEm =
+        restaurante.criadoEm
+            ? new Date(restaurante.criadoEm)
+            : new Date();
+
+    const atualizadoEm =
+        restaurante.atualizadoEm
+            ? new Date(restaurante.atualizadoEm)
+            : new Date();
+
+    // ========================================================
+    // PRESERVAR REGISTRO COMPLETO
+    // ========================================================
+
+    const dados = {
+        ...restaurante,
+        id,
+        nome,
+        cnpj,
+        categoria,
+        status,
+        online,
+        aberto,
+        criadoEm: criadoEm.toISOString(),
+        atualizadoEm: atualizadoEm.toISOString(),
+    };
+
+    // ========================================================
+    // INSERT
+    // ========================================================
+
+    const resultado = await pool.query(
+        `
+        INSERT INTO restaurantes (
+            id,
+            nome,
+            cnpj,
+            categoria,
+            endereco,
+            pagamento,
+            imagem,
+            status,
+            online,
+            aberto,
+            criado_em,
+            atualizado_em,
+            dados
+        )
+        VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11,
+            $12,
+            $13
+        )
+        RETURNING
+            id,
+            nome,
+            cnpj,
+            categoria,
+            endereco,
+            pagamento,
+            imagem,
+            status,
+            online,
+            aberto,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            id,
+            nome,
+            cnpj,
+            categoria,
+
+            restaurante.endereco
+                ? JSON.stringify(restaurante.endereco)
+                : null,
+
+            restaurante.pagamento
+                ? JSON.stringify(restaurante.pagamento)
+                : null,
+
+            restaurante.imagem || null,
+
+            status,
+            online,
+            aberto,
+
+            criadoEm,
+            atualizadoEm,
+
+            dados,
+        ]
+    );
+
+    const novoRestaurante =
+        montarRestaurante(resultado.rows[0]);
 
     console.log(
         "🏪 RESTAURANTE CRIADO:",
-        restaurante.id
+        novoRestaurante.id
     );
 
-    return restaurante;
+    return novoRestaurante;
 };
 
 // ============================================================
@@ -58,9 +184,30 @@ exports.criar = async (restaurante) => {
 
 exports.listar = async () => {
 
-    await prepararBanco();
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            nome,
+            cnpj,
+            categoria,
+            endereco,
+            pagamento,
+            imagem,
+            status,
+            online,
+            aberto,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        FROM restaurantes
+        ORDER BY criado_em ASC NULLS LAST
+        `
+    );
 
-    return db.data.restaurantes;
+    return resultado.rows.map(
+        montarRestaurante
+    );
 };
 
 // ============================================================
@@ -68,8 +215,6 @@ exports.listar = async () => {
 // ============================================================
 
 exports.buscarPorId = async (id) => {
-
-    await prepararBanco();
 
     if (
         id === undefined ||
@@ -79,15 +224,38 @@ exports.buscarPorId = async (id) => {
         return null;
     }
 
-    const restaurante =
-        db.data.restaurantes.find(
-            restaurante =>
-                restaurante &&
-                String(restaurante.id) ===
-                String(id)
-        );
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            nome,
+            cnpj,
+            categoria,
+            endereco,
+            pagamento,
+            imagem,
+            status,
+            online,
+            aberto,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        FROM restaurantes
+        WHERE id = $1
+        LIMIT 1
+        `,
+        [
+            String(id)
+        ]
+    );
 
-    return restaurante || null;
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarRestaurante(
+        resultado.rows[0]
+    );
 };
 
 // ============================================================
@@ -99,34 +267,79 @@ exports.atualizarStatus = async (
     status
 ) => {
 
-    await prepararBanco();
-
     const restaurante =
-        db.data.restaurantes.find(
-            restaurante =>
-                restaurante &&
-                String(restaurante.id) ===
-                String(id)
-        );
+        await exports.buscarPorId(id);
 
     if (!restaurante) {
         return null;
     }
 
-    restaurante.status = status;
+    const novoStatus =
+        status !== undefined &&
+        status !== null
+            ? String(status)
+            : restaurante.status;
 
-    restaurante.online =
-        status === "ABERTO";
+    const online =
+        novoStatus === "ABERTO";
 
-    restaurante.aberto =
-        status === "ABERTO";
+    const aberto =
+        novoStatus === "ABERTO";
 
-    restaurante.atualizadoEm =
-        new Date().toISOString();
+    const atualizadoEm =
+        new Date();
 
-    await db.write();
+    const dadosAtualizados = {
+        ...(restaurante.dados || {}),
+        status: novoStatus,
+        online,
+        aberto,
+        atualizadoEm:
+            atualizadoEm.toISOString(),
+    };
 
-    return restaurante;
+    const resultado = await pool.query(
+        `
+        UPDATE restaurantes
+        SET
+            status = $1,
+            online = $2,
+            aberto = $3,
+            atualizado_em = $4,
+            dados = $5
+        WHERE id = $6
+        RETURNING
+            id,
+            nome,
+            cnpj,
+            categoria,
+            endereco,
+            pagamento,
+            imagem,
+            status,
+            online,
+            aberto,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            novoStatus,
+            online,
+            aberto,
+            atualizadoEm,
+            dadosAtualizados,
+            String(id),
+        ]
+    );
+
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarRestaurante(
+        resultado.rows[0]
+    );
 };
 
 // ============================================================
@@ -138,72 +351,167 @@ exports.atualizar = async (
     dados
 ) => {
 
-    await prepararBanco();
-
     const restaurante =
-        db.data.restaurantes.find(
-            restaurante =>
-                restaurante &&
-                String(restaurante.id) ===
-                String(id)
-        );
+        await exports.buscarPorId(id);
 
     if (!restaurante) {
         return null;
     }
 
     if (
-        dados &&
-        typeof dados === "object"
+        !dados ||
+        typeof dados !== "object"
     ) {
-
-        Object.keys(dados).forEach(
-            chave => {
-
-                if (
-                    dados[chave] !==
-                    undefined
-                ) {
-
-                    restaurante[chave] =
-                        dados[chave];
-                }
-            }
-        );
+        return restaurante;
     }
 
-    restaurante.atualizadoEm =
-        new Date().toISOString();
+    // ========================================================
+    // MESMO COMPORTAMENTO DO LOWDB:
+    // todos os campos definidos são atualizados
+    // ========================================================
 
-    await db.write();
+    const restauranteAtualizado = {
+        ...restaurante,
+        ...dados,
+    };
 
-    return restaurante;
+    const atualizadoEm =
+        new Date();
+
+    restauranteAtualizado.atualizadoEm =
+        atualizadoEm.toISOString();
+
+    // ========================================================
+    // CAMPOS PRINCIPAIS
+    // ========================================================
+
+    const nome =
+        restauranteAtualizado.nome !== undefined &&
+        restauranteAtualizado.nome !== null
+            ? String(restauranteAtualizado.nome).trim()
+            : null;
+
+    const cnpj =
+        restauranteAtualizado.cnpj !== undefined &&
+        restauranteAtualizado.cnpj !== null
+            ? String(restauranteAtualizado.cnpj).trim()
+            : null;
+
+    const categoria =
+        restauranteAtualizado.categoria !== undefined &&
+        restauranteAtualizado.categoria !== null
+            ? String(restauranteAtualizado.categoria).trim()
+            : null;
+
+    const status =
+        restauranteAtualizado.status !== undefined &&
+        restauranteAtualizado.status !== null
+            ? String(restauranteAtualizado.status)
+            : null;
+
+    const online =
+        restauranteAtualizado.online !== undefined
+            ? Boolean(restauranteAtualizado.online)
+            : status === "ABERTO";
+
+    const aberto =
+        restauranteAtualizado.aberto !== undefined
+            ? Boolean(restauranteAtualizado.aberto)
+            : status === "ABERTO";
+
+    // ========================================================
+    // DADOS COMPLETOS
+    // ========================================================
+
+    const dadosAtualizados = {
+        ...(restaurante.dados || {}),
+        ...restauranteAtualizado,
+        id: restaurante.id,
+        nome,
+        cnpj,
+        categoria,
+        status,
+        online,
+        aberto,
+        atualizadoEm:
+            atualizadoEm.toISOString(),
+    };
+
+    // ========================================================
+    // UPDATE
+    // ========================================================
+
+    const resultado = await pool.query(
+        `
+        UPDATE restaurantes
+        SET
+            nome = $1,
+            cnpj = $2,
+            categoria = $3,
+            endereco = $4,
+            pagamento = $5,
+            imagem = $6,
+            status = $7,
+            online = $8,
+            aberto = $9,
+            atualizado_em = $10,
+            dados = $11
+        WHERE id = $12
+        RETURNING
+            id,
+            nome,
+            cnpj,
+            categoria,
+            endereco,
+            pagamento,
+            imagem,
+            status,
+            online,
+            aberto,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            nome,
+            cnpj,
+            categoria,
+
+            restauranteAtualizado.endereco !== undefined
+                ? JSON.stringify(restauranteAtualizado.endereco)
+                : null,
+
+            restauranteAtualizado.pagamento !== undefined
+                ? JSON.stringify(restauranteAtualizado.pagamento)
+                : null,
+
+            restauranteAtualizado.imagem !== undefined
+                ? restauranteAtualizado.imagem
+                : null,
+
+            status,
+            online,
+            aberto,
+            atualizadoEm,
+            dadosAtualizados,
+            String(id),
+        ]
+    );
+
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarRestaurante(
+        resultado.rows[0]
+    );
 };
 
 // ============================================================
-// EXCLUIR RESTAURANTE E TODOS OS DADOS VINCULADOS
-// ============================================================
-//
-// Remove:
-//
-// - restaurante
-// - usuário(s) da conta do restaurante
-// - produtos
-// - pedidos
-// - pagamentos
-// - outras coleções vinculadas
-//
-// NÃO remove:
-//
-// - clientes sem vínculo
-// - entregadores sem vínculo
-// - outros restaurantes
-//
+// EXCLUIR RESTAURANTE E DADOS VINCULADOS
 // ============================================================
 
 exports.excluir = async (id) => {
-
-    await prepararBanco();
 
     const restauranteId =
         String(id || "").trim();
@@ -220,452 +528,309 @@ exports.excluir = async (id) => {
     }
 
     // ========================================================
-    // LOCALIZAR RESTAURANTE
+    // VERIFICAR RESTAURANTE
     // ========================================================
 
     const restaurante =
-        db.data.restaurantes.find(
-            item =>
-                item &&
-                String(item.id) ===
-                restauranteId
+        await exports.buscarPorId(
+            restauranteId
         );
 
     if (!restaurante) {
-
         return null;
     }
 
     // ========================================================
-    // CONTADORES
+    // TRANSAÇÃO
     // ========================================================
 
-    const removidos = {
+    const client =
+        await pool.connect();
 
-        restaurante: 0,
+    try {
 
-        usuarios: 0,
-
-        produtos: 0,
-
-        pedidos: 0,
-
-        pagamentos: 0,
-
-        outros: 0
-    };
-
-    // ========================================================
-    // REMOVER RESTAURANTE
-    // ========================================================
-
-    const restaurantesAntes =
-        db.data.restaurantes.length;
-
-    db.data.restaurantes =
-        db.data.restaurantes.filter(
-            item =>
-                !item ||
-                String(item.id) !==
-                restauranteId
+        await client.query(
+            "BEGIN"
         );
 
-    removidos.restaurante =
-        restaurantesAntes -
-        db.data.restaurantes.length;
+        // ====================================================
+        // CONTADORES
+        // ====================================================
 
-    // ========================================================
-    // REMOVER USUÁRIOS VINCULADOS
-    // ========================================================
+        const removidos = {
 
-    const usuariosAntes =
-        db.data.usuarios.length;
+            restaurante: 0,
 
-    db.data.usuarios =
-        db.data.usuarios.filter(
-            usuario => {
+            usuarios: 0,
 
-                // Usuário inválido permanece
-                if (
-                    !usuario ||
-                    typeof usuario !==
-                    "object"
-                ) {
-                    return true;
-                }
+            produtos: 0,
 
-                // --------------------------------------------
-                // restauranteId
-                // --------------------------------------------
+            pedidos: 0,
 
-                if (
-                    usuario.restauranteId !==
-                    undefined &&
-                    usuario.restauranteId !==
-                    null
-                ) {
+            pagamentos: 0,
 
-                    return (
-                        String(
-                            usuario.restauranteId
-                        ) !==
-                        restauranteId
-                    );
-                }
+            outros: 0,
+        };
 
-                // --------------------------------------------
-                // restaurantId
-                // --------------------------------------------
+        // ====================================================
+        // PAGAMENTOS ASAAS
+        // ====================================================
 
-                if (
-                    usuario.restaurantId !==
-                    undefined &&
-                    usuario.restaurantId !==
-                    null
-                ) {
-
-                    return (
-                        String(
-                            usuario.restaurantId
-                        ) !==
-                        restauranteId
-                    );
-                }
-
-                // --------------------------------------------
-                // restaurante.id
-                // --------------------------------------------
-
-                if (
-                    usuario.restaurante &&
-                    typeof usuario.restaurante ===
-                    "object"
-                ) {
-
-                    const idAninhado =
-                        usuario.restaurante.id;
-
-                    if (
-                        idAninhado !==
-                        undefined &&
-                        idAninhado !==
-                        null
-                    ) {
-
-                        return (
-                            String(idAninhado) !==
-                            restauranteId
-                        );
-                    }
-                }
-
-                // Usuário sem vínculo
-                // permanece no banco.
-
-                return true;
-            }
-        );
-
-    removidos.usuarios =
-        usuariosAntes -
-        db.data.usuarios.length;
-
-    // ========================================================
-    // REMOVER PRODUTOS
-    // ========================================================
-
-    if (
-        Array.isArray(
-            db.data.produtos
-        )
-    ) {
-
-        const antes =
-            db.data.produtos.length;
-
-        db.data.produtos =
-            db.data.produtos.filter(
-                produto => {
-
-                    if (
-                        !produto ||
-                        typeof produto !==
-                        "object"
-                    ) {
-                        return true;
-                    }
-
-                    const vinculo =
-                        produto.restauranteId ??
-                        produto.restaurantId;
-
-                    if (
-                        vinculo ===
-                        undefined ||
-                        vinculo ===
-                        null
-                    ) {
-                        return true;
-                    }
-
-                    return (
-                        String(vinculo) !==
-                        restauranteId
-                    );
-                }
+        const pagamentosAsaas =
+            await client.query(
+                `
+                DELETE FROM pagamentos_asaas
+                WHERE restaurante_id = $1
+                `,
+                [
+                    restauranteId
+                ]
             );
 
-        removidos.produtos =
-            antes -
-            db.data.produtos.length;
-    }
+        removidos.pagamentos +=
+            pagamentosAsaas.rowCount;
 
-    // ========================================================
-    // REMOVER PEDIDOS
-    // ========================================================
+        // ====================================================
+        // PAGAMENTOS
+        // ====================================================
 
-    if (
-        Array.isArray(
-            db.data.pedidos
-        )
-    ) {
+        const pagamentos =
+            await client.query(
+                `
+                DELETE FROM pagamentos
+                WHERE restaurante_id = $1
+                `,
+                [
+                    restauranteId
+                ]
+            );
 
-        const antes =
-            db.data.pedidos.length;
+        removidos.pagamentos +=
+            pagamentos.rowCount;
 
-        db.data.pedidos =
-            db.data.pedidos.filter(
-                pedido => {
+        // ====================================================
+        // PEDIDOS
+        // ====================================================
 
-                    if (
-                        !pedido ||
-                        typeof pedido !==
-                        "object"
-                    ) {
-                        return true;
-                    }
-
-                    const vinculo =
-                        pedido.restauranteId ??
-                        pedido.restaurantId;
-
-                    if (
-                        vinculo ===
-                        undefined ||
-                        vinculo ===
-                        null
-                    ) {
-                        return true;
-                    }
-
-                    return (
-                        String(vinculo) !==
-                        restauranteId
-                    );
-                }
+        const pedidos =
+            await client.query(
+                `
+                DELETE FROM pedidos
+                WHERE restaurante_id = $1
+                `,
+                [
+                    restauranteId
+                ]
             );
 
         removidos.pedidos =
-            antes -
-            db.data.pedidos.length;
-    }
+            pedidos.rowCount;
 
-    // ========================================================
-    // REMOVER PAGAMENTOS
-    // ========================================================
+        // ====================================================
+        // PRODUTOS
+        // ====================================================
 
-    if (
-        Array.isArray(
-            db.data.pagamentos
-        )
-    ) {
-
-        const antes =
-            db.data.pagamentos.length;
-
-        db.data.pagamentos =
-            db.data.pagamentos.filter(
-                pagamento => {
-
-                    if (
-                        !pagamento ||
-                        typeof pagamento !==
-                        "object"
-                    ) {
-                        return true;
-                    }
-
-                    const vinculo =
-                        pagamento.restauranteId ??
-                        pagamento.restaurantId;
-
-                    if (
-                        vinculo ===
-                        undefined ||
-                        vinculo ===
-                        null
-                    ) {
-                        return true;
-                    }
-
-                    return (
-                        String(vinculo) !==
-                        restauranteId
-                    );
-                }
+        const produtos =
+            await client.query(
+                `
+                DELETE FROM produtos
+                WHERE restaurante_id = $1
+                `,
+                [
+                    restauranteId
+                ]
             );
 
-        removidos.pagamentos =
-            antes -
-            db.data.pagamentos.length;
+        removidos.produtos =
+            produtos.rowCount;
+
+        // ====================================================
+        // USUÁRIOS
+        // ====================================================
+
+        const usuarios =
+            await client.query(
+                `
+                DELETE FROM usuarios
+                WHERE restaurante_id = $1
+                   OR dados->>'restaurantId' = $1
+                   OR dados->'restaurante'->>'id' = $1
+                `,
+                [
+                    restauranteId
+                ]
+            );
+
+        removidos.usuarios =
+            usuarios.rowCount;
+
+        // ====================================================
+        // OUTRAS COLEÇÕES
+        // ====================================================
+        //
+        // No momento as tabelas principais são as acima.
+        // As demais serão migradas individualmente.
+        //
+        // ====================================================
+
+        // ====================================================
+        // RESTAURANTE
+        // ====================================================
+
+        const restauranteRemovido =
+            await client.query(
+                `
+                DELETE FROM restaurantes
+                WHERE id = $1
+                `,
+                [
+                    restauranteId
+                ]
+            );
+
+        removidos.restaurante =
+            restauranteRemovido.rowCount;
+
+        // ====================================================
+        // COMMIT
+        // ====================================================
+
+        await client.query(
+            "COMMIT"
+        );
+
+        // ====================================================
+        // LOG
+        // ====================================================
+
+        console.log(
+            "============================================"
+        );
+
+        console.log(
+            "🗑️ CONTA DO RESTAURANTE EXCLUÍDA"
+        );
+
+        console.log(
+            "RESTAURANTE:",
+            restauranteId
+        );
+
+        console.log(
+            "Restaurantes:",
+            removidos.restaurante
+        );
+
+        console.log(
+            "Usuários:",
+            removidos.usuarios
+        );
+
+        console.log(
+            "Produtos:",
+            removidos.produtos
+        );
+
+        console.log(
+            "Pedidos:",
+            removidos.pedidos
+        );
+
+        console.log(
+            "Pagamentos:",
+            removidos.pagamentos
+        );
+
+        console.log(
+            "Outros:",
+            removidos.outros
+        );
+
+        console.log(
+            "============================================"
+        );
+
+        return {
+
+            sucesso: true,
+
+            restauranteId,
+
+            removidos,
+        };
+
+    } catch (error) {
+
+        await client.query(
+            "ROLLBACK"
+        );
+
+        console.error(
+            "❌ ERRO AO EXCLUIR RESTAURANTE:"
+        );
+
+        console.error(error);
+
+        throw error;
+
+    } finally {
+
+        client.release();
+    }
+};
+
+// ============================================================
+// MONTAR RESTAURANTE
+// ============================================================
+
+function montarRestaurante(row) {
+
+    if (!row) {
+        return null;
     }
 
-    // ========================================================
-    // OUTRAS COLEÇÕES
-    // ========================================================
-
-    const colecoesIgnoradas = [
-
-        "restaurantes",
-
-        "usuarios",
-
-        "produtos",
-
-        "pedidos",
-
-        "pagamentos",
-
-        "entregadores"
-    ];
-
-    Object.keys(db.data).forEach(
-        nomeColecao => {
-
-            if (
-                colecoesIgnoradas.includes(
-                    nomeColecao
-                )
-            ) {
-                return;
-            }
-
-            if (
-                !Array.isArray(
-                    db.data[nomeColecao]
-                )
-            ) {
-                return;
-            }
-
-            const antes =
-                db.data[nomeColecao].length;
-
-            db.data[nomeColecao] =
-                db.data[nomeColecao].filter(
-                    item => {
-
-                        if (
-                            !item ||
-                            typeof item !==
-                            "object"
-                        ) {
-                            return true;
-                        }
-
-                        const vinculo =
-                            item.restauranteId ??
-                            item.restaurantId;
-
-                        if (
-                            vinculo ===
-                            undefined ||
-                            vinculo ===
-                            null
-                        ) {
-                            return true;
-                        }
-
-                        return (
-                            String(vinculo) !==
-                            restauranteId
-                        );
-                    }
-                );
-
-            removidos.outros +=
-                antes -
-                db.data[nomeColecao].length;
-        }
-    );
-
-    // ========================================================
-    // SALVAR
-    // ========================================================
-
-    await db.write();
-
-    // ========================================================
-    // LOG
-    // ========================================================
-
-    console.log(
-        "============================================"
-    );
-
-    console.log(
-        "🗑️ CONTA DO RESTAURANTE EXCLUÍDA"
-    );
-
-    console.log(
-        "RESTAURANTE:",
-        restauranteId
-    );
-
-    console.log(
-        "Restaurantes:",
-        removidos.restaurante
-    );
-
-    console.log(
-        "Usuários:",
-        removidos.usuarios
-    );
-
-    console.log(
-        "Produtos:",
-        removidos.produtos
-    );
-
-    console.log(
-        "Pedidos:",
-        removidos.pedidos
-    );
-
-    console.log(
-        "Pagamentos:",
-        removidos.pagamentos
-    );
-
-    console.log(
-        "Outros:",
-        removidos.outros
-    );
-
-    console.log(
-        "============================================"
-    );
-
-    // ========================================================
-    // RETORNO
-    // ========================================================
+    const dados =
+        row.dados &&
+        typeof row.dados === "object"
+            ? row.dados
+            : {};
 
     return {
 
-        sucesso: true,
+        ...dados,
 
-        restauranteId,
+        id: row.id,
 
-        removidos
+        nome: row.nome,
+
+        cnpj: row.cnpj,
+
+        categoria: row.categoria,
+
+        endereco: row.endereco,
+
+        pagamento: row.pagamento,
+
+        imagem: row.imagem,
+
+        status: row.status,
+
+        online: row.online,
+
+        aberto: row.aberto,
+
+        criadoEm:
+            row.criadoEm
+                ? new Date(
+                    row.criadoEm
+                ).toISOString()
+                : null,
+
+        atualizadoEm:
+            row.atualizadoEm
+                ? new Date(
+                    row.atualizadoEm
+                ).toISOString()
+                : null,
     };
-};
+}

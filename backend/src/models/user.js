@@ -1,30 +1,10 @@
-
-const { db } = require("../config/database");
-
-// ============================================================
-// PREPARAR BANCO
-// ============================================================
-
-async function prepararBanco() {
-
-    await db.read();
-
-    if (!db.data) {
-        db.data = {};
-    }
-
-    if (!Array.isArray(db.data.usuarios)) {
-        db.data.usuarios = [];
-    }
-}
+const { pool } = require("../config/database");
 
 // ============================================================
 // BUSCAR USUÁRIO POR ID
 // ============================================================
 
 async function buscarPorId(id) {
-
-    await prepararBanco();
 
     if (
         id === undefined ||
@@ -34,11 +14,33 @@ async function buscarPorId(id) {
         return null;
     }
 
-    return db.data.usuarios.find(
-        usuario =>
-            usuario &&
-            String(usuario.id) === String(id)
-    ) || null;
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            nome,
+            email,
+            senha,
+            tipo,
+            restaurante_id AS "restauranteId",
+            telefone,
+            cpf,
+            endereco,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        FROM usuarios
+        WHERE id = $1
+        LIMIT 1
+        `,
+        [String(id)]
+    );
+
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarUsuario(resultado.rows[0]);
 }
 
 // ============================================================
@@ -46,8 +48,6 @@ async function buscarPorId(id) {
 // ============================================================
 
 async function buscarPorEmail(email) {
-
-    await prepararBanco();
 
     const emailNormalizado =
         String(email || "")
@@ -58,14 +58,33 @@ async function buscarPorEmail(email) {
         return null;
     }
 
-    return db.data.usuarios.find(
-        usuario =>
-            usuario &&
-            String(usuario.email || "")
-                .trim()
-                .toLowerCase() ===
-            emailNormalizado
-    ) || null;
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            nome,
+            email,
+            senha,
+            tipo,
+            restaurante_id AS "restauranteId",
+            telefone,
+            cpf,
+            endereco,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        FROM usuarios
+        WHERE LOWER(TRIM(email)) = $1
+        LIMIT 1
+        `,
+        [emailNormalizado]
+    );
+
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarUsuario(resultado.rows[0]);
 }
 
 // ============================================================
@@ -83,8 +102,6 @@ async function buscarEmail(email) {
 
 async function criar(usuario) {
 
-    await prepararBanco();
-
     if (
         !usuario ||
         typeof usuario !== "object"
@@ -94,21 +111,109 @@ async function criar(usuario) {
         );
     }
 
-    if (!usuario.id) {
-        usuario.id =
-            `user_${Date.now()}`;
-    }
+    const id =
+        usuario.id
+            ? String(usuario.id)
+            : `user_${Date.now()}`;
 
-    db.data.usuarios.push(usuario);
+    const nome =
+        usuario.nome !== undefined &&
+        usuario.nome !== null
+            ? String(usuario.nome).trim()
+            : null;
 
-    await db.write();
+    const email =
+        usuario.email !== undefined &&
+        usuario.email !== null
+            ? String(usuario.email)
+                .trim()
+                .toLowerCase()
+            : null;
+
+    const agora =
+        new Date();
+
+    const dadosExtras = {
+        ...usuario,
+        id,
+        nome,
+        email
+    };
+
+    const resultado = await pool.query(
+        `
+        INSERT INTO usuarios (
+            id,
+            nome,
+            email,
+            senha,
+            tipo,
+            restaurante_id,
+            telefone,
+            cpf,
+            endereco,
+            criado_em,
+            atualizado_em,
+            dados
+        )
+        VALUES (
+            $1,
+            $2,
+            $3,
+            $4,
+            $5,
+            $6,
+            $7,
+            $8,
+            $9,
+            $10,
+            $11,
+            $12
+        )
+        RETURNING
+            id,
+            nome,
+            email,
+            senha,
+            tipo,
+            restaurante_id AS "restauranteId",
+            telefone,
+            cpf,
+            endereco,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            id,
+            nome,
+            email,
+            usuario.senha || null,
+            usuario.tipo || null,
+            usuario.restauranteId !== undefined &&
+            usuario.restauranteId !== null
+                ? String(usuario.restauranteId)
+                : null,
+            usuario.telefone || null,
+            usuario.cpf || null,
+            usuario.endereco || null,
+            usuario.criadoEm
+                ? new Date(usuario.criadoEm)
+                : agora,
+            agora,
+            dadosExtras
+        ]
+    );
+
+    const novoUsuario =
+        montarUsuario(resultado.rows[0]);
 
     console.log(
         "👤 USUÁRIO CRIADO:",
-        usuario.id
+        novoUsuario.id
     );
 
-    return usuario;
+    return novoUsuario;
 }
 
 // ============================================================
@@ -120,29 +225,56 @@ async function atualizarSenha(
     novaSenhaHash
 ) {
 
-    await prepararBanco();
-
     const usuario =
-        db.data.usuarios.find(
-            item =>
-                item &&
-                String(item.id) ===
-                String(id)
-        );
+        await buscarPorId(id);
 
     if (!usuario) {
         return null;
     }
 
-    usuario.senha =
-        novaSenhaHash;
+    const agora =
+        new Date();
 
-    usuario.atualizadoEm =
-        new Date().toISOString();
+    const dadosAtualizados = {
+        ...(usuario.dados || {}),
+        senha: novaSenhaHash
+    };
 
-    await db.write();
+    const resultado = await pool.query(
+        `
+        UPDATE usuarios
+        SET
+            senha = $1,
+            atualizado_em = $2,
+            dados = $3
+        WHERE id = $4
+        RETURNING
+            id,
+            nome,
+            email,
+            senha,
+            tipo,
+            restaurante_id AS "restauranteId",
+            telefone,
+            cpf,
+            endereco,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            novaSenhaHash,
+            agora,
+            dadosAtualizados,
+            String(id)
+        ]
+    );
 
-    return usuario;
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarUsuario(resultado.rows[0]);
 }
 
 // ============================================================
@@ -154,66 +286,91 @@ async function atualizarPerfil(
     dados
 ) {
 
-    await prepararBanco();
-
     const usuario =
-        db.data.usuarios.find(
-            item =>
-                item &&
-                String(item.id) ===
-                String(id)
-        );
+        await buscarPorId(id);
 
     if (!usuario) {
         return null;
     }
 
-    if (
-        dados &&
-        typeof dados === "object"
-    ) {
+    const nome =
+        dados?.nome !== undefined &&
+        dados?.nome !== null
+            ? String(dados.nome).trim()
+            : usuario.nome;
 
-        if (
-            dados.nome !== undefined &&
-            dados.nome !== null
-        ) {
-            usuario.nome =
-                String(dados.nome).trim();
-        }
+    const telefone =
+        dados?.telefone !== undefined &&
+        dados?.telefone !== null
+            ? String(dados.telefone).trim()
+            : usuario.telefone;
 
-        if (
-            dados.telefone !== undefined &&
-            dados.telefone !== null
-        ) {
-            usuario.telefone =
-                String(dados.telefone).trim();
-        }
+    const email =
+        dados?.email !== undefined &&
+        dados?.email !== null
+            ? String(dados.email)
+                .trim()
+                .toLowerCase()
+            : usuario.email;
 
-        if (
-            dados.email !== undefined &&
-            dados.email !== null
-        ) {
-            usuario.email =
-                String(dados.email)
-                    .trim()
-                    .toLowerCase();
-        }
+    const cpf =
+        dados?.cpf !== undefined &&
+        dados?.cpf !== null
+            ? String(dados.cpf).trim()
+            : usuario.cpf;
 
-        if (
-            dados.cpf !== undefined &&
-            dados.cpf !== null
-        ) {
-            usuario.cpf =
-                String(dados.cpf).trim();
-        }
+    const agora =
+        new Date();
+
+    const dadosAtualizados = {
+        ...(usuario.dados || {}),
+        nome,
+        telefone,
+        email,
+        cpf
+    };
+
+    const resultado = await pool.query(
+        `
+        UPDATE usuarios
+        SET
+            nome = $1,
+            telefone = $2,
+            email = $3,
+            cpf = $4,
+            atualizado_em = $5,
+            dados = $6
+        WHERE id = $7
+        RETURNING
+            id,
+            nome,
+            email,
+            senha,
+            tipo,
+            restaurante_id AS "restauranteId",
+            telefone,
+            cpf,
+            endereco,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            nome,
+            telefone,
+            email,
+            cpf,
+            agora,
+            dadosAtualizados,
+            String(id)
+        ]
+    );
+
+    if (resultado.rows.length === 0) {
+        return null;
     }
 
-    usuario.atualizadoEm =
-        new Date().toISOString();
-
-    await db.write();
-
-    return usuario;
+    return montarUsuario(resultado.rows[0]);
 }
 
 // ============================================================
@@ -225,21 +382,14 @@ async function atualizarEndereco(
     endereco
 ) {
 
-    await prepararBanco();
-
     const usuario =
-        db.data.usuarios.find(
-            item =>
-                item &&
-                String(item.id) ===
-                String(id)
-        );
+        await buscarPorId(id);
 
     if (!usuario) {
         return null;
     }
 
-    usuario.endereco = {
+    const novoEndereco = {
         cep:
             endereco?.cep || "",
 
@@ -262,12 +412,49 @@ async function atualizarEndereco(
             endereco?.estado || ""
     };
 
-    usuario.atualizadoEm =
-        new Date().toISOString();
+    const agora =
+        new Date();
 
-    await db.write();
+    const dadosAtualizados = {
+        ...(usuario.dados || {}),
+        endereco: novoEndereco
+    };
 
-    return usuario;
+    const resultado = await pool.query(
+        `
+        UPDATE usuarios
+        SET
+            endereco = $1,
+            atualizado_em = $2,
+            dados = $3
+        WHERE id = $4
+        RETURNING
+            id,
+            nome,
+            email,
+            senha,
+            tipo,
+            restaurante_id AS "restauranteId",
+            telefone,
+            cpf,
+            endereco,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            novoEndereco,
+            agora,
+            dadosAtualizados,
+            String(id)
+        ]
+    );
+
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarUsuario(resultado.rows[0]);
 }
 
 // ============================================================
@@ -280,32 +467,57 @@ async function salvarCodigoRecuperacao(
     expiracao
 ) {
 
-    await prepararBanco();
-
     const usuario =
-        db.data.usuarios.find(
-            item =>
-                item &&
-                String(item.id) ===
-                String(id)
-        );
+        await buscarPorId(id);
 
     if (!usuario) {
         return null;
     }
 
-    usuario.codigoRecuperacao =
-        String(codigo);
+    const agora =
+        new Date();
 
-    usuario.codigoRecuperacaoExpiracao =
-        Number(expiracao);
+    const dadosAtualizados = {
+        ...(usuario.dados || {}),
+        codigoRecuperacao:
+            String(codigo),
+        codigoRecuperacaoExpiracao:
+            Number(expiracao)
+    };
 
-    usuario.atualizadoEm =
-        new Date().toISOString();
+    const resultado = await pool.query(
+        `
+        UPDATE usuarios
+        SET
+            atualizado_em = $1,
+            dados = $2
+        WHERE id = $3
+        RETURNING
+            id,
+            nome,
+            email,
+            senha,
+            tipo,
+            restaurante_id AS "restauranteId",
+            telefone,
+            cpf,
+            endereco,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            agora,
+            dadosAtualizados,
+            String(id)
+        ]
+    );
 
-    await db.write();
+    if (resultado.rows.length === 0) {
+        return null;
+    }
 
-    return usuario;
+    return montarUsuario(resultado.rows[0]);
 }
 
 // ============================================================
@@ -317,8 +529,6 @@ async function buscarPorCodigoRecuperacao(
     codigo
 ) {
 
-    await prepararBanco();
-
     const emailNormalizado =
         String(email || "")
             .trim()
@@ -327,28 +537,51 @@ async function buscarPorCodigoRecuperacao(
     const codigoNormalizado =
         String(codigo || "").trim();
 
-    const agora = Date.now();
+    if (
+        !emailNormalizado ||
+        !codigoNormalizado
+    ) {
+        return null;
+    }
 
-    const usuario =
-        db.data.usuarios.find(
-            item =>
-                item &&
-                String(item.email || "")
-                    .trim()
-                    .toLowerCase() ===
-                    emailNormalizado &&
+    const agora =
+        Date.now();
 
-                String(
-                    item.codigoRecuperacao || ""
-                ) ===
-                    codigoNormalizado &&
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            nome,
+            email,
+            senha,
+            tipo,
+            restaurante_id AS "restauranteId",
+            telefone,
+            cpf,
+            endereco,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        FROM usuarios
+        WHERE LOWER(TRIM(email)) = $1
+          AND dados->>'codigoRecuperacao' = $2
+          AND (
+              dados->>'codigoRecuperacaoExpiracao'
+          )::BIGINT > $3
+        LIMIT 1
+        `,
+        [
+            emailNormalizado,
+            codigoNormalizado,
+            agora
+        ]
+    );
 
-                Number(
-                    item.codigoRecuperacaoExpiracao || 0
-                ) > agora
-        );
+    if (resultado.rows.length === 0) {
+        return null;
+    }
 
-    return usuario || null;
+    return montarUsuario(resultado.rows[0]);
 }
 
 // ============================================================
@@ -359,29 +592,53 @@ async function limparCodigoRecuperacao(
     id
 ) {
 
-    await prepararBanco();
-
     const usuario =
-        db.data.usuarios.find(
-            item =>
-                item &&
-                String(item.id) ===
-                String(id)
-        );
+        await buscarPorId(id);
 
     if (!usuario) {
         return null;
     }
 
-    delete usuario.codigoRecuperacao;
-    delete usuario.codigoRecuperacaoExpiracao;
+    const dadosAtualizados = {
+        ...(usuario.dados || {})
+    };
 
-    usuario.atualizadoEm =
-        new Date().toISOString();
+    delete dadosAtualizados.codigoRecuperacao;
+    delete dadosAtualizados.codigoRecuperacaoExpiracao;
 
-    await db.write();
+    const resultado = await pool.query(
+        `
+        UPDATE usuarios
+        SET
+            atualizado_em = $1,
+            dados = $2
+        WHERE id = $3
+        RETURNING
+            id,
+            nome,
+            email,
+            senha,
+            tipo,
+            restaurante_id AS "restauranteId",
+            telefone,
+            cpf,
+            endereco,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        `,
+        [
+            new Date(),
+            dadosAtualizados,
+            String(id)
+        ]
+    );
 
-    return usuario;
+    if (resultado.rows.length === 0) {
+        return null;
+    }
+
+    return montarUsuario(resultado.rows[0]);
 }
 
 // ============================================================
@@ -390,26 +647,17 @@ async function limparCodigoRecuperacao(
 
 async function excluir(id) {
 
-    await prepararBanco();
-
-    const indice =
-        db.data.usuarios.findIndex(
-            usuario =>
-                usuario &&
-                String(usuario.id) ===
-                String(id)
-        );
-
-    if (indice === -1) {
-        return false;
-    }
-
-    db.data.usuarios.splice(
-        indice,
-        1
+    const resultado = await pool.query(
+        `
+        DELETE FROM usuarios
+        WHERE id = $1
+        `,
+        [String(id)]
     );
 
-    await db.write();
+    if (resultado.rowCount === 0) {
+        return false;
+    }
 
     console.log(
         "🗑️ USUÁRIO EXCLUÍDO:",
@@ -425,9 +673,71 @@ async function excluir(id) {
 
 async function listar() {
 
-    await prepararBanco();
+    const resultado = await pool.query(
+        `
+        SELECT
+            id,
+            nome,
+            email,
+            senha,
+            tipo,
+            restaurante_id AS "restauranteId",
+            telefone,
+            cpf,
+            endereco,
+            criado_em AS "criadoEm",
+            atualizado_em AS "atualizadoEm",
+            dados
+        FROM usuarios
+        ORDER BY criado_em ASC NULLS LAST
+        `
+    );
 
-    return db.data.usuarios;
+    return resultado.rows.map(
+        montarUsuario
+    );
+}
+
+// ============================================================
+// MONTAR USUÁRIO
+// ============================================================
+
+function montarUsuario(row) {
+
+    if (!row) {
+        return null;
+    }
+
+    const dados =
+        row.dados &&
+        typeof row.dados === "object"
+            ? row.dados
+            : {};
+
+    return {
+        ...dados,
+
+        id: row.id,
+        nome: row.nome,
+        email: row.email,
+        senha: row.senha,
+        tipo: row.tipo,
+        restauranteId:
+            row.restauranteId,
+        telefone: row.telefone,
+        cpf: row.cpf,
+        endereco: row.endereco,
+        criadoEm:
+            row.criadoEm
+                ? new Date(row.criadoEm)
+                    .toISOString()
+                : null,
+        atualizadoEm:
+            row.atualizadoEm
+                ? new Date(row.atualizadoEm)
+                    .toISOString()
+                : null
+    };
 }
 
 // ============================================================
@@ -461,4 +771,3 @@ module.exports = {
     excluir
 
 };
-
