@@ -151,9 +151,14 @@ async function buscarUsuarioAutenticado(req) {
 
 function prepararDadosCliente(usuario, body = {}) {
 
+    const endereco =
+        body.endereco || {};
+
     const nomeCliente =
         usuario.nome ||
+        usuario.nomeCompleto ||
         body.nome ||
+        body.nomeCliente ||
         "Cliente FoodJet";
 
     const email =
@@ -161,18 +166,61 @@ function prepararDadosCliente(usuario, body = {}) {
             ? String(usuario.email)
                 .trim()
                 .toLowerCase()
-            : "";
+            : (
+                body.email
+                    ? String(body.email)
+                        .trim()
+                        .toLowerCase()
+                    : ""
+            );
+
+    // ========================================================
+    // TELEFONE
+    // ========================================================
+    //
+    // Aceita vários nomes possíveis:
+    //
+    // usuario.telefone
+    // usuario.celular
+    // usuario.phone
+    // usuario.mobilePhone
+    //
+    // body.telefone
+    // body.celular
+    // body.phone
+    // body.mobilePhone
+    //
+    // endereco.telefone
+    // endereco.celular
+    // endereco.phone
+    // ========================================================
 
     const telefoneCliente =
         usuario.telefone ||
         usuario.celular ||
+        usuario.phone ||
+        usuario.mobilePhone ||
+        usuario.telefoneCelular ||
         body.telefone ||
+        body.celular ||
+        body.phone ||
+        body.mobilePhone ||
+        endereco.telefone ||
+        endereco.celular ||
+        endereco.phone ||
         "";
+
+    // ========================================================
+    // CPF / CNPJ
+    // ========================================================
 
     const cpfCliente =
         usuario.cpf ||
         usuario.cpfCnpj ||
+        usuario.documento ||
         body.cpf ||
+        body.cpfCnpj ||
+        body.documento ||
         "";
 
     const documento =
@@ -181,9 +229,15 @@ function prepararDadosCliente(usuario, body = {}) {
             .trim();
 
     return {
-        nomeCliente,
+
+        nomeCliente:
+            String(nomeCliente).trim(),
+
         email,
-        telefoneCliente,
+
+        telefoneCliente:
+            String(telefoneCliente).trim(),
+
         documento,
     };
 }
@@ -291,23 +345,7 @@ async function buscarPedidoObrigatorio(pedidoId) {
 
 
 // ============================================================
-// CRIAR PEDIDO QUANDO O FLUTTER AINDA NÃO POSSUI PEDIDO ID
-// ============================================================
-//
-// O checkout atual envia pedidoId: null.
-//
-// Nesse caso:
-// Flutter
-//   ↓
-// /pagamentos/pix
-//   ↓
-// cria pedido no PostgreSQL
-//   ↓
-// recebe ID do pedido
-//   ↓
-// cria cobrança Asaas usando esse mesmo ID
-//
-// Assim o externalReference do Asaas fica igual ao pedido.
+// CRIAR PEDIDO QUANDO NÃO EXISTE
 // ============================================================
 
 async function criarPedidoSeNecessario(
@@ -319,7 +357,7 @@ async function criarPedidoSeNecessario(
         body.pedidoId;
 
     // --------------------------------------------------------
-    // JÁ EXISTE PEDIDO
+    // PEDIDO JÁ EXISTE
     // --------------------------------------------------------
 
     if (
@@ -340,7 +378,7 @@ async function criarPedidoSeNecessario(
     }
 
     // --------------------------------------------------------
-    // DADOS NECESSÁRIOS PARA CRIAR PEDIDO
+    // RESTAURANTE
     // --------------------------------------------------------
 
     const restauranteId =
@@ -357,6 +395,10 @@ async function criarPedidoSeNecessario(
             "Restaurante não informado para criar o pedido."
         );
     }
+
+    // --------------------------------------------------------
+    // ITENS
+    // --------------------------------------------------------
 
     const itens =
         Array.isArray(body.itens)
@@ -398,7 +440,9 @@ async function criarPedidoSeNecessario(
         body.total !== undefined &&
         body.total !== null
             ? Number(body.total)
-            : subtotal + taxaServico + taxaEntrega;
+            : subtotal +
+              taxaServico +
+              taxaEntrega;
 
     const total =
         validarValor(
@@ -420,6 +464,7 @@ async function criarPedidoSeNecessario(
     const pagamento =
         String(
             body.pagamento ||
+            body.formaPagamento ||
             "PIX"
         ).toUpperCase();
 
@@ -431,6 +476,7 @@ async function criarPedidoSeNecessario(
     console.log(
         "📦 PEDIDO AINDA NÃO EXISTE."
     );
+
     console.log(
         "📦 CRIANDO PEDIDO NO POSTGRESQL..."
     );
@@ -581,41 +627,33 @@ async function vincularPagamentoAoPedido(
     const dadosAtualizados = {
 
         pagamentoId:
-
             pagamentoId,
 
         paymentId:
-
             pagamentoId,
 
         asaasPaymentId:
-
             pagamentoId,
 
         externalReference:
-
             pagamento?.externalReference ||
             String(pedido.id),
 
         referenciaPagamento:
-
             pagamento?.externalReference ||
             String(pedido.id),
 
         pagamentoStatus:
-
             pagamento?.status ||
             "PENDING",
 
         statusPagamento:
-
             String(
                 pagamento?.status ||
                 "PENDING"
             ).toLowerCase(),
 
         pagamentoAprovado:
-
             false,
     };
 
@@ -656,16 +694,8 @@ async function gerarPix(req, res) {
             "========================================"
         );
 
-        // ----------------------------------------------------
-        // USUÁRIO
-        // ----------------------------------------------------
-
         const usuario =
             await buscarUsuarioAutenticado(req);
-
-        // ----------------------------------------------------
-        // BODY
-        // ----------------------------------------------------
 
         const body =
             req.body || {};
@@ -679,10 +709,6 @@ async function gerarPix(req, res) {
             body.pedidoId
         );
 
-        // ----------------------------------------------------
-        // PEDIDO
-        // ----------------------------------------------------
-
         const resultadoPedido =
             await criarPedidoSeNecessario(
                 usuario,
@@ -692,35 +718,19 @@ async function gerarPix(req, res) {
         pedido =
             resultadoPedido.pedido;
 
-        // ----------------------------------------------------
-        // GARANTIR QUE O PEDIDO É DO CLIENTE
-        // ----------------------------------------------------
-
         validarClienteDoPedido(
             pedido,
             usuario
         );
 
-        // ----------------------------------------------------
-        // REFERÊNCIA
-        // ----------------------------------------------------
-
         const referencia =
             obterReferencia(pedido);
-
-        // ----------------------------------------------------
-        // VALOR
-        // ----------------------------------------------------
 
         const valorFinal =
             validarValor(
                 valor ??
                 pedido.total
             );
-
-        // ----------------------------------------------------
-        // CLIENTE
-        // ----------------------------------------------------
 
         const dadosCliente =
             prepararDadosCliente(
@@ -769,10 +779,6 @@ async function gerarPix(req, res) {
             referencia
         );
 
-        // ----------------------------------------------------
-        // CRIAR PIX ASAAS
-        // ----------------------------------------------------
-
         console.log(
             "💚 CRIANDO PIX NO ASAAS..."
         );
@@ -818,19 +824,11 @@ async function gerarPix(req, res) {
             pagamentoId
         );
 
-        // ----------------------------------------------------
-        // VINCULAR ASAAS AO PEDIDO
-        // ----------------------------------------------------
-
         pedido =
             await vincularPagamentoAoPedido(
                 pedido,
                 pagamento
             );
-
-        // ----------------------------------------------------
-        // QR CODE
-        // ----------------------------------------------------
 
         const pix =
             await obterQrCodePix(
@@ -850,10 +848,6 @@ async function gerarPix(req, res) {
         console.log(
             "✅ QR CODE PIX OBTIDO"
         );
-
-        // ----------------------------------------------------
-        // RESPOSTA
-        // ----------------------------------------------------
 
         return res.status(201).json({
 
@@ -910,9 +904,11 @@ async function gerarPix(req, res) {
         console.error(
             "========================================"
         );
+
         console.error(
             "❌ ERRO GERANDO PIX"
         );
+
         console.error(
             "========================================"
         );
@@ -986,15 +982,17 @@ async function gerarCartao(req, res) {
         console.log(
             "========================================"
         );
+
         console.log(
             "💳 POST /pagamentos/cartao"
         );
+
         console.log(
             "========================================"
         );
 
         // ====================================================
-        // USUÁRIO AUTENTICADO
+        // USUÁRIO
         // ====================================================
 
         const usuario =
@@ -1064,7 +1062,7 @@ async function gerarCartao(req, res) {
         } = dadosCliente;
 
         // ====================================================
-        // TELEFONE
+        // TELEFONE DO TITULAR
         // ====================================================
 
         const telefone =
@@ -1073,6 +1071,13 @@ async function gerarCartao(req, res) {
             )
                 .replace(/\D/g, "")
                 .trim();
+
+        console.log(
+            "📱 TELEFONE ENCONTRADO:",
+            telefone
+                ? "SIM"
+                : "NÃO"
+        );
 
         if (
             telefone.length < 10 ||
@@ -1098,6 +1103,8 @@ async function gerarCartao(req, res) {
                 enderecoOriginal.CEP ||
                 enderecoOriginal.codigoPostal ||
                 enderecoOriginal.postalCode ||
+                enderecoOriginal.cepCodigo ||
+                enderecoOriginal.cepEndereco ||
                 "",
 
             numero:
@@ -1125,7 +1132,16 @@ async function gerarCartao(req, res) {
                 .replace(/\D/g, "")
                 .trim();
 
-        if (cep.length !== 8) {
+        console.log(
+            "📍 CEP ENCONTRADO:",
+            cep
+                ? "SIM"
+                : "NÃO"
+        );
+
+        if (
+            cep.length !== 8
+        ) {
 
             throw new Error(
                 "CEP do titular do cartão é obrigatório."
@@ -1155,9 +1171,9 @@ async function gerarCartao(req, res) {
         const cartao =
             body.cartao || {};
 
-        // ----------------------------------------------------
+        // ====================================================
         // NÚMERO
-        // ----------------------------------------------------
+        // ====================================================
 
         const numero =
             String(
@@ -1175,9 +1191,9 @@ async function gerarCartao(req, res) {
             );
         }
 
-        // ----------------------------------------------------
+        // ====================================================
         // TITULAR
-        // ----------------------------------------------------
+        // ====================================================
 
         const nomeCartao =
             String(
@@ -1191,9 +1207,9 @@ async function gerarCartao(req, res) {
             );
         }
 
-        // ----------------------------------------------------
+        // ====================================================
         // VALIDADE
-        // ----------------------------------------------------
+        // ====================================================
 
         const validade =
             String(
@@ -1233,9 +1249,9 @@ async function gerarCartao(req, res) {
         const anoExpiracao =
             `20${validade.substring(2, 4)}`;
 
-        // ----------------------------------------------------
+        // ====================================================
         // CVV
-        // ----------------------------------------------------
+        // ====================================================
 
         const cvv =
             String(
@@ -1254,7 +1270,7 @@ async function gerarCartao(req, res) {
         }
 
         // ====================================================
-        // IP DO CLIENTE
+        // IP
         // ====================================================
 
         const forwardedFor =
@@ -1298,21 +1314,29 @@ async function gerarCartao(req, res) {
         console.log(
             "📱 TELEFONE:",
             telefone
+                ? "OK"
+                : "NÃO"
         );
 
         console.log(
             "🪪 DOCUMENTO:",
             documento
+                ? "OK"
+                : "NÃO"
         );
 
         console.log(
             "📍 CEP:",
             cep
+                ? "OK"
+                : "NÃO"
         );
 
         console.log(
             "🏠 NÚMERO:",
             numeroEndereco
+                ? "OK"
+                : "NÃO"
         );
 
         console.log(
@@ -1363,10 +1387,6 @@ async function gerarCartao(req, res) {
                 usuarioId:
                     String(usuario.id),
 
-                // ==========================================
-                // CARTÃO
-                // ==========================================
-
                 cartao: {
 
                     numero,
@@ -1381,10 +1401,6 @@ async function gerarCartao(req, res) {
                     cvv,
                 },
 
-                // ==========================================
-                // ENDEREÇO
-                // ==========================================
-
                 endereco: {
 
                     cep,
@@ -1396,15 +1412,11 @@ async function gerarCartao(req, res) {
                         endereco.complemento,
                 },
 
-                // ==========================================
-                // IP
-                // ==========================================
-
                 remoteIp,
             });
 
         // ====================================================
-        // VALIDAR RESPOSTA ASAAS
+        // VALIDAR ASAAS
         // ====================================================
 
         if (
@@ -1417,7 +1429,7 @@ async function gerarCartao(req, res) {
         }
 
         // ====================================================
-        // VINCULAR PAGAMENTO AO PEDIDO
+        // VINCULAR AO PEDIDO
         // ====================================================
 
         pedido =
@@ -1431,6 +1443,7 @@ async function gerarCartao(req, res) {
         // ====================================================
 
         console.log("");
+
         console.log(
             "========================================"
         );
@@ -1497,6 +1510,7 @@ async function gerarCartao(req, res) {
     } catch (erro) {
 
         console.error("");
+
         console.error(
             "========================================"
         );
@@ -1581,9 +1595,11 @@ async function gerarDebito(req, res) {
         console.log(
             "========================================"
         );
+
         console.log(
             "💳 POST /pagamentos/debito"
         );
+
         console.log(
             "========================================"
         );
