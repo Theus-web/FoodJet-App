@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -23,6 +24,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final TextEditingController _emailController =
       TextEditingController();
 
+  final TextEditingController _telefoneController =
+      TextEditingController();
+
   final TextEditingController _senhaController =
       TextEditingController();
 
@@ -34,12 +38,16 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _mostrarConfirmarSenha = false;
 
   // ============================================================
-  // CPF
+  // SOMENTE NÚMEROS
   // ============================================================
 
   String _somenteNumeros(String valor) {
     return valor.replaceAll(RegExp(r'\D'), '');
   }
+
+  // ============================================================
+  // CPF
+  // ============================================================
 
   String _formatarCpf(String valor) {
     final cpf = _somenteNumeros(valor);
@@ -62,6 +70,33 @@ class _RegisterScreenState extends State<RegisterScreen> {
         '${cpf.substring(3, 6)}.'
         '${cpf.substring(6, 9)}-'
         '${cpf.substring(9, cpf.length > 11 ? 11 : cpf.length)}';
+  }
+
+  // ============================================================
+  // TELEFONE
+  // ============================================================
+
+  String _formatarTelefone(String valor) {
+    final telefone = _somenteNumeros(valor);
+
+    if (telefone.length <= 2) {
+      return telefone;
+    }
+
+    if (telefone.length <= 7) {
+      return '(${telefone.substring(0, 2)}) '
+          '${telefone.substring(2)}';
+    }
+
+    if (telefone.length <= 10) {
+      return '(${telefone.substring(0, 2)}) '
+          '${telefone.substring(2, 6)}-'
+          '${telefone.substring(6)}';
+    }
+
+    return '(${telefone.substring(0, 2)}) '
+        '${telefone.substring(2, 7)}-'
+        '${telefone.substring(7, telefone.length > 11 ? 11 : telefone.length)}';
   }
 
   // ============================================================
@@ -88,6 +123,10 @@ class _RegisterScreenState extends State<RegisterScreen> {
         _cpfController.text,
       );
 
+      final telefone = _somenteNumeros(
+        _telefoneController.text,
+      );
+
       final resposta = await http
           .post(
             url,
@@ -98,6 +137,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               'nome': _nomeController.text.trim(),
               'cpf': cpf,
               'email': _emailController.text.trim().toLowerCase(),
+              'telefone': telefone,
               'senha': _senhaController.text,
               'tipo': 'CLIENTE',
             }),
@@ -178,6 +218,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _nomeController.dispose();
     _cpfController.dispose();
     _emailController.dispose();
+    _telefoneController.dispose();
     _senhaController.dispose();
     _confirmarSenhaController.dispose();
 
@@ -374,10 +415,14 @@ class _RegisterScreenState extends State<RegisterScreen> {
                             '',
                           );
 
+                          final formatado =
+                              _formatarCpf(numeros);
+
                           return TextEditingValue(
-                            text: _formatarCpf(numeros),
-                            selection: TextSelection.collapsed(
-                              offset: _formatarCpf(numeros).length,
+                            text: formatado,
+                            selection:
+                                TextSelection.collapsed(
+                              offset: formatado.length,
                             ),
                           );
                         },
@@ -401,6 +446,68 @@ class _RegisterScreenState extends State<RegisterScreen> {
 
                       if (cpf.length != 11) {
                         return 'Digite um CPF válido';
+                      }
+
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 18),
+
+                  // ==================================================
+                  // TELEFONE
+                  // ==================================================
+
+                  TextFormField(
+                    controller: _telefoneController,
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      TextInputFormatter.withFunction(
+                        (oldValue, newValue) {
+                          final numeros =
+                              _somenteNumeros(
+                            newValue.text,
+                          );
+
+                          if (numeros.length > 11) {
+                            return oldValue;
+                          }
+
+                          final formatado =
+                              _formatarTelefone(
+                            numeros,
+                          );
+
+                          return TextEditingValue(
+                            text: formatado,
+                            selection:
+                                TextSelection.collapsed(
+                              offset: formatado.length,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
+                    style: const TextStyle(
+                      color: Colors.white,
+                    ),
+                    decoration: _decoracaoCampo(
+                      label: 'Telefone',
+                      icone: Icons.phone_outlined,
+                    ),
+                    validator: (value) {
+                      final telefone =
+                          _somenteNumeros(
+                        value ?? '',
+                      );
+
+                      if (telefone.isEmpty) {
+                        return 'Digite seu telefone';
+                      }
+
+                      if (telefone.length != 10 &&
+                          telefone.length != 11) {
+                        return 'Digite um telefone válido';
                       }
 
                       return null;
@@ -628,3 +735,4 @@ class _RegisterScreenState extends State<RegisterScreen> {
     );
   }
 }
+

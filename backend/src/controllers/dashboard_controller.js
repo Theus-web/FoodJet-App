@@ -1,3 +1,4 @@
+
 const { pool } = require("../config/database");
 
 // ============================================================
@@ -36,6 +37,10 @@ exports.resumo = async (req, res) => {
 
         if (restauranteId) {
 
+            // =================================================
+            // PEDIDOS
+            // =================================================
+
             pedidosQuery = pool.query(
                 `
                 SELECT
@@ -44,7 +49,6 @@ exports.resumo = async (req, res) => {
                     total,
                     status,
                     criado_em,
-                    atualizado_em,
                     dados
                 FROM pedidos
                 WHERE restaurante_id = $1
@@ -52,6 +56,10 @@ exports.resumo = async (req, res) => {
                 `,
                 [String(restauranteId)]
             );
+
+            // =================================================
+            // PRODUTOS
+            // =================================================
 
             produtosQuery = pool.query(
                 `
@@ -61,7 +69,6 @@ exports.resumo = async (req, res) => {
                     nome,
                     disponivel,
                     criado_em,
-                    atualizado_em,
                     dados
                 FROM produtos
                 WHERE restaurante_id = $1
@@ -69,6 +76,10 @@ exports.resumo = async (req, res) => {
                 `,
                 [String(restauranteId)]
             );
+
+            // =================================================
+            // RESTAURANTE
+            // =================================================
 
             restauranteQuery = pool.query(
                 `
@@ -80,7 +91,6 @@ exports.resumo = async (req, res) => {
                     online,
                     aberto,
                     criado_em,
-                    atualizado_em,
                     dados
                 FROM restaurantes
                 WHERE id = $1
@@ -91,6 +101,10 @@ exports.resumo = async (req, res) => {
 
         } else {
 
+            // =================================================
+            // PEDIDOS
+            // =================================================
+
             pedidosQuery = pool.query(
                 `
                 SELECT
@@ -99,12 +113,15 @@ exports.resumo = async (req, res) => {
                     total,
                     status,
                     criado_em,
-                    atualizado_em,
                     dados
                 FROM pedidos
                 ORDER BY criado_em DESC
                 `
             );
+
+            // =================================================
+            // PRODUTOS
+            // =================================================
 
             produtosQuery = pool.query(
                 `
@@ -114,17 +131,24 @@ exports.resumo = async (req, res) => {
                     nome,
                     disponivel,
                     criado_em,
-                    atualizado_em,
                     dados
                 FROM produtos
                 ORDER BY criado_em DESC
                 `
             );
 
+            // =================================================
+            // SEM RESTAURANTE
+            // =================================================
+
             restauranteQuery = Promise.resolve({
                 rows: []
             });
         }
+
+        // ====================================================
+        // EXECUTAR CONSULTAS
+        // ====================================================
 
         const [
             pedidosResultado,
@@ -168,14 +192,10 @@ exports.resumo = async (req, res) => {
                             ? new Date(
                                 row.criado_em
                             ).toISOString()
-                            : dados.criadoEm,
+                            : dados.criadoEm || null,
 
                     atualizadoEm:
-                        row.atualizado_em
-                            ? new Date(
-                                row.atualizado_em
-                            ).toISOString()
-                            : dados.atualizadoEm
+                        dados.atualizadoEm || null
                 };
 
             });
@@ -212,14 +232,10 @@ exports.resumo = async (req, res) => {
                             ? new Date(
                                 row.criado_em
                             ).toISOString()
-                            : dados.criadoEm,
+                            : dados.criadoEm || null,
 
                     atualizadoEm:
-                        row.atualizado_em
-                            ? new Date(
-                                row.atualizado_em
-                            ).toISOString()
-                            : dados.atualizadoEm
+                        dados.atualizadoEm || null
                 };
 
             });
@@ -244,28 +260,36 @@ exports.resumo = async (req, res) => {
                     : {};
 
             restaurante = {
+
                 ...dados,
 
-                id: row.id,
-                nome: row.nome,
-                categoria: row.categoria,
-                status: row.status,
-                online: row.online,
-                aberto: row.aberto,
+                id:
+                    row.id,
+
+                nome:
+                    row.nome,
+
+                categoria:
+                    row.categoria,
+
+                status:
+                    row.status,
+
+                online:
+                    row.online,
+
+                aberto:
+                    row.aberto,
 
                 criadoEm:
                     row.criado_em
                         ? new Date(
                             row.criado_em
                         ).toISOString()
-                        : dados.criadoEm,
+                        : dados.criadoEm || null,
 
                 atualizadoEm:
-                    row.atualizado_em
-                        ? new Date(
-                            row.atualizado_em
-                        ).toISOString()
-                        : dados.atualizadoEm
+                    dados.atualizadoEm || null
             };
         }
 
@@ -274,11 +298,17 @@ exports.resumo = async (req, res) => {
             pedidos.length
         );
 
+        console.log(
+            "🍔 PRODUTOS ENCONTRADOS:",
+            produtos.length
+        );
+
         // ====================================================
         // DATA DE HOJE
         // ====================================================
 
-        const agora = new Date();
+        const agora =
+            new Date();
 
         const inicioHoje =
             new Date(
@@ -530,20 +560,28 @@ exports.resumo = async (req, res) => {
 
             sucesso: true,
 
-            restaurante: restaurante
-                ? {
-                    id: restaurante.id,
-                    nome: restaurante.nome,
-                    categoria:
-                        restaurante.categoria,
-                    status:
-                        restaurante.status,
-                    online:
-                        restaurante.online,
-                    aberto:
-                        restaurante.aberto
-                }
-                : null,
+            restaurante:
+                restaurante
+                    ? {
+                        id:
+                            restaurante.id,
+
+                        nome:
+                            restaurante.nome,
+
+                        categoria:
+                            restaurante.categoria,
+
+                        status:
+                            restaurante.status,
+
+                        online:
+                            restaurante.online,
+
+                        aberto:
+                            restaurante.aberto
+                    }
+                    : null,
 
             vendasHoje:
                 Number(
@@ -580,9 +618,17 @@ exports.resumo = async (req, res) => {
 
         };
 
+        // ====================================================
+        // LOG FINAL
+        // ====================================================
+
         console.log(
             "📊 DASHBOARD:",
             resposta
+        );
+
+        console.log(
+            "================================"
         );
 
         return res.status(200).json(
@@ -620,3 +666,4 @@ exports.resumo = async (req, res) => {
     }
 
 };
+
