@@ -1324,89 +1324,352 @@ async function consultarPagamento(
   }
 }
 
+
 // ============================================================
 // ESTORNAR PAGAMENTO
+// PIX + CARTÃO DE CRÉDITO
 // ============================================================
 
-async function estornarPagamento(pagamentoId, valor = null) {
-    try {
-        if (!pagamentoId) {
-            throw new Error("ID do pagamento Asaas não informado.");
-        }
+async function estornarPagamento(
+  pagamentoId,
+  valor = null
+) {
 
-        console.log("========================================");
-        console.log("💸 FOODJET - ESTORNO ASAAS");
-        console.log("========================================");
-        console.log("🆔 PAGAMENTO ASAAS:", pagamentoId);
+  try {
 
-        const body = {};
+    // ==========================================================
+    // VALIDAR ID
+    // ==========================================================
 
-        // Se valor for informado, faz estorno parcial.
-        // Se não informar, o Asaas faz estorno total.
-        if (valor !== null && valor !== undefined) {
-            const valorNumerico = Number(valor);
+    if (
+      !pagamentoId ||
+      !String(pagamentoId).trim()
+    ) {
 
-            if (!Number.isFinite(valorNumerico) || valorNumerico <= 0) {
-                throw new Error("Valor de estorno inválido.");
-            }
+      throw new Error(
+        "ID do pagamento Asaas não informado."
+      );
+    }
 
-            body.value = Number(valorNumerico.toFixed(2));
+    const id =
+      String(
+        pagamentoId
+      ).trim();
 
-            console.log("💰 VALOR DO ESTORNO:", body.value);
-        } else {
-            console.log("💰 ESTORNO: TOTAL");
-        }
+    console.log("");
+    console.log(
+      "========================================"
+    );
+    console.log(
+      "💸 FOODJET - ESTORNO ASAAS"
+    );
+    console.log(
+      "========================================"
+    );
+    console.log(
+      "🆔 PAGAMENTO ASAAS:",
+      id
+    );
 
-        const response = await api.post(
-            `/v3/payments/${encodeURIComponent(pagamentoId)}/refund`,
-            body
+    // ==========================================================
+    // CONSULTAR PAGAMENTO ANTES DO ESTORNO
+    // ==========================================================
+
+    const consulta =
+      await consultarPagamento(id);
+
+    if (!consulta) {
+
+      throw new Error(
+        "Pagamento Asaas não encontrado."
+      );
+    }
+
+    const billingType =
+      String(
+        consulta.billingType ||
+        ""
+      )
+        .trim()
+        .toUpperCase();
+
+    const status =
+      String(
+        consulta.status ||
+        ""
+      )
+        .trim()
+        .toUpperCase();
+
+    console.log(
+      "💳 FORMA DE PAGAMENTO:",
+      billingType
+    );
+
+    console.log(
+      "📊 STATUS ASAAS:",
+      status
+    );
+
+    // ==========================================================
+    // PERMITIR SOMENTE PIX E CARTÃO
+    // ==========================================================
+
+    const tiposPermitidos = [
+      "PIX",
+      "CREDIT_CARD",
+    ];
+
+    if (
+      !tiposPermitidos.includes(
+        billingType
+      )
+    ) {
+
+      throw new Error(
+        `Forma de pagamento não pode ser estornada automaticamente: ${billingType || "não informada"}.`
+      );
+    }
+
+    // ==========================================================
+    // VERIFICAR STATUS DE PAGAMENTO
+    // ==========================================================
+
+    const pagamentoRecebido =
+      (
+        billingType === "PIX" &&
+        status === "RECEIVED"
+      ) ||
+      (
+        billingType === "CREDIT_CARD" &&
+        (
+          status === "RECEIVED" ||
+          status === "CONFIRMED"
+        )
+      );
+
+    if (!pagamentoRecebido) {
+
+      // --------------------------------------------------------
+      // SE JÁ ESTIVER ESTORNADO
+      // --------------------------------------------------------
+
+      if (
+        status === "REFUNDED"
+      ) {
+
+        console.log(
+          "ℹ️ PAGAMENTO JÁ ESTORNADO."
         );
 
-        console.log("✅ ESTORNO SOLICITADO COM SUCESSO");
-        console.log("🆔 PAGAMENTO:", pagamentoId);
-
-        if (response.data?.status) {
-            console.log(
-                "📊 STATUS:",
-                response.data.status
-            );
-        }
-
-        console.log("========================================");
-
-        return response.data;
-
-    } catch (error) {
-
-        console.error("========================================");
-        console.error("❌ ERRO AO ESTORNAR PAGAMENTO ASAAS");
-        console.error("========================================");
-
-        console.error(
-            "🆔 PAGAMENTO:",
-            pagamentoId
+        console.log(
+          "========================================"
         );
 
-        console.error(
-            "📊 STATUS HTTP:",
-            error.response?.status
+        return consulta;
+      }
+
+      // --------------------------------------------------------
+      // SE ESTIVER EM PROCESSAMENTO DE ESTORNO
+      // --------------------------------------------------------
+
+      if (
+        status === "REFUND_IN_PROGRESS"
+      ) {
+
+        console.log(
+          "ℹ️ ESTORNO JÁ ESTÁ EM PROCESSAMENTO."
         );
 
-        console.error(
-            "📄 RESPOSTA ASAAS:",
-            error.response?.data || error.message
+        console.log(
+          "========================================"
         );
 
-        console.error("========================================");
+        return consulta;
+      }
+
+      throw new Error(
+        `Pagamento não está em um status permitido para estorno: ${status || "não informado"}.`
+      );
+    }
+
+    // ==========================================================
+    // PREPARAR ESTORNO
+    // ==========================================================
+
+    const body = {};
+
+    // ----------------------------------------------------------
+    // ESTORNO PARCIAL
+    // ----------------------------------------------------------
+
+    if (
+      valor !== null &&
+      valor !== undefined
+    ) {
+
+      const valorNumerico =
+        Number(valor);
+
+      if (
+        !Number.isFinite(
+          valorNumerico
+        ) ||
+        valorNumerico <= 0
+      ) {
 
         throw new Error(
-            error.response?.data?.errors?.[0]?.description ||
-            error.response?.data?.message ||
-            error.message ||
-            "Não foi possível estornar o pagamento."
+          "Valor de estorno inválido."
         );
+      }
+
+      const valorEstorno =
+        Number(
+          valorNumerico.toFixed(2)
+        );
+
+      const valorPagamento =
+        Number(
+          consulta.value || 0
+        );
+
+      if (
+        valorEstorno >
+        valorPagamento
+      ) {
+
+        throw new Error(
+          "O valor do estorno não pode ser maior que o valor do pagamento."
+        );
+      }
+
+      body.value =
+        valorEstorno;
+
+      console.log(
+        "💰 TIPO: ESTORNO PARCIAL"
+      );
+
+      console.log(
+        "💰 VALOR:",
+        valorEstorno
+      );
+
+    } else {
+
+      // --------------------------------------------------------
+      // ESTORNO TOTAL
+      // --------------------------------------------------------
+
+      console.log(
+        "💰 TIPO: ESTORNO TOTAL"
+      );
+
+      console.log(
+        "💰 VALOR:",
+        consulta.value
+      );
     }
+
+    // ==========================================================
+    // SOLICITAR ESTORNO NO ASAAS
+    // ==========================================================
+
+    const response =
+      await api.post(
+        `/v3/payments/${encodeURIComponent(
+          id
+        )}/refund`,
+        body
+      );
+
+    // ==========================================================
+    // RESPOSTA
+    // ==========================================================
+
+    console.log("");
+    console.log(
+      "========================================"
+    );
+
+    console.log(
+      "✅ ESTORNO SOLICITADO AO ASAAS"
+    );
+
+    console.log(
+      "🆔 PAGAMENTO:",
+      id
+    );
+
+    console.log(
+      "💳 FORMA:",
+      billingType
+    );
+
+    console.log(
+      "📊 STATUS RETORNADO:",
+      response.data?.status ||
+      "NÃO INFORMADO"
+    );
+
+    console.log(
+      "========================================"
+    );
+
+    return response.data;
+
+  } catch (error) {
+
+    console.error("");
+    console.error(
+      "========================================"
+    );
+
+    console.error(
+      "❌ ERRO AO ESTORNAR PAGAMENTO ASAAS"
+    );
+
+    console.error(
+      "========================================"
+    );
+
+    console.error(
+      "🆔 PAGAMENTO:",
+      pagamentoId
+    );
+
+    console.error(
+      "📊 STATUS HTTP:",
+      error?.response?.status
+    );
+
+    console.error(
+      "📄 RESPOSTA ASAAS:"
+    );
+
+    console.error(
+      JSON.stringify(
+        error?.response?.data ||
+        {},
+        null,
+        2
+      )
+    );
+
+    console.error(
+      "========================================"
+    );
+
+    throw new Error(
+      error?.response?.data?.errors?.[0]?.description ||
+      error?.response?.data?.message ||
+      error?.message ||
+      "Não foi possível estornar o pagamento."
+    );
+  }
 }
+
+
 
 module.exports = {
     criarPix,
