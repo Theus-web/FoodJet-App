@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'order_tracking_screen.dart';
 
 import '../../config/api.dart';
 import 'cart_screen.dart';
@@ -1388,7 +1389,15 @@ class _PixCheckoutPageState
   String? encodedImage;
   String? expirationDate;
 
-  Timer? _timer;
+  // ============================================================
+  // MONITORAMENTO DO PAGAMENTO
+  // ============================================================
+
+  Timer? _timerPagamento;
+
+  bool _pagamentoConfirmado = false;
+
+  bool _navegando = false;
 
   @override
   void initState() {
@@ -1402,7 +1411,8 @@ class _PixCheckoutPageState
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _timerPagamento?.cancel();
+
     super.dispose();
   }
 
@@ -1522,21 +1532,6 @@ class _PixCheckoutPageState
 
   // ============================================================
   // INICIAR PIX
-  //
-  // IMPORTANTE:
-  //
-  // O pedido JÁ FOI CRIADO pelo OrderReviewScreen.
-  //
-  // Portanto:
-  //
-  // NÃO fazemos POST /orders aqui.
-  //
-  // Apenas:
-  //
-  // 1. Recebemos pedidoId
-  // 2. Enviamos pedidoId para /pagamentos/pix
-  // 3. O backend cria o pagamento no Asaas
-  // 4. O webhook usa a referência do pedido
   // ============================================================
 
   Future<void> _iniciarFluxoPix() async {
@@ -1643,7 +1638,7 @@ class _PixCheckoutPageState
       }
 
       // ========================================================
-      // NÃO CRIAMOS OUTRO PEDIDO
+      // PEDIDO JÁ EXISTE
       // ========================================================
 
       debugPrint(
@@ -1674,6 +1669,12 @@ class _PixCheckoutPageState
         carregando = false;
         erro = false;
       });
+
+      // ========================================================
+      // INICIAR MONITORAMENTO
+      // ========================================================
+
+      await _iniciarMonitoramentoPagamento();
 
       debugPrint(
         '🎉 ========================================',
@@ -1780,10 +1781,6 @@ class _PixCheckoutPageState
 
       'restauranteId':
           widget.restauranteId,
-
-      // ========================================================
-      // CORREÇÃO PRINCIPAL
-      // ========================================================
 
       'pedidoId':
           pedidoId,
@@ -2026,6 +2023,380 @@ class _PixCheckoutPageState
 
     debugPrint(
       '========================================',
+    );
+  }
+
+  // ============================================================
+  // INICIAR MONITORAMENTO DO PAGAMENTO
+  // ============================================================
+
+  Future<void> _iniciarMonitoramentoPagamento() async {
+    if (pagamentoId == null ||
+        pagamentoId!.trim().isEmpty) {
+      debugPrint(
+        '⚠️ Não foi possível iniciar monitoramento: pagamentoId vazio.',
+      );
+
+      return;
+    }
+
+    debugPrint(
+      '========================================',
+    );
+
+    debugPrint(
+      '🔎 INICIANDO MONITORAMENTO PIX',
+    );
+
+    debugPrint(
+      '💳 PAGAMENTO ASAAS: $pagamentoId',
+    );
+
+    debugPrint(
+      '🆔 PEDIDO FOODJET: $pedidoId',
+    );
+
+    debugPrint(
+      '⏱️ INTERVALO: 2 SEGUNDOS',
+    );
+
+    debugPrint(
+      '========================================',
+    );
+
+    _timerPagamento?.cancel();
+
+    // ==========================================================
+    // PRIMEIRA VERIFICAÇÃO IMEDIATA
+    // ==========================================================
+
+    await _verificarPagamento();
+
+    if (_pagamentoConfirmado) {
+      return;
+    }
+
+    // ==========================================================
+    // VERIFICA A CADA 2 SEGUNDOS
+    // ==========================================================
+
+    _timerPagamento = Timer.periodic(
+      const Duration(seconds: 2),
+      (_) {
+        _verificarPagamento();
+      },
+    );
+  }
+
+  // ============================================================
+  // VERIFICAR PAGAMENTO NO BACKEND
+  // ============================================================
+
+  Future<void> _verificarPagamento() async {
+    if (_pagamentoConfirmado ||
+        _navegando) {
+      return;
+    }
+
+    if (pagamentoId == null ||
+        pagamentoId!.trim().isEmpty) {
+      return;
+    }
+
+    try {
+      final token =
+          await _obterToken();
+
+      if (token == null) {
+        debugPrint(
+          '⚠️ Não foi possível verificar pagamento: token ausente.',
+        );
+
+        return;
+      }
+
+      final url = Uri.parse(
+        '${Api.baseUrl}/pagamentos/$pagamentoId',
+      );
+
+      final response =
+          await http
+              .get(
+                url,
+                headers: {
+                  'Accept':
+                      'application/json',
+                  'Authorization':
+                      'Bearer $token',
+                },
+              )
+              .timeout(
+                const Duration(
+                  seconds: 10,
+                ),
+              );
+
+      debugPrint(
+        '🔎 VERIFICANDO PAGAMENTO $pagamentoId',
+      );
+
+      debugPrint(
+        '📡 HTTP: ${response.statusCode}',
+      );
+
+      debugPrint(
+        '📦 BODY: ${response.body}',
+      );
+
+      if (response.statusCode != 200) {
+        return;
+      }
+
+      final dynamic dados =
+          _decodificarResposta(
+        response,
+        'VERIFICAR PAGAMENTO',
+      );
+
+      final String? status =
+          _extrairStatusPagamento(
+        dados,
+      );
+
+      debugPrint(
+        '💳 STATUS PAGAMENTO: ${status ?? "DESCONHECIDO"}',
+      );
+
+      if (_statusPagamentoAprovado(
+        status,
+      )) {
+        debugPrint(
+          '========================================',
+        );
+
+        debugPrint(
+          '🎉 PIX CONFIRMADO!',
+        );
+
+        debugPrint(
+          '💳 PAGAMENTO: $pagamentoId',
+        );
+
+        debugPrint(
+          '🆔 PEDIDO: $pedidoId',
+        );
+
+        debugPrint(
+          '📊 STATUS: $status',
+        );
+
+        debugPrint(
+          '========================================',
+        );
+
+        await _pagamentoFoiConfirmado();
+      }
+    } catch (e) {
+      // ========================================================
+      // IMPORTANTE:
+      //
+      // Se uma consulta falhar, não mostramos erro para o
+      // cliente. O próximo ciclo tentará novamente.
+      // ========================================================
+
+      debugPrint(
+        '⚠️ Erro ao consultar status do pagamento: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // EXTRAIR STATUS
+  // ============================================================
+
+  String? _extrairStatusPagamento(
+    dynamic dados,
+  ) {
+    if (dados is! Map) {
+      return null;
+    }
+
+    // ==========================================================
+    // RESPOSTAS POSSÍVEIS
+    // ==========================================================
+
+    final candidatos = [
+      dados['status'],
+      dados['statusPagamento'],
+      dados['status_pagamento'],
+      dados['statusAsaas'],
+      dados['status_asaas'],
+      dados['paymentStatus'],
+      dados['payment_status'],
+    ];
+
+    for (final candidato in candidatos) {
+      final valor =
+          _stringValue(candidato);
+
+      if (valor != null) {
+        return valor;
+      }
+    }
+
+    // ==========================================================
+    // OBJETO PAGAMENTO
+    // ==========================================================
+
+    final pagamento =
+        dados['pagamento'];
+
+    if (pagamento is Map) {
+      final candidatosPagamento = [
+        pagamento['status'],
+        pagamento['statusPagamento'],
+        pagamento['status_pagamento'],
+        pagamento['statusAsaas'],
+        pagamento['status_asaas'],
+      ];
+
+      for (final candidato
+          in candidatosPagamento) {
+        final valor =
+            _stringValue(candidato);
+
+        if (valor != null) {
+          return valor;
+        }
+      }
+    }
+
+    // ==========================================================
+    // OBJETO DADOS
+    // ==========================================================
+
+    final dadosInternos =
+        dados['dados'];
+
+    if (dadosInternos is Map) {
+      final candidatosDados = [
+        dadosInternos['status'],
+        dadosInternos['statusPagamento'],
+        dadosInternos['status_pagamento'],
+        dadosInternos['statusAsaas'],
+        dadosInternos['status_asaas'],
+      ];
+
+      for (final candidato
+          in candidatosDados) {
+        final valor =
+            _stringValue(candidato);
+
+        if (valor != null) {
+          return valor;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // STATUS APROVADO
+  // ============================================================
+
+  bool _statusPagamentoAprovado(
+    String? status,
+  ) {
+    if (status == null) {
+      return false;
+    }
+
+    final normalizado =
+        status
+            .trim()
+            .toUpperCase();
+
+    const aprovados = {
+      'RECEIVED',
+      'CONFIRMED',
+      'RECEIVED_IN_CASH',
+      'APPROVED',
+      'APROVADO',
+      'PAGO',
+      'PAID',
+      'PAYMENT_RECEIVED',
+      'CONFIRMADO',
+    };
+
+    return aprovados.contains(
+      normalizado,
+    );
+  }
+
+  // ============================================================
+  // PAGAMENTO CONFIRMADO
+  // ============================================================
+
+  Future<void> _pagamentoFoiConfirmado() async {
+    if (_pagamentoConfirmado ||
+        _navegando ||
+        !mounted) {
+      return;
+    }
+
+    _pagamentoConfirmado = true;
+
+    _timerPagamento?.cancel();
+    _timerPagamento = null;
+
+    if (!mounted) {
+      return;
+    }
+
+    setState(() {
+      carregando = true;
+      erro = false;
+    });
+
+    // ==========================================================
+    // PEQUENA PAUSA PARA MOSTRAR CONFIRMAÇÃO
+    // ==========================================================
+
+    await Future.delayed(
+      const Duration(
+        milliseconds: 700,
+      ),
+    );
+
+    if (!mounted ||
+        _navegando) {
+      return;
+    }
+
+    _navegando = true;
+
+    debugPrint(
+      '➡️ NAVEGANDO PARA OrderTrackingScreen',
+    );
+
+    debugPrint(
+      '🆔 PEDIDO: $pedidoId',
+    );
+
+    // ==========================================================
+    // ABRIR ACOMPANHAMENTO DO PEDIDO
+    // ==========================================================
+
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            OrderTrackingScreen(
+          pedidoId:
+              int.parse(pedidoId),
+        ),
+      ),
     );
   }
 
@@ -2572,6 +2943,10 @@ class _PixCheckoutPageState
             height: 20,
           ),
 
+          // ======================================================
+          // MONITORAMENTO
+          // ======================================================
+
           Container(
             width:
                 double.infinity,
@@ -2580,10 +2955,15 @@ class _PixCheckoutPageState
             decoration:
                 BoxDecoration(
               color:
-                  Colors.white,
+                  const Color(0xFFE4F7EF),
               borderRadius:
                   BorderRadius.circular(
                 14,
+              ),
+              border:
+                  Border.all(
+                color:
+                    const Color(0xFFB7E4D1),
               ),
             ),
             child:
@@ -2591,23 +2971,47 @@ class _PixCheckoutPageState
               crossAxisAlignment:
                   CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.info_outline,
-                  color:
-                      laranja,
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child:
+                      CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color:
+                        verdePix,
+                  ),
                 ),
                 SizedBox(
-                  width: 10,
+                  width: 12,
                 ),
                 Expanded(
                   child:
+                      Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment.start,
+                    children: [
                       Text(
-                    'Após o pagamento, o Asaas notificará o FoodJet automaticamente. O pedido será atualizado quando o pagamento for confirmado.',
-                    style:
-                        TextStyle(
-                      fontSize: 12,
-                      height: 1.4,
-                    ),
+                        'Aguardando confirmação do pagamento',
+                        style:
+                            TextStyle(
+                          fontWeight:
+                              FontWeight.bold,
+                          color:
+                              Colors.black87,
+                        ),
+                      ),
+                      SizedBox(
+                        height: 4,
+                      ),
+                      Text(
+                        'Assim que o Asaas confirmar o Pix, esta tela será atualizada automaticamente.',
+                        style:
+                            TextStyle(
+                          fontSize: 12,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ],
