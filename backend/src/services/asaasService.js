@@ -1206,6 +1206,8 @@ async function criarPix({
   }
 }
 
+
+
 // ============================================================
 // QR CODE PIX
 // ============================================================
@@ -1323,19 +1325,97 @@ async function consultarPagamento(
 }
 
 // ============================================================
-// EXPORTAR
+// ESTORNAR PAGAMENTO
 // ============================================================
 
+async function estornarPagamento(pagamentoId, valor = null) {
+    try {
+        if (!pagamentoId) {
+            throw new Error("ID do pagamento Asaas não informado.");
+        }
+
+        console.log("========================================");
+        console.log("💸 FOODJET - ESTORNO ASAAS");
+        console.log("========================================");
+        console.log("🆔 PAGAMENTO ASAAS:", pagamentoId);
+
+        const body = {};
+
+        // Se valor for informado, faz estorno parcial.
+        // Se não informar, o Asaas faz estorno total.
+        if (valor !== null && valor !== undefined) {
+            const valorNumerico = Number(valor);
+
+            if (!Number.isFinite(valorNumerico) || valorNumerico <= 0) {
+                throw new Error("Valor de estorno inválido.");
+            }
+
+            body.value = Number(valorNumerico.toFixed(2));
+
+            console.log("💰 VALOR DO ESTORNO:", body.value);
+        } else {
+            console.log("💰 ESTORNO: TOTAL");
+        }
+
+        const response = await api.post(
+            `/v3/payments/${encodeURIComponent(pagamentoId)}/refund`,
+            body
+        );
+
+        console.log("✅ ESTORNO SOLICITADO COM SUCESSO");
+        console.log("🆔 PAGAMENTO:", pagamentoId);
+
+        if (response.data?.status) {
+            console.log(
+                "📊 STATUS:",
+                response.data.status
+            );
+        }
+
+        console.log("========================================");
+
+        return response.data;
+
+    } catch (error) {
+
+        console.error("========================================");
+        console.error("❌ ERRO AO ESTORNAR PAGAMENTO ASAAS");
+        console.error("========================================");
+
+        console.error(
+            "🆔 PAGAMENTO:",
+            pagamentoId
+        );
+
+        console.error(
+            "📊 STATUS HTTP:",
+            error.response?.status
+        );
+
+        console.error(
+            "📄 RESPOSTA ASAAS:",
+            error.response?.data || error.message
+        );
+
+        console.error("========================================");
+
+        throw new Error(
+            error.response?.data?.errors?.[0]?.description ||
+            error.response?.data?.message ||
+            error.message ||
+            "Não foi possível estornar o pagamento."
+        );
+    }
+}
+
 module.exports = {
-
-  criarPix,
-
-  criarCartao,
-
-  criarDebito,
-
-  obterQrCodePix,
-
-  consultarPagamento,
-
+    criarPix,
+    criarCartao,
+    criarDebito,
+    obterQrCodePix,
+    consultarPagamento,
+    estornarPagamento,
 };
+
+
+
