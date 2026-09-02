@@ -16,9 +16,15 @@ const {
 // ======================================================
 
 function obterUsuarioAutenticado(req) {
-    const usuario = req.usuario || req.user || null;
 
-    if (!usuario) return null;
+    const usuario =
+        req.usuario ||
+        req.user ||
+        null;
+
+    if (!usuario) {
+        return null;
+    }
 
     const id =
         usuario.id ||
@@ -27,7 +33,9 @@ function obterUsuarioAutenticado(req) {
         usuario._id ||
         null;
 
-    if (!id) return null;
+    if (!id) {
+        return null;
+    }
 
     return {
         ...usuario,
@@ -40,30 +48,52 @@ function obterUsuarioAutenticado(req) {
 // PROCESSAR ESTORNO DO PEDIDO
 // ======================================================
 //
-// Retorna:
+// Compatível com:
+// - PIX
+// - CARTÃO DE CRÉDITO
+//
+// Não utiliza RECEIVED_IN_CASH.
+//
+// Retorno:
 // {
 //     encontrado: true/false,
 //     estornado: true/false,
+//     emProcessamento: true/false,
 //     statusAsaas: "..."
 // }
 //
-// Se houver erro no estorno, lança erro.
-// Isso permite que o pedido NÃO seja cancelado/recusado
-// quando o dinheiro não puder ser estornado.
+// IMPORTANTE:
+// O Asaas pode retornar REFUND_IN_PROGRESS.
+// Nesse caso o pedido pode continuar sendo
+// cancelado/recusado, mas o pagamento fica marcado
+// no banco como REFUND_IN_PROGRESS.
 //
+// Quando o webhook PAYMENT_REFUNDED chegar,
+// o webhook deverá atualizar para REFUNDED.
+// ======================================================
 
 async function processarEstornoPedido(pedidoAtual) {
 
-    if (!pedidoAtual || !pedidoAtual.id) {
+    if (
+        !pedidoAtual ||
+        !pedidoAtual.id
+    ) {
+
         throw new Error(
             "Pedido inválido para processamento do estorno."
         );
     }
 
     console.log("");
-    console.log("========================================");
-    console.log("💸 FOODJET - PROCESSAR ESTORNO");
-    console.log("========================================");
+    console.log(
+        "========================================"
+    );
+    console.log(
+        "💸 FOODJET - PROCESSAR ESTORNO"
+    );
+    console.log(
+        "========================================"
+    );
     console.log(
         "🆔 PEDIDO:",
         pedidoAtual.id
@@ -133,6 +163,7 @@ async function processarEstornoPedido(pedidoAtual) {
         return {
             encontrado: false,
             estornado: false,
+            emProcessamento: false,
             statusAsaas: null,
         };
     }
@@ -174,13 +205,14 @@ async function processarEstornoPedido(pedidoAtual) {
         return {
             encontrado: true,
             estornado: false,
+            emProcessamento: false,
             statusAsaas: null,
         };
     }
 
 
     // ==================================================
-    // JÁ MARCADO COMO ESTORNADO
+    // STATUS ATUAL NO BANCO
     // ==================================================
 
     const statusBanco =
@@ -191,7 +223,13 @@ async function processarEstornoPedido(pedidoAtual) {
             .toUpperCase();
 
 
-    if (statusBanco === "REFUNDED") {
+    // ==================================================
+    // JÁ ESTORNADO
+    // ==================================================
+
+    if (
+        statusBanco === "REFUNDED"
+    ) {
 
         console.log(
             "ℹ️ PAGAMENTO JÁ ESTORNADO NO BANCO."
@@ -209,7 +247,44 @@ async function processarEstornoPedido(pedidoAtual) {
         return {
             encontrado: true,
             estornado: true,
+            emProcessamento: false,
             statusAsaas: "REFUNDED",
+        };
+    }
+
+
+    // ==================================================
+    // ESTORNO JÁ EM PROCESSAMENTO
+    // ==================================================
+
+    if (
+        statusBanco === "REFUND_IN_PROGRESS" ||
+        statusBanco === "REFUND_PENDING"
+    ) {
+
+        console.log(
+            "ℹ️ ESTORNO JÁ ESTÁ EM PROCESSAMENTO."
+        );
+
+        console.log(
+            "🆔 ASAAS:",
+            pagamentoId
+        );
+
+        console.log(
+            "📊 STATUS:",
+            statusBanco
+        );
+
+        console.log(
+            "========================================"
+        );
+
+        return {
+            encontrado: true,
+            estornado: false,
+            emProcessamento: true,
+            statusAsaas: statusBanco,
         };
     }
 
@@ -221,7 +296,6 @@ async function processarEstornoPedido(pedidoAtual) {
     console.log(
         "🔎 CONSULTANDO STATUS ATUAL NO ASAAS..."
     );
-
 
     let pagamentoAtualizado;
 
@@ -246,6 +320,10 @@ async function processarEstornoPedido(pedidoAtual) {
     }
 
 
+    // ==================================================
+    // STATUS ASAAS
+    // ==================================================
+
     const statusAsaas =
         String(
             pagamentoAtualizado?.status || ""
@@ -261,26 +339,126 @@ async function processarEstornoPedido(pedidoAtual) {
 
 
     // ==================================================
+    // JÁ ESTORNADO NO ASAAS
+    // ==================================================
+
+    if (
+        statusAsaas === "REFUNDED"
+    ) {
+
+        console.log(
+            "✅ PAGAMENTO JÁ ESTÁ ESTORNADO NO ASAAS."
+        );
+
+        try {
+
+            await pool.query(
+                `
+                UPDATE pagamentos_asaas
+                SET status_asaas = 'REFUNDED'
+                WHERE payment_id = $1
+                `,
+                [
+                    pagamentoId,
+                ]
+            );
+
+        } catch (erroBanco) {
+
+            console.error(
+                "⚠️ PAGAMENTO ESTORNADO NO ASAAS, MAS NÃO FOI POSSÍVEL ATUALIZAR O BANCO:",
+                erroBanco.message
+            );
+
+            throw new Error(
+                "O pagamento já está estornado no Asaas, mas houve erro ao atualizar o banco: " +
+                erroBanco.message
+            );
+        }
+
+        return {
+            encontrado: true,
+            estornado: true,
+            emProcessamento: false,
+            statusAsaas: "REFUNDED",
+        };
+    }
+
+
+    // ==================================================
+    // ESTORNO JÁ EM PROCESSAMENTO NO ASAAS
+    // ==================================================
+
+    if (
+        statusAsaas === "REFUND_IN_PROGRESS" ||
+        statusAsaas === "REFUND_PENDING"
+    ) {
+
+        console.log(
+            "ℹ️ ESTORNO JÁ ESTÁ EM PROCESSAMENTO NO ASAAS."
+        );
+
+        try {
+
+            await pool.query(
+                `
+                UPDATE pagamentos_asaas
+                SET status_asaas = $1
+                WHERE payment_id = $2
+                `,
+                [
+                    statusAsaas,
+                    pagamentoId,
+                ]
+            );
+
+        } catch (erroBanco) {
+
+            console.error(
+                "⚠️ ERRO ATUALIZANDO STATUS DE ESTORNO:",
+                erroBanco.message
+            );
+        }
+
+        return {
+            encontrado: true,
+            estornado: false,
+            emProcessamento: true,
+            statusAsaas,
+        };
+    }
+
+
+    // ==================================================
     // PAGAMENTOS QUE PODEM SER ESTORNADOS
+    // ==================================================
+    //
+    // PIX:
+    // RECEIVED
+    //
+    // CARTÃO:
+    // RECEIVED
+    // CONFIRMED
+    //
+    // RECEIVED_IN_CASH NÃO ENTRA.
     // ==================================================
 
     const pagamentoPago = [
         "RECEIVED",
         "CONFIRMED",
-        "RECEIVED_IN_CASH",
     ].includes(
         statusAsaas
     );
 
 
     // ==================================================
-    // PAGAMENTO NÃO FOI PAGO
+    // PAGAMENTO NÃO ESTÁ EM STATUS ESTORNÁVEL
     // ==================================================
 
     if (!pagamentoPago) {
 
         console.log(
-            "ℹ️ PAGAMENTO AINDA NÃO ESTÁ PAGO."
+            "ℹ️ PAGAMENTO NÃO ESTÁ EM STATUS ESTORNÁVEL."
         );
 
         console.log(
@@ -299,13 +477,14 @@ async function processarEstornoPedido(pedidoAtual) {
         return {
             encontrado: true,
             estornado: false,
+            emProcessamento: false,
             statusAsaas,
         };
     }
 
 
     // ==================================================
-    // PAGAMENTO PAGO → SOLICITAR ESTORNO
+    // PAGAMENTO CONFIRMADO
     // ==================================================
 
     console.log(
@@ -317,11 +496,18 @@ async function processarEstornoPedido(pedidoAtual) {
     );
 
 
+    // ==================================================
+    // SOLICITAR ESTORNO
+    // ==================================================
+
+    let resultadoEstorno;
+
     try {
 
-        await estornarPagamento(
-            pagamentoId
-        );
+        resultadoEstorno =
+            await estornarPagamento(
+                pagamentoId
+            );
 
     } catch (erroEstorno) {
 
@@ -329,9 +515,11 @@ async function processarEstornoPedido(pedidoAtual) {
         console.error(
             "========================================"
         );
+
         console.error(
             "❌ ERRO AO PROCESSAR ESTORNO"
         );
+
         console.error(
             "========================================"
         );
@@ -368,7 +556,62 @@ async function processarEstornoPedido(pedidoAtual) {
 
 
     // ==================================================
-    // REGISTRAR ESTORNO NO POSTGRESQL
+    // IDENTIFICAR STATUS RETORNADO PELO ASAAS
+    // ==================================================
+
+    const statusRetornado =
+        String(
+            resultadoEstorno?.status ||
+            ""
+        )
+            .trim()
+            .toUpperCase();
+
+
+    console.log(
+        "📊 STATUS DO ESTORNO RETORNADO:",
+        statusRetornado ||
+        "NÃO INFORMADO"
+    );
+
+
+    // ==================================================
+    // DEFINIR STATUS PARA O BANCO
+    // ==================================================
+
+    let novoStatusBanco;
+
+    if (
+        statusRetornado === "REFUNDED"
+    ) {
+
+        novoStatusBanco =
+            "REFUNDED";
+
+    } else if (
+        statusRetornado === "REFUND_IN_PROGRESS" ||
+        statusRetornado === "REFUND_PENDING"
+    ) {
+
+        novoStatusBanco =
+            statusRetornado;
+
+    } else {
+
+        // ------------------------------------------------
+        // Caso o Asaas não retorne status de estorno,
+        // usamos REFUND_IN_PROGRESS para impedir que
+        // outra chamada tente estornar novamente antes
+        // do webhook confirmar o resultado.
+        // ------------------------------------------------
+
+        novoStatusBanco =
+            "REFUND_IN_PROGRESS";
+    }
+
+
+    // ==================================================
+    // REGISTRAR STATUS DO ESTORNO NO POSTGRESQL
     // ==================================================
 
     try {
@@ -376,10 +619,11 @@ async function processarEstornoPedido(pedidoAtual) {
         await pool.query(
             `
             UPDATE pagamentos_asaas
-            SET status_asaas = 'REFUNDED'
-            WHERE payment_id = $1
+            SET status_asaas = $1
+            WHERE payment_id = $2
             `,
             [
+                novoStatusBanco,
                 pagamentoId,
             ]
         );
@@ -398,12 +642,28 @@ async function processarEstornoPedido(pedidoAtual) {
     }
 
 
-    console.log(
-        "✅ ESTORNO SOLICITADO COM SUCESSO."
-    );
+    // ==================================================
+    // LOG FINAL
+    // ==================================================
+
+    if (
+        novoStatusBanco === "REFUNDED"
+    ) {
+
+        console.log(
+            "✅ ESTORNO CONFIRMADO."
+        );
+
+    } else {
+
+        console.log(
+            "⏳ ESTORNO SOLICITADO E EM PROCESSAMENTO."
+        );
+    }
 
     console.log(
-        "✅ PAGAMENTO MARCADO COMO REFUNDED."
+        "📊 STATUS BANCO:",
+        novoStatusBanco
     );
 
     console.log(
@@ -413,8 +673,16 @@ async function processarEstornoPedido(pedidoAtual) {
 
     return {
         encontrado: true,
-        estornado: true,
-        statusAsaas,
+
+        estornado:
+            novoStatusBanco === "REFUNDED",
+
+        emProcessamento:
+            novoStatusBanco === "REFUND_IN_PROGRESS" ||
+            novoStatusBanco === "REFUND_PENDING",
+
+        statusAsaas:
+            novoStatusBanco,
     };
 }
 
@@ -424,12 +692,19 @@ async function processarEstornoPedido(pedidoAtual) {
 // ======================================================
 
 async function create(req, res) {
+
     try {
 
         console.log("");
-        console.log("========================================");
-        console.log("📦 CONTROLLER - CRIAR PEDIDO");
-        console.log("========================================");
+        console.log(
+            "========================================"
+        );
+        console.log(
+            "📦 CONTROLLER - CRIAR PEDIDO"
+        );
+        console.log(
+            "========================================"
+        );
 
         const usuario =
             obterUsuarioAutenticado(req);
@@ -437,7 +712,9 @@ async function create(req, res) {
         if (!usuario) {
 
             return res.status(401).json({
+
                 sucesso: false,
+
                 erro:
                     "Cliente não identificado. Faça login novamente.",
             });
@@ -450,7 +727,9 @@ async function create(req, res) {
         if (!body.restauranteId) {
 
             return res.status(400).json({
+
                 sucesso: false,
+
                 erro:
                     "Restaurante não identificado.",
             });
@@ -463,7 +742,9 @@ async function create(req, res) {
         ) {
 
             return res.status(400).json({
+
                 sucesso: false,
+
                 erro:
                     "O pedido precisa possuir pelo menos um item.",
             });
@@ -532,27 +813,37 @@ async function create(req, res) {
             });
 
 
-        console.log("========================================");
+        console.log(
+            "========================================"
+        );
+
         console.log(
             "✅ PEDIDO CRIADO PELO CONTROLLER"
         );
+
         console.log(
             "ID:",
             pedido.id
         );
+
         console.log(
             "CLIENTE:",
             pedido.clienteId
         );
+
         console.log(
             "RESTAURANTE:",
             pedido.restauranteId
         );
+
         console.log(
             "STATUS:",
             pedido.status
         );
-        console.log("========================================");
+
+        console.log(
+            "========================================"
+        );
 
 
         return res.status(201).json({
@@ -757,9 +1048,11 @@ async function updateStatus(req, res) {
             console.log(
                 "========================================"
             );
+
             console.log(
                 "❌ FOODJET - CANCELAMENTO"
             );
+
             console.log(
                 "========================================"
             );
@@ -777,8 +1070,14 @@ async function updateStatus(req, res) {
 
             try {
 
-                await processarEstornoPedido(
-                    pedidoAtual
+                const resultadoEstorno =
+                    await processarEstornoPedido(
+                        pedidoAtual
+                    );
+
+                console.log(
+                    "📊 RESULTADO ESTORNO:",
+                    resultadoEstorno
                 );
 
             } catch (erroEstorno) {
@@ -1036,9 +1335,11 @@ async function rejectRestaurant(req, res) {
         console.log(
             "========================================"
         );
+
         console.log(
             "🚫 FOODJET - RESTAURANTE RECUSANDO PEDIDO"
         );
+
         console.log(
             "========================================"
         );
@@ -1083,8 +1384,14 @@ async function rejectRestaurant(req, res) {
 
         try {
 
-            await processarEstornoPedido(
-                pedidoAtual
+            const resultadoEstorno =
+                await processarEstornoPedido(
+                    pedidoAtual
+                );
+
+            console.log(
+                "📊 RESULTADO ESTORNO:",
+                resultadoEstorno
             );
 
         } catch (erroEstorno) {
