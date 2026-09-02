@@ -5,11 +5,7 @@ const { pool } = require("../config/database");
 // ============================================================
 
 function normalizarId(valor) {
-
-    if (
-        valor === null ||
-        valor === undefined
-    ) {
+    if (valor === null || valor === undefined) {
         return "";
     }
 
@@ -21,7 +17,6 @@ function normalizarId(valor) {
 // ============================================================
 
 function montarFavorito(row) {
-
     if (!row) {
         return null;
     }
@@ -43,32 +38,9 @@ function montarFavorito(row) {
         restauranteId:
             row.restaurante_id,
 
-        nome:
-            row.nome || "",
-
-        descricao:
-            row.descricao || "",
-
-        avaliacao:
-            row.avaliacao || "5.0",
-
-        logo:
-            row.logo || "",
-
-        imagem:
-            row.imagem || "",
-
-        imagemUrl:
-            row.imagem_url || "",
-
-        logoBase64:
-            row.logo_base64 || "",
-
         criadoEm:
             row.criado_em
-                ? new Date(
-                    row.criado_em
-                ).toISOString()
+                ? new Date(row.criado_em).toISOString()
                 : dados.criadoEm
     };
 }
@@ -120,13 +92,6 @@ async function listar(req, res) {
                     id,
                     usuario_id,
                     restaurante_id,
-                    nome,
-                    descricao,
-                    avaliacao,
-                    logo,
-                    imagem,
-                    imagem_url,
-                    logo_base64,
                     criado_em,
                     dados
                 FROM favoritos
@@ -174,10 +139,6 @@ async function salvar(req, res) {
 
     try {
 
-        // ------------------------------------------------------
-        // USUÁRIO
-        // ------------------------------------------------------
-
         const usuarioId =
             normalizarId(
                 req.usuario?.id ??
@@ -216,7 +177,7 @@ async function salvar(req, res) {
         }
 
         // ------------------------------------------------------
-        // RESTAURANTE
+        // DADOS DO RESTAURANTE
         // ------------------------------------------------------
 
         const restaurante =
@@ -284,7 +245,7 @@ async function salvar(req, res) {
         }
 
         // ------------------------------------------------------
-        // CRIAR FAVORITO
+        // CRIAR ID
         // ------------------------------------------------------
 
         const agora =
@@ -319,32 +280,30 @@ async function salvar(req, res) {
             logo:
                 restaurante.logo
                     ?.toString()
-                    .trim() ??
+                    .trim() ||
                 restaurante.imagem
                     ?.toString()
-                    .trim() ??
+                    .trim() ||
                 "",
 
             imagem:
                 restaurante.imagem
                     ?.toString()
-                    .trim() ??
+                    .trim() ||
                 restaurante.logo
                     ?.toString()
-                    .trim() ??
+                    .trim() ||
                 "",
 
             imagemUrl:
                 restaurante.imagemUrl
                     ?.toString()
-                    .trim() ??
-                "",
+                    .trim() || "",
 
             logoBase64:
                 restaurante.logoBase64
                     ?.toString()
-                    .trim() ??
-                "",
+                    .trim() || "",
 
             criadoEm:
                 agora
@@ -360,13 +319,6 @@ async function salvar(req, res) {
                 id,
                 usuario_id,
                 restaurante_id,
-                nome,
-                descricao,
-                avaliacao,
-                logo,
-                imagem,
-                imagem_url,
-                logo_base64,
                 criado_em,
                 dados
             )
@@ -375,24 +327,10 @@ async function salvar(req, res) {
                 $2,
                 $3,
                 $4,
-                $5,
-                $6,
-                $7,
-                $8,
-                $9,
-                $10,
-                $11,
-                $12::jsonb
+                $5::jsonb
             )
             ON CONFLICT (id)
             DO UPDATE SET
-                nome = EXCLUDED.nome,
-                descricao = EXCLUDED.descricao,
-                avaliacao = EXCLUDED.avaliacao,
-                logo = EXCLUDED.logo,
-                imagem = EXCLUDED.imagem,
-                imagem_url = EXCLUDED.imagem_url,
-                logo_base64 = EXCLUDED.logo_base64,
                 dados = EXCLUDED.dados
             `,
             [
@@ -401,20 +339,6 @@ async function salvar(req, res) {
                 novoFavorito.usuarioId,
 
                 novoFavorito.restauranteId,
-
-                novoFavorito.nome,
-
-                novoFavorito.descricao,
-
-                novoFavorito.avaliacao,
-
-                novoFavorito.logo,
-
-                novoFavorito.imagem,
-
-                novoFavorito.imagemUrl,
-
-                novoFavorito.logoBase64,
 
                 novoFavorito.criadoEm,
 

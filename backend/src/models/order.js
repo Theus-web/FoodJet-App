@@ -85,17 +85,17 @@ async function encontrarPagamentoAsaasPendente(
             SELECT
                 id,
                 pagamento_id,
+                pedido_id,
                 external_reference,
-                status_asaas,
-                status_pagamento,
-                evento,
+                status,
                 valor,
-                atualizado_em,
-                dados
+                dados,
+                criado_em,
+                atualizado_em
             FROM pagamentos_asaas
-            WHERE
-                external_reference = $1
-            ORDER BY id DESC
+            WHERE external_reference = $1
+            ORDER BY atualizado_em DESC NULLS LAST,
+                     criado_em DESC
             LIMIT 1
             `,
             [
@@ -111,6 +111,10 @@ async function encontrarPagamentoAsaasPendente(
 
     const row =
         resultado.rows[0];
+
+    // ==================================================
+    // DADOS JSONB
+    // ==================================================
 
     let dados =
         row.dados;
@@ -141,6 +145,96 @@ async function encontrarPagamentoAsaasPendente(
 
     }
 
+    // ==================================================
+    // NORMALIZAR STATUS
+    // ==================================================
+
+    const statusAsaas =
+        row.status ||
+        dados.statusAsaas ||
+        dados.status ||
+        "";
+
+    let statusPagamento =
+        dados.statusPagamento ||
+        "";
+
+    // --------------------------------------------------
+    // Se o status veio do Asaas, converter para o padrão
+    // utilizado pelo FoodJet.
+    // --------------------------------------------------
+
+    const statusNormalizado =
+        String(
+            statusAsaas
+        )
+            .trim()
+            .toUpperCase();
+
+    if (
+        statusNormalizado === "RECEIVED" ||
+        statusNormalizado === "CONFIRMED"
+    ) {
+
+        statusPagamento =
+            "approved";
+
+    } else if (
+        statusNormalizado === "PENDING" ||
+        statusNormalizado === "AWAITING_RISK_ANALYSIS" ||
+        statusNormalizado === "AWAITING_CASH_IN"
+    ) {
+
+        statusPagamento =
+            "pending";
+
+    } else if (
+        statusNormalizado === "OVERDUE" ||
+        statusNormalizado === "REFUNDED" ||
+        statusNormalizado === "REFUND_REQUESTED" ||
+        statusNormalizado === "CHARGEBACK_REQUESTED" ||
+        statusNormalizado === "CHARGEBACK_DISPUTE" ||
+        statusNormalizado === "DUNNING_REQUESTED"
+    ) {
+
+        statusPagamento =
+            "rejected";
+
+    } else if (!statusPagamento) {
+
+        statusPagamento =
+            "pending";
+
+    }
+
+    // ==================================================
+    // EVENTO
+    // ==================================================
+
+    const evento =
+        dados.evento ||
+        dados.event ||
+        dados.eventType ||
+        "";
+
+    // ==================================================
+    // DATA DE ATUALIZAÇÃO
+    // ==================================================
+
+    const atualizadoEm =
+        row.atualizado_em
+            ? new Date(
+                row.atualizado_em
+            ).toISOString()
+            : (
+                dados.atualizadoEm ||
+                new Date().toISOString()
+            );
+
+    // ==================================================
+    // RETORNO PADRONIZADO
+    // ==================================================
+
     return {
 
         id:
@@ -158,20 +252,19 @@ async function encontrarPagamentoAsaasPendente(
             dados.pagamentoId ||
             "",
 
+        pedidoId:
+            row.pedido_id ||
+            dados.pedidoId ||
+            "",
+
         externalReference:
             row.external_reference ||
             dados.externalReference ||
             "",
 
-        statusAsaas:
-            row.status_asaas ||
-            dados.statusAsaas ||
-            "",
+        statusAsaas,
 
-        statusPagamento:
-            row.status_pagamento ||
-            dados.statusPagamento ||
-            "pending",
+        statusPagamento,
 
         valor:
             Number(
@@ -182,26 +275,17 @@ async function encontrarPagamentoAsaasPendente(
             ) ||
             0,
 
-        evento:
-            row.evento ||
-            dados.evento ||
-            "",
+        evento,
 
-        atualizadoEm:
-            row.atualizado_em
-                ? new Date(
-                    row.atualizado_em
-                ).toISOString()
-                : (
-                    dados.atualizadoEm ||
-                    new Date().toISOString()
-                ),
+        atualizadoEm,
 
-        dados,
+        dados
 
     };
 
 }
+
+
 
 
 // ======================================================

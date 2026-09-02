@@ -7,9 +7,7 @@ const { pool } = require("../config/database");
 async function criar(produto) {
 
     if (!produto || typeof produto !== "object") {
-        throw new Error(
-            "Dados do produto são obrigatórios."
-        );
+        throw new Error("Dados do produto são obrigatórios.");
     }
 
     const id = produto.id
@@ -72,10 +70,6 @@ async function criar(produto) {
             ? new Date(produto.atualizadoEm)
             : new Date();
 
-    // ========================================================
-    // PRESERVAR DADOS COMPLETOS
-    // ========================================================
-
     const dados = {
         ...produto,
         id,
@@ -91,10 +85,6 @@ async function criar(produto) {
         atualizadoEm: atualizadoEm.toISOString(),
     };
 
-    // ========================================================
-    // INSERT
-    // ========================================================
-
     const resultado = await pool.query(
         `
         INSERT INTO produtos (
@@ -108,7 +98,6 @@ async function criar(produto) {
             disponivel,
             destaque,
             criado_em,
-            atualizado_em,
             dados
         )
         VALUES (
@@ -122,8 +111,7 @@ async function criar(produto) {
             $8,
             $9,
             $10,
-            $11,
-            $12
+            $11
         )
         RETURNING
             id,
@@ -136,7 +124,6 @@ async function criar(produto) {
             disponivel,
             destaque,
             criado_em AS "criadoEm",
-            atualizado_em AS "atualizadoEm",
             dados
         `,
         [
@@ -150,18 +137,13 @@ async function criar(produto) {
             disponivel,
             destaque,
             criadoEm,
-            atualizadoEm,
             dados,
         ]
     );
 
-    const novoProduto =
-        montarProduto(resultado.rows[0]);
+    const novoProduto = montarProduto(resultado.rows[0]);
 
-    console.log(
-        "🍕 PRODUTO CRIADO:",
-        novoProduto.id
-    );
+    console.log("🍕 PRODUTO CRIADO:", novoProduto.id);
 
     return novoProduto;
 }
@@ -185,16 +167,13 @@ async function listar() {
             disponivel,
             destaque,
             criado_em AS "criadoEm",
-            atualizado_em AS "atualizadoEm",
             dados
         FROM produtos
         ORDER BY criado_em ASC NULLS LAST
         `
     );
 
-    return resultado.rows.map(
-        montarProduto
-    );
+    return resultado.rows.map(montarProduto);
 }
 
 // ============================================================
@@ -224,46 +203,34 @@ async function buscarPorId(id) {
             disponivel,
             destaque,
             criado_em AS "criadoEm",
-            atualizado_em AS "atualizadoEm",
             dados
         FROM produtos
         WHERE id = $1
         LIMIT 1
         `,
-        [
-            String(id)
-        ]
+        [String(id)]
     );
 
     if (resultado.rows.length === 0) {
         return null;
     }
 
-    return montarProduto(
-        resultado.rows[0]
-    );
+    return montarProduto(resultado.rows[0]);
 }
 
 // ============================================================
 // ATUALIZAR
 // ============================================================
 
-async function atualizar(
-    id,
-    dados
-) {
+async function atualizar(id, dados) {
 
-    const produto =
-        await buscarPorId(id);
+    const produto = await buscarPorId(id);
 
     if (!produto) {
         return null;
     }
 
-    if (
-        !dados ||
-        typeof dados !== "object"
-    ) {
+    if (!dados || typeof dados !== "object") {
         return produto;
     }
 
@@ -273,15 +240,10 @@ async function atualizar(
         id: produto.id,
     };
 
-    const atualizadoEm =
-        new Date();
+    const atualizadoEm = new Date();
 
     produtoAtualizado.atualizadoEm =
         atualizadoEm.toISOString();
-
-    // ========================================================
-    // CAMPOS
-    // ========================================================
 
     const restauranteId =
         produtoAtualizado.restauranteId !== undefined &&
@@ -328,39 +290,21 @@ async function atualizar(
             ? Boolean(produtoAtualizado.destaque)
             : false;
 
-    // ========================================================
-    // PRESERVAR DADOS EXTRAS
-    // ========================================================
-
     const dadosAtualizados = {
         ...(produto.dados || {}),
         ...produtoAtualizado,
 
         id: produto.id,
-
         restauranteId,
-
         nome,
-
         descricao,
-
         preco,
-
         categoria,
-
         imagem,
-
         disponivel,
-
         destaque,
-
-        atualizadoEm:
-            atualizadoEm.toISOString(),
+        atualizadoEm: atualizadoEm.toISOString(),
     };
-
-    // ========================================================
-    // UPDATE
-    // ========================================================
 
     const resultado = await pool.query(
         `
@@ -374,9 +318,8 @@ async function atualizar(
             imagem = $6,
             disponivel = $7,
             destaque = $8,
-            atualizado_em = $9,
-            dados = $10
-        WHERE id = $11
+            dados = $9
+        WHERE id = $10
         RETURNING
             id,
             restaurante_id AS "restauranteId",
@@ -388,7 +331,6 @@ async function atualizar(
             disponivel,
             destaque,
             criado_em AS "criadoEm",
-            atualizado_em AS "atualizadoEm",
             dados
         `,
         [
@@ -400,7 +342,6 @@ async function atualizar(
             imagem,
             disponivel,
             destaque,
-            atualizadoEm,
             dadosAtualizados,
             String(id),
         ]
@@ -410,35 +351,27 @@ async function atualizar(
         return null;
     }
 
-    return montarProduto(
-        resultado.rows[0]
-    );
+    return montarProduto(resultado.rows[0]);
 }
 
 // ============================================================
 // ATUALIZAR IMAGEM
 // ============================================================
 
-async function atualizarImagem(
-    id,
-    imagem
-) {
+async function atualizarImagem(id, imagem) {
 
-    const produto =
-        await buscarPorId(id);
+    const produto = await buscarPorId(id);
 
     if (!produto) {
         return null;
     }
 
-    const atualizadoEm =
-        new Date();
+    const atualizadoEm = new Date();
 
     const dadosAtualizados = {
         ...(produto.dados || {}),
         imagem,
-        atualizadoEm:
-            atualizadoEm.toISOString(),
+        atualizadoEm: atualizadoEm.toISOString(),
     };
 
     const resultado = await pool.query(
@@ -446,9 +379,8 @@ async function atualizarImagem(
         UPDATE produtos
         SET
             imagem = $1,
-            atualizado_em = $2,
-            dados = $3
-        WHERE id = $4
+            dados = $2
+        WHERE id = $3
         RETURNING
             id,
             restaurante_id AS "restauranteId",
@@ -460,12 +392,10 @@ async function atualizarImagem(
             disponivel,
             destaque,
             criado_em AS "criadoEm",
-            atualizado_em AS "atualizadoEm",
             dados
         `,
         [
             imagem,
-            atualizadoEm,
             dadosAtualizados,
             String(id),
         ]
@@ -475,39 +405,28 @@ async function atualizarImagem(
         return null;
     }
 
-    return montarProduto(
-        resultado.rows[0]
-    );
+    return montarProduto(resultado.rows[0]);
 }
 
 // ============================================================
 // DISPONIBILIDADE
 // ============================================================
 
-async function atualizarDisponibilidade(
-    id,
-    disponivel
-) {
+async function atualizarDisponibilidade(id, disponivel) {
 
-    const produto =
-        await buscarPorId(id);
+    const produto = await buscarPorId(id);
 
     if (!produto) {
         return null;
     }
 
-    const novaDisponibilidade =
-        Boolean(disponivel);
-
-    const atualizadoEm =
-        new Date();
+    const novaDisponibilidade = Boolean(disponivel);
+    const atualizadoEm = new Date();
 
     const dadosAtualizados = {
         ...(produto.dados || {}),
-        disponivel:
-            novaDisponibilidade,
-        atualizadoEm:
-            atualizadoEm.toISOString(),
+        disponivel: novaDisponibilidade,
+        atualizadoEm: atualizadoEm.toISOString(),
     };
 
     const resultado = await pool.query(
@@ -515,9 +434,8 @@ async function atualizarDisponibilidade(
         UPDATE produtos
         SET
             disponivel = $1,
-            atualizado_em = $2,
-            dados = $3
-        WHERE id = $4
+            dados = $2
+        WHERE id = $3
         RETURNING
             id,
             restaurante_id AS "restauranteId",
@@ -529,12 +447,10 @@ async function atualizarDisponibilidade(
             disponivel,
             destaque,
             criado_em AS "criadoEm",
-            atualizado_em AS "atualizadoEm",
             dados
         `,
         [
             novaDisponibilidade,
-            atualizadoEm,
             dadosAtualizados,
             String(id),
         ]
@@ -544,39 +460,28 @@ async function atualizarDisponibilidade(
         return null;
     }
 
-    return montarProduto(
-        resultado.rows[0]
-    );
+    return montarProduto(resultado.rows[0]);
 }
 
 // ============================================================
 // ATUALIZAR DESTAQUE
 // ============================================================
 
-async function atualizarDestaque(
-    id,
-    destaque
-) {
+async function atualizarDestaque(id, destaque) {
 
-    const produto =
-        await buscarPorId(id);
+    const produto = await buscarPorId(id);
 
     if (!produto) {
         return null;
     }
 
-    const novoDestaque =
-        Boolean(destaque);
-
-    const atualizadoEm =
-        new Date();
+    const novoDestaque = Boolean(destaque);
+    const atualizadoEm = new Date();
 
     const dadosAtualizados = {
         ...(produto.dados || {}),
-        destaque:
-            novoDestaque,
-        atualizadoEm:
-            atualizadoEm.toISOString(),
+        destaque: novoDestaque,
+        atualizadoEm: atualizadoEm.toISOString(),
     };
 
     const resultado = await pool.query(
@@ -584,9 +489,8 @@ async function atualizarDestaque(
         UPDATE produtos
         SET
             destaque = $1,
-            atualizado_em = $2,
-            dados = $3
-        WHERE id = $4
+            dados = $2
+        WHERE id = $3
         RETURNING
             id,
             restaurante_id AS "restauranteId",
@@ -598,12 +502,10 @@ async function atualizarDestaque(
             disponivel,
             destaque,
             criado_em AS "criadoEm",
-            atualizado_em AS "atualizadoEm",
             dados
         `,
         [
             novoDestaque,
-            atualizadoEm,
             dadosAtualizados,
             String(id),
         ]
@@ -613,9 +515,7 @@ async function atualizarDestaque(
         return null;
     }
 
-    return montarProduto(
-        resultado.rows[0]
-    );
+    return montarProduto(resultado.rows[0]);
 }
 
 // ============================================================
@@ -639,30 +539,23 @@ async function excluir(id) {
             disponivel,
             destaque,
             criado_em AS "criadoEm",
-            atualizado_em AS "atualizadoEm",
             dados
         `,
-        [
-            String(id)
-        ]
+        [String(id)]
     );
 
     if (resultado.rows.length === 0) {
         return null;
     }
 
-    return montarProduto(
-        resultado.rows[0]
-    );
+    return montarProduto(resultado.rows[0]);
 }
 
 // ============================================================
 // LISTAR POR RESTAURANTE
 // ============================================================
 
-async function listarPorRestaurante(
-    restauranteId
-) {
+async function listarPorRestaurante(restauranteId) {
 
     if (
         restauranteId === undefined ||
@@ -685,30 +578,22 @@ async function listarPorRestaurante(
             disponivel,
             destaque,
             criado_em AS "criadoEm",
-            atualizado_em AS "atualizadoEm",
             dados
         FROM produtos
         WHERE restaurante_id = $1
         ORDER BY criado_em ASC NULLS LAST
         `,
-        [
-            String(restauranteId)
-        ]
+        [String(restauranteId)]
     );
 
-    return resultado.rows.map(
-        montarProduto
-    );
+    return resultado.rows.map(montarProduto);
 }
 
 // ============================================================
 // BUSCAR POR CATEGORIA
 // ============================================================
 
-async function listarPorCategoria(
-    restauranteId,
-    categoria
-) {
+async function listarPorCategoria(restauranteId, categoria) {
 
     if (
         restauranteId === undefined ||
@@ -731,7 +616,6 @@ async function listarPorCategoria(
             disponivel,
             destaque,
             criado_em AS "criadoEm",
-            atualizado_em AS "atualizadoEm",
             dados
         FROM produtos
         WHERE restaurante_id = $1
@@ -744,18 +628,14 @@ async function listarPorCategoria(
         ]
     );
 
-    return resultado.rows.map(
-        montarProduto
-    );
+    return resultado.rows.map(montarProduto);
 }
 
 // ============================================================
 // CONTAR PRODUTOS
 // ============================================================
 
-async function contar(
-    restauranteId
-) {
+async function contar(restauranteId) {
 
     if (
         restauranteId === undefined ||
@@ -771,9 +651,7 @@ async function contar(
         FROM produtos
         WHERE restaurante_id = $1
         `,
-        [
-            String(restauranteId)
-        ]
+        [String(restauranteId)]
     );
 
     return resultado.rows[0].total;
@@ -829,17 +707,11 @@ function montarProduto(row) {
 
         criadoEm:
             row.criadoEm
-                ? new Date(
-                    row.criadoEm
-                ).toISOString()
+                ? new Date(row.criadoEm).toISOString()
                 : null,
 
         atualizadoEm:
-            row.atualizadoEm
-                ? new Date(
-                    row.atualizadoEm
-                ).toISOString()
-                : null,
+            dados.atualizadoEm || null,
     };
 }
 
