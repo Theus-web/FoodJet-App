@@ -993,6 +993,10 @@ async function gerarCartao(req, res) {
             "========================================"
         );
 
+        // ====================================================
+        // USUÁRIO AUTENTICADO
+        // ====================================================
+
         const usuario =
             await buscarUsuarioAutenticado(req);
 
@@ -1002,6 +1006,10 @@ async function gerarCartao(req, res) {
         const {
             valor,
         } = body;
+
+        // ====================================================
+        // PEDIDO
+        // ====================================================
 
         const resultadoPedido =
             await criarPedidoSeNecessario(
@@ -1017,14 +1025,26 @@ async function gerarCartao(req, res) {
             usuario
         );
 
+        // ====================================================
+        // REFERÊNCIA
+        // ====================================================
+
         const referencia =
             obterReferencia(pedido);
+
+        // ====================================================
+        // VALOR
+        // ====================================================
 
         const valorFinal =
             validarValor(
                 valor ??
                 pedido.total
             );
+
+        // ====================================================
+        // CLIENTE
+        // ====================================================
 
         const dadosCliente =
             prepararDadosCliente(
@@ -1043,178 +1063,399 @@ async function gerarCartao(req, res) {
             documento,
         } = dadosCliente;
 
-        const cartao = body.cartao || {};
+        // ====================================================
+        // TELEFONE
+        // ====================================================
 
-// ==========================================================
-// VALIDAR DADOS DO CARTÃO
-// ==========================================================
+        const telefone =
+            String(
+                telefoneCliente || ""
+            )
+                .replace(/\D/g, "")
+                .trim();
 
-const numero =
-    String(cartao.numero || "")
-        .replace(/\D/g, "");
+        if (
+            telefone.length < 10 ||
+            telefone.length > 11
+        ) {
 
-const nomeCartao =
-    String(cartao.nome || "")
-        .trim();
+            throw new Error(
+                "Número de contato com DDD do titular do cartão é obrigatório."
+            );
+        }
 
-const validade =
-    String(cartao.validade || "")
-        .replace(/\D/g, "");
-
-const cvv =
-    String(cartao.cvv || "")
-        .replace(/\D/g, "");
-
-if (numero.length < 13 || numero.length > 19) {
-
-    throw new Error(
-        "Número do cartão inválido."
-    );
-}
-
-if (!nomeCartao) {
-
-    throw new Error(
-        "Nome do titular do cartão é obrigatório."
-    );
-}
-
-if (!/^\d{4}$/.test(validade)) {
-
-    throw new Error(
-        "Validade do cartão inválida. Use MM/AA."
-    );
-}
-
-const mes =
-    Number(
-        validade.substring(0, 2)
-    );
-
-if (
-    mes < 1 ||
-    mes > 12
-) {
-
-    throw new Error(
-        "Mês de validade do cartão inválido."
-    );
-}
-
-if (
-    cvv.length < 3 ||
-    cvv.length > 4
-) {
-
-    throw new Error(
-        "CVV do cartão inválido."
-    );
-}
-
-// ==========================================================
-// ENDEREÇO
-// ==========================================================
-
-const endereco =
-    body.endereco || {};
-
-// ==========================================================
-// IP REAL DO CLIENTE
-// ==========================================================
-
-const remoteIp =
-    req.headers["x-forwarded-for"]
-        ?.split(",")[0]
-        ?.trim() ||
-    req.socket?.remoteAddress ||
-    "";
-
-if (!remoteIp) {
-
-    throw new Error(
-        "Não foi possível identificar o IP do cliente."
-    );
-}
-
-// ==========================================================
-// CRIAR PAGAMENTO NO ASAAS
-// ==========================================================
-
-const pagamento =
-    await criarCartao({
-
-        valor:
-            valorFinal,
-
-        email,
-
-        referencia,
-
-        descricao:
-            `Pedido FoodJet #${referencia}`,
-
-        nome:
-            nomeCliente,
-
-        cpf:
-            documento,
-
-        telefone:
-            telefoneCliente,
-
-        usuarioId:
-            String(usuario.id),
-
-        // ==================================================
-        // CARTÃO
-        // ==================================================
-
-        cartao: {
-
-            numero,
-
-            nome:
-                nomeCartao,
-
-            mesExpiracao:
-                validade.substring(0, 2),
-
-            anoExpiracao:
-                validade.substring(2, 4),
-
-            cvv,
-
-        },
-
-        // ==================================================
+        // ====================================================
         // ENDEREÇO
-        // ==================================================
+        // ====================================================
 
-        endereco,
+        const enderecoOriginal =
+            body.endereco || {};
 
-        // ==================================================
+        const endereco = {
+
+            cep:
+                enderecoOriginal.cep ||
+                enderecoOriginal.CEP ||
+                enderecoOriginal.codigoPostal ||
+                enderecoOriginal.postalCode ||
+                "",
+
+            numero:
+                enderecoOriginal.numero ||
+                enderecoOriginal.numeroEndereco ||
+                enderecoOriginal.number ||
+                enderecoOriginal.addressNumber ||
+                "",
+
+            complemento:
+                enderecoOriginal.complemento ||
+                enderecoOriginal.complement ||
+                enderecoOriginal.addressComplement ||
+                "",
+        };
+
+        // ====================================================
+        // CEP
+        // ====================================================
+
+        const cep =
+            String(
+                endereco.cep || ""
+            )
+                .replace(/\D/g, "")
+                .trim();
+
+        if (cep.length !== 8) {
+
+            throw new Error(
+                "CEP do titular do cartão é obrigatório."
+            );
+        }
+
+        // ====================================================
+        // NÚMERO DO ENDEREÇO
+        // ====================================================
+
+        const numeroEndereco =
+            String(
+                endereco.numero || ""
+            ).trim();
+
+        if (!numeroEndereco) {
+
+            throw new Error(
+                "Número do endereço é obrigatório para pagamento com cartão."
+            );
+        }
+
+        // ====================================================
+        // CARTÃO
+        // ====================================================
+
+        const cartao =
+            body.cartao || {};
+
+        // ----------------------------------------------------
+        // NÚMERO
+        // ----------------------------------------------------
+
+        const numero =
+            String(
+                cartao.numero || ""
+            )
+                .replace(/\D/g, "");
+
+        if (
+            numero.length < 13 ||
+            numero.length > 19
+        ) {
+
+            throw new Error(
+                "Número do cartão inválido."
+            );
+        }
+
+        // ----------------------------------------------------
+        // TITULAR
+        // ----------------------------------------------------
+
+        const nomeCartao =
+            String(
+                cartao.nome || ""
+            ).trim();
+
+        if (!nomeCartao) {
+
+            throw new Error(
+                "Nome do titular do cartão é obrigatório."
+            );
+        }
+
+        // ----------------------------------------------------
+        // VALIDADE
+        // ----------------------------------------------------
+
+        const validade =
+            String(
+                cartao.validade || ""
+            )
+                .replace(/\D/g, "");
+
+        if (
+            !/^\d{4}$/.test(
+                validade
+            )
+        ) {
+
+            throw new Error(
+                "Validade do cartão inválida. Use MM/AA."
+            );
+        }
+
+        const mes =
+            Number(
+                validade.substring(0, 2)
+            );
+
+        if (
+            mes < 1 ||
+            mes > 12
+        ) {
+
+            throw new Error(
+                "Mês de validade do cartão inválido."
+            );
+        }
+
+        const mesExpiracao =
+            validade.substring(0, 2);
+
+        const anoExpiracao =
+            `20${validade.substring(2, 4)}`;
+
+        // ----------------------------------------------------
+        // CVV
+        // ----------------------------------------------------
+
+        const cvv =
+            String(
+                cartao.cvv || ""
+            )
+                .replace(/\D/g, "");
+
+        if (
+            cvv.length < 3 ||
+            cvv.length > 4
+        ) {
+
+            throw new Error(
+                "CVV do cartão inválido."
+            );
+        }
+
+        // ====================================================
         // IP DO CLIENTE
-        // ==================================================
+        // ====================================================
 
-        remoteIp,
+        const forwardedFor =
+            req.headers[
+                "x-forwarded-for"
+            ];
 
-    });
+        const remoteIp =
+            forwardedFor
+                ? String(
+                    forwardedFor
+                )
+                    .split(",")[0]
+                    .trim()
+                : String(
+                    req.socket?.remoteAddress ||
+                    ""
+                ).trim();
 
-        if (!pagamento?.id) {
+        if (!remoteIp) {
+
+            throw new Error(
+                "Não foi possível identificar o IP do cliente."
+            );
+        }
+
+        // ====================================================
+        // LOG SEGURO
+        // ====================================================
+
+        console.log(
+            "👤 CLIENTE:",
+            usuario.id
+        );
+
+        console.log(
+            "📧 EMAIL:",
+            email
+        );
+
+        console.log(
+            "📱 TELEFONE:",
+            telefone
+        );
+
+        console.log(
+            "🪪 DOCUMENTO:",
+            documento
+        );
+
+        console.log(
+            "📍 CEP:",
+            cep
+        );
+
+        console.log(
+            "🏠 NÚMERO:",
+            numeroEndereco
+        );
+
+        console.log(
+            "💰 VALOR:",
+            valorFinal
+        );
+
+        console.log(
+            "🆔 PEDIDO:",
+            pedido.id
+        );
+
+        console.log(
+            "🔖 REFERÊNCIA:",
+            referencia
+        );
+
+        console.log(
+            "💳 CARTÃO:",
+            "DADOS RECEBIDOS"
+        );
+
+        // ====================================================
+        // CRIAR PAGAMENTO ASAAS
+        // ====================================================
+
+        const pagamento =
+            await criarCartao({
+
+                valor:
+                    valorFinal,
+
+                email,
+
+                referencia,
+
+                descricao:
+                    `Pedido FoodJet #${referencia}`,
+
+                nome:
+                    nomeCliente,
+
+                cpf:
+                    documento,
+
+                telefone,
+
+                usuarioId:
+                    String(usuario.id),
+
+                // ==========================================
+                // CARTÃO
+                // ==========================================
+
+                cartao: {
+
+                    numero,
+
+                    nome:
+                        nomeCartao,
+
+                    mesExpiracao,
+
+                    anoExpiracao,
+
+                    cvv,
+                },
+
+                // ==========================================
+                // ENDEREÇO
+                // ==========================================
+
+                endereco: {
+
+                    cep,
+
+                    numero:
+                        numeroEndereco,
+
+                    complemento:
+                        endereco.complemento,
+                },
+
+                // ==========================================
+                // IP
+                // ==========================================
+
+                remoteIp,
+            });
+
+        // ====================================================
+        // VALIDAR RESPOSTA ASAAS
+        // ====================================================
+
+        if (
+            !pagamento?.id
+        ) {
 
             throw new Error(
                 "O Asaas não retornou o ID do pagamento com cartão."
             );
         }
 
-        await vincularPagamentoAoPedido(
-            pedido,
-            pagamento
+        // ====================================================
+        // VINCULAR PAGAMENTO AO PEDIDO
+        // ====================================================
+
+        pedido =
+            await vincularPagamentoAoPedido(
+                pedido,
+                pagamento
+            );
+
+        // ====================================================
+        // SUCESSO
+        // ====================================================
+
+        console.log("");
+        console.log(
+            "========================================"
         );
 
         console.log(
-            "✅ CARTÃO CRIADO:",
+            "✅ CARTÃO CRIADO NO ASAAS"
+        );
+
+        console.log(
+            "💳 PAGAMENTO:",
             pagamento.id
+        );
+
+        console.log(
+            "📦 PEDIDO:",
+            pedido.id
+        );
+
+        console.log(
+            "📊 STATUS:",
+            pagamento.status
+        );
+
+        console.log(
+            "========================================"
         );
 
         return res.status(201).json({
@@ -1255,20 +1496,44 @@ const pagamento =
 
     } catch (erro) {
 
+        console.error("");
         console.error(
-            "❌ ERRO GERANDO CARTÃO:",
+            "========================================"
+        );
+
+        console.error(
+            "❌ ERRO GERANDO CARTÃO"
+        );
+
+        console.error(
+            "========================================"
+        );
+
+        console.error(
+            "MENSAGEM:",
             erro?.message || erro
         );
 
         if (erro?.response?.data) {
 
             console.error(
-                "ASAAS:",
+                "ASAAS:"
+            );
+
+            console.error(
                 JSON.stringify(
                     erro.response.data,
                     null,
                     2
                 )
+            );
+        }
+
+        if (pedido) {
+
+            console.error(
+                "📦 PEDIDO:",
+                pedido.id
             );
         }
 

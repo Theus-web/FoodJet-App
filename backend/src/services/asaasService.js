@@ -38,7 +38,6 @@ console.log("========================================");
 // ============================================================
 
 if (!ASAAS_API_KEY) {
-
   console.error(
     "❌ ASAAS_API_KEY não configurada."
   );
@@ -53,21 +52,14 @@ if (!ASAAS_API_KEY) {
 // ============================================================
 
 const api = axios.create({
-
   baseURL: ASAAS_API_URL,
 
   timeout: 30000,
 
   headers: {
-
-    "Content-Type":
-      "application/json",
-
-    Accept:
-      "application/json",
-
-    access_token:
-      ASAAS_API_KEY,
+    "Content-Type": "application/json",
+    Accept: "application/json",
+    access_token: ASAAS_API_KEY,
   },
 });
 
@@ -76,9 +68,7 @@ const api = axios.create({
 // ============================================================
 
 function obterDataHoje() {
-
-  const agora =
-    new Date();
+  const agora = new Date();
 
   const ano =
     agora.getFullYear();
@@ -97,17 +87,35 @@ function obterDataHoje() {
 }
 
 // ============================================================
+// LIMPAR TELEFONE
+// ============================================================
+
+function limparTelefone(valor) {
+  return String(valor || "")
+    .replace(/\D/g, "")
+    .trim();
+}
+
+// ============================================================
+// LIMPAR CEP
+// ============================================================
+
+function limparCep(valor) {
+  return String(valor || "")
+    .replace(/\D/g, "")
+    .trim();
+}
+
+// ============================================================
 // CRIAR / LOCALIZAR CLIENTE ASAAS
 // ============================================================
 
 async function criarCliente({
-
   nome,
   email,
   cpf,
   telefone,
   usuarioId,
-
 }) {
 
   const documento =
@@ -116,26 +124,34 @@ async function criarCliente({
           .replace(/\D/g, "")
       : "";
 
+  const telefoneLimpo =
+    limparTelefone(telefone);
+
   // ==========================================================
   // VALIDAR CPF
   // ==========================================================
 
   if (!documento) {
-
     throw new Error(
       "CPF não cadastrado. Atualize seu cadastro antes de realizar o pagamento."
     );
   }
 
-  if (!nome) {
+  // ==========================================================
+  // VALIDAR NOME
+  // ==========================================================
 
+  if (!nome || !String(nome).trim()) {
     throw new Error(
       "Nome do cliente não encontrado."
     );
   }
 
-  if (!email) {
+  // ==========================================================
+  // VALIDAR EMAIL
+  // ==========================================================
 
+  if (!email || !String(email).trim()) {
     throw new Error(
       "E-mail do cliente não encontrado."
     );
@@ -180,7 +196,7 @@ async function criarCliente({
   } catch (erro) {
 
     console.warn(
-      "⚠️ NÃO FOI POSSÍVEL LOCALIZAR CLIENTE ASAAS PELO CPF:"
+      "⚠️ NÃO FOI POSSÍVEL LOCALIZAR CLIENTE ASAAS PELO CPF"
     );
 
     console.warn(
@@ -210,11 +226,10 @@ async function criarCliente({
       true,
   };
 
-  if (telefone) {
+  if (telefoneLimpo) {
 
     body.mobilePhone =
-      String(telefone)
-        .replace(/\D/g, "");
+      telefoneLimpo;
   }
 
   if (usuarioId) {
@@ -260,20 +275,6 @@ async function criarCliente({
 // ============================================================
 // CRIAR COBRANÇA - CARTÃO DE CRÉDITO
 // ============================================================
-//
-// Processamento direto pelo ASAAS
-//
-// FoodJet
-//    ↓
-// Cliente ASAAS
-//    ↓
-// Cobrança CREDIT_CARD
-//    ↓
-// Dados do cartão
-//    ↓
-// ASAAS autoriza/processa
-//
-// ============================================================
 
 async function criarCartao({
 
@@ -286,13 +287,10 @@ async function criarCartao({
   telefone,
   usuarioId,
 
-  // DADOS DO CARTÃO
   cartao,
 
-  // ENDEREÇO DO CLIENTE
   endereco,
 
-  // IP DO CLIENTE
   remoteIp,
 
 }) {
@@ -305,7 +303,9 @@ async function criarCartao({
     Number(valor);
 
   if (
-    !Number.isFinite(valorNumerico) ||
+    !Number.isFinite(
+      valorNumerico
+    ) ||
     valorNumerico <= 0
   ) {
 
@@ -356,7 +356,8 @@ async function criarCartao({
   const numero =
     String(
       cartao.numero || ""
-    ).replace(/\D/g, "");
+    )
+      .replace(/\D/g, "");
 
   const nomeCartao =
     String(
@@ -379,7 +380,8 @@ async function criarCartao({
   const cvv =
     String(
       cartao.cvv || ""
-    ).replace(/\D/g, "");
+    )
+      .replace(/\D/g, "");
 
   // ==========================================================
   // VALIDAR NÚMERO
@@ -414,7 +416,9 @@ async function criarCartao({
     Number(mesExpiracao);
 
   if (
-    !Number.isInteger(mesNumero) ||
+    !Number.isInteger(
+      mesNumero
+    ) ||
     mesNumero < 1 ||
     mesNumero > 12
   ) {
@@ -462,7 +466,7 @@ async function criarCartao({
   }
 
   // ==========================================================
-  // VALIDAR CPF
+  // CPF
   // ==========================================================
 
   const documento =
@@ -477,13 +481,82 @@ async function criarCartao({
   }
 
   // ==========================================================
-  // VALIDAR IP
+  // TELEFONE
   // ==========================================================
 
+  const telefoneLimpo =
+    limparTelefone(telefone);
+
   if (
-    !remoteIp ||
-    !String(remoteIp).trim()
+    telefoneLimpo.length < 10 ||
+    telefoneLimpo.length > 11
   ) {
+
+    throw new Error(
+      "Número de contato com DDD do titular do cartão é obrigatório."
+    );
+  }
+
+  // ==========================================================
+  // ENDEREÇO
+  // ==========================================================
+
+  const enderecoSeguro =
+    endereco || {};
+
+  const cep =
+    limparCep(
+      enderecoSeguro.cep ||
+      enderecoSeguro.CEP ||
+      enderecoSeguro.codigoPostal ||
+      enderecoSeguro.postalCode ||
+      enderecoSeguro.cepCodigo ||
+      ""
+    );
+
+  const numeroEndereco =
+    String(
+      enderecoSeguro.numero ||
+      enderecoSeguro.numeroEndereco ||
+      enderecoSeguro.number ||
+      enderecoSeguro.addressNumber ||
+      ""
+    ).trim();
+
+  const complemento =
+    String(
+      enderecoSeguro.complemento ||
+      enderecoSeguro.complement ||
+      enderecoSeguro.addressComplement ||
+      ""
+    ).trim();
+
+  if (
+    cep.length !== 8
+  ) {
+
+    throw new Error(
+      "CEP do titular do cartão é obrigatório."
+    );
+  }
+
+  if (!numeroEndereco) {
+
+    throw new Error(
+      "Número do endereço é obrigatório para pagamento com cartão."
+    );
+  }
+
+  // ==========================================================
+  // IP DO CLIENTE
+  // ==========================================================
+
+  const ipCliente =
+    String(
+      remoteIp || ""
+    ).trim();
+
+  if (!ipCliente) {
 
     throw new Error(
       "Não foi possível identificar o IP do cliente."
@@ -507,50 +580,11 @@ async function criarCartao({
       cpf:
         documento,
 
-      telefone,
+      telefone:
+        telefoneLimpo,
 
       usuarioId,
-
     });
-
-  // ==========================================================
-  // ENDEREÇO
-  // ==========================================================
-
-  const enderecoSeguro =
-    endereco || {};
-
-  const cep =
-    String(
-      enderecoSeguro.cep ||
-      enderecoSeguro.CEP ||
-      enderecoSeguro.codigoPostal ||
-      ""
-    )
-      .replace(/\D/g, "");
-
-  const numeroEndereco =
-    String(
-      enderecoSeguro.numero ||
-      enderecoSeguro.numeroEndereco ||
-      ""
-    ).trim();
-
-  if (
-    cep.length !== 8
-  ) {
-
-    throw new Error(
-      "CEP do endereço é obrigatório para pagamento com cartão."
-    );
-  }
-
-  if (!numeroEndereco) {
-
-    throw new Error(
-      "Número do endereço é obrigatório para pagamento com cartão."
-    );
-  }
 
   // ==========================================================
   // DADOS DO TITULAR
@@ -576,18 +610,17 @@ async function criarCartao({
       numeroEndereco,
 
     phone:
-      telefone
-        ? String(telefone)
-            .replace(/\D/g, "")
-        : undefined,
+      telefoneLimpo,
 
     mobilePhone:
-      telefone
-        ? String(telefone)
-            .replace(/\D/g, "")
-        : undefined,
-
+      telefoneLimpo,
   };
+
+  if (complemento) {
+
+    creditCardHolderInfo.addressComplement =
+      complemento;
+  }
 
   // ==========================================================
   // COBRANÇA ASAAS
@@ -639,7 +672,6 @@ async function criarCartao({
 
       ccv:
         cvv,
-
     },
 
     // ========================================================
@@ -653,8 +685,7 @@ async function criarCartao({
     // ========================================================
 
     remoteIp:
-      String(remoteIp).trim(),
-
+      ipCliente,
   };
 
   try {
@@ -684,13 +715,28 @@ async function criarCartao({
     );
 
     console.log(
+      "CEP TITULAR:",
+      cep
+    );
+
+    console.log(
+      "NÚMERO ENDEREÇO:",
+      numeroEndereco
+    );
+
+    console.log(
+      "TELEFONE:",
+      telefoneLimpo
+    );
+
+    console.log(
       "VALIDADE:",
       `${mesExpiracao}/${anoExpiracao}`
     );
 
     console.log(
       "IP CLIENTE:",
-      body.remoteIp
+      ipCliente
     );
 
     console.log(
@@ -792,20 +838,6 @@ async function criarCartao({
 // ============================================================
 // CRIAR COBRANÇA - CARTÃO DE DÉBITO
 // ============================================================
-//
-// ATENÇÃO:
-//
-// O Asaas NÃO permite enviar número, validade e CVV
-// de cartão de débito diretamente pela API.
-//
-// Para débito:
-// 1. Criamos a cobrança no Asaas
-// 2. Usamos billingType CREDIT_CARD
-// 3. Pegamos a invoiceUrl
-// 4. O cliente abre a página do Asaas
-// 5. Na página da fatura ele poderá escolher DÉBITO
-//
-// ============================================================
 
 async function criarDebito({
   valor,
@@ -818,55 +850,46 @@ async function criarDebito({
   usuarioId,
 }) {
 
-  // ==========================================================
-  // VALOR
-  // ==========================================================
-
   const valorNumerico =
     Number(valor);
 
   if (
-    !Number.isFinite(valorNumerico) ||
+    !Number.isFinite(
+      valorNumerico
+    ) ||
     valorNumerico <= 0
   ) {
+
     throw new Error(
       "Valor inválido para pagamento."
     );
   }
 
-  // ==========================================================
-  // EMAIL
-  // ==========================================================
-
   if (
     !email ||
     !String(email).trim()
   ) {
+
     throw new Error(
       "E-mail obrigatório."
     );
   }
 
-  // ==========================================================
-  // REFERÊNCIA
-  // ==========================================================
-
   if (
     !referencia ||
     !String(referencia).trim()
   ) {
+
     throw new Error(
       "Referência obrigatória."
     );
   }
 
-  // ==========================================================
-  // CLIENTE ASAAS
-  // ==========================================================
-
   const cliente =
     await criarCliente({
+
       nome,
+
       email:
         String(email)
           .trim()
@@ -879,17 +902,11 @@ async function criarDebito({
       usuarioId,
     });
 
-  // ==========================================================
-  // COBRANÇA
-  // ==========================================================
-
   const body = {
 
     customer:
       cliente.id,
 
-    // O Asaas usa CREDIT_CARD para disponibilizar
-    // o pagamento por cartão através da invoiceUrl.
     billingType:
       "CREDIT_CARD",
 
@@ -975,20 +992,17 @@ async function criarDebito({
     console.log(
       "INVOICE URL:",
       response.data?.invoiceUrl ||
-        "NÃO INFORMADA"
+      "NÃO INFORMADA"
     );
 
     console.log(
       "========================================"
     );
 
-    // ========================================================
-    // VALIDAR INVOICE URL
-    // ========================================================
-
     if (
       !response.data?.invoiceUrl
     ) {
+
       throw new Error(
         "O Asaas criou a cobrança, mas não retornou a invoiceUrl."
       );
@@ -1015,7 +1029,7 @@ async function criarDebito({
     console.error(
       JSON.stringify(
         erro?.response?.data ||
-          {},
+        {},
         null,
         2
       )
@@ -1045,10 +1059,6 @@ async function criarPix({
   const valorNumerico =
     Number(valor);
 
-  // ==========================================================
-  // VALOR
-  // ==========================================================
-
   if (
     !Number.isFinite(
       valorNumerico
@@ -1061,10 +1071,6 @@ async function criarPix({
     );
   }
 
-  // ==========================================================
-  // EMAIL
-  // ==========================================================
-
   if (
     !email ||
     !String(email).trim()
@@ -1075,10 +1081,6 @@ async function criarPix({
     );
   }
 
-  // ==========================================================
-  // REFERÊNCIA
-  // ==========================================================
-
   if (
     !referencia ||
     !String(referencia).trim()
@@ -1088,10 +1090,6 @@ async function criarPix({
       "Referência obrigatória."
     );
   }
-
-  // ==========================================================
-  // CLIENTE ASAAS
-  // ==========================================================
 
   const cliente =
     await criarCliente({
@@ -1109,10 +1107,6 @@ async function criarPix({
 
       usuarioId,
     });
-
-  // ==========================================================
-  // COBRANÇA PIX
-  // ==========================================================
 
   const body = {
 
