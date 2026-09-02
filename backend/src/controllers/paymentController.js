@@ -1043,20 +1043,102 @@ async function gerarCartao(req, res) {
             documento,
         } = dadosCliente;
 
-        const cartao =
-    body.cartao || {};
+        const cartao = body.cartao || {};
+
+// ==========================================================
+// VALIDAR DADOS DO CARTÃO
+// ==========================================================
+
+const numero =
+    String(cartao.numero || "")
+        .replace(/\D/g, "");
+
+const nomeCartao =
+    String(cartao.nome || "")
+        .trim();
 
 const validade =
-    String(
-        cartao.validade || ""
-    ).replace(/\D/g, "");
+    String(cartao.validade || "")
+        .replace(/\D/g, "");
 
-if (validade.length !== 4) {
+const cvv =
+    String(cartao.cvv || "")
+        .replace(/\D/g, "");
+
+if (numero.length < 13 || numero.length > 19) {
 
     throw new Error(
-        "Validade do cartão inválida."
+        "Número do cartão inválido."
     );
 }
+
+if (!nomeCartao) {
+
+    throw new Error(
+        "Nome do titular do cartão é obrigatório."
+    );
+}
+
+if (!/^\d{4}$/.test(validade)) {
+
+    throw new Error(
+        "Validade do cartão inválida. Use MM/AA."
+    );
+}
+
+const mes =
+    Number(
+        validade.substring(0, 2)
+    );
+
+if (
+    mes < 1 ||
+    mes > 12
+) {
+
+    throw new Error(
+        "Mês de validade do cartão inválido."
+    );
+}
+
+if (
+    cvv.length < 3 ||
+    cvv.length > 4
+) {
+
+    throw new Error(
+        "CVV do cartão inválido."
+    );
+}
+
+// ==========================================================
+// ENDEREÇO
+// ==========================================================
+
+const endereco =
+    body.endereco || {};
+
+// ==========================================================
+// IP REAL DO CLIENTE
+// ==========================================================
+
+const remoteIp =
+    req.headers["x-forwarded-for"]
+        ?.split(",")[0]
+        ?.trim() ||
+    req.socket?.remoteAddress ||
+    "";
+
+if (!remoteIp) {
+
+    throw new Error(
+        "Não foi possível identificar o IP do cliente."
+    );
+}
+
+// ==========================================================
+// CRIAR PAGAMENTO NO ASAAS
+// ==========================================================
 
 const pagamento =
     await criarCartao({
@@ -1083,13 +1165,16 @@ const pagamento =
         usuarioId:
             String(usuario.id),
 
+        // ==================================================
+        // CARTÃO
+        // ==================================================
+
         cartao: {
 
-            numero:
-                cartao.numero,
+            numero,
 
             nome:
-                cartao.nome,
+                nomeCartao,
 
             mesExpiracao:
                 validade.substring(0, 2),
@@ -1097,10 +1182,21 @@ const pagamento =
             anoExpiracao:
                 validade.substring(2, 4),
 
-            cvv:
-                cartao.cvv,
+            cvv,
 
         },
+
+        // ==================================================
+        // ENDEREÇO
+        // ==================================================
+
+        endereco,
+
+        // ==================================================
+        // IP DO CLIENTE
+        // ==================================================
+
+        remoteIp,
 
     });
 

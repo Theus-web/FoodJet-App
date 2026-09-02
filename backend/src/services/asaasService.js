@@ -261,7 +261,7 @@ async function criarCliente({
 // CRIAR COBRANÇA - CARTÃO DE CRÉDITO
 // ============================================================
 //
-// Fluxo:
+// Processamento direto pelo ASAAS
 //
 // FoodJet
 //    ↓
@@ -271,7 +271,7 @@ async function criarCliente({
 //    ↓
 // Dados do cartão
 //    ↓
-// ASAAS PROCESSA O CARTÃO
+// ASAAS autoriza/processa
 //
 // ============================================================
 
@@ -289,19 +289,23 @@ async function criarCartao({
   // DADOS DO CARTÃO
   cartao,
 
-}) {
+  // ENDEREÇO DO CLIENTE
+  endereco,
 
-  const valorNumerico =
-    Number(valor);
+  // IP DO CLIENTE
+  remoteIp,
+
+}) {
 
   // ==========================================================
   // VALOR
   // ==========================================================
 
+  const valorNumerico =
+    Number(valor);
+
   if (
-    !Number.isFinite(
-      valorNumerico
-    ) ||
+    !Number.isFinite(valorNumerico) ||
     valorNumerico <= 0
   ) {
 
@@ -339,7 +343,7 @@ async function criarCartao({
   }
 
   // ==========================================================
-  // VALIDAR CARTÃO
+  // CARTÃO
   // ==========================================================
 
   if (!cartao) {
@@ -362,24 +366,38 @@ async function criarCartao({
   const mesExpiracao =
     String(
       cartao.mesExpiracao || ""
-    ).trim();
+    )
+      .replace(/\D/g, "")
+      .padStart(2, "0");
 
-  const anoExpiracao =
+  let anoExpiracao =
     String(
       cartao.anoExpiracao || ""
-    ).trim();
+    )
+      .replace(/\D/g, "");
 
   const cvv =
     String(
       cartao.cvv || ""
     ).replace(/\D/g, "");
 
-  if (!numero) {
+  // ==========================================================
+  // VALIDAR NÚMERO
+  // ==========================================================
+
+  if (
+    numero.length < 13 ||
+    numero.length > 19
+  ) {
 
     throw new Error(
-      "Número do cartão não informado."
+      "Número do cartão inválido."
     );
   }
+
+  // ==========================================================
+  // VALIDAR TITULAR
+  // ==========================================================
 
   if (!nomeCartao) {
 
@@ -388,29 +406,92 @@ async function criarCartao({
     );
   }
 
-  if (!mesExpiracao) {
+  // ==========================================================
+  // VALIDAR MÊS
+  // ==========================================================
+
+  const mesNumero =
+    Number(mesExpiracao);
+
+  if (
+    !Number.isInteger(mesNumero) ||
+    mesNumero < 1 ||
+    mesNumero > 12
+  ) {
 
     throw new Error(
-      "Mês de validade do cartão não informado."
-    );
-  }
-
-  if (!anoExpiracao) {
-
-    throw new Error(
-      "Ano de validade do cartão não informado."
-    );
-  }
-
-  if (!cvv) {
-
-    throw new Error(
-      "CVV do cartão não informado."
+      "Mês de validade do cartão inválido."
     );
   }
 
   // ==========================================================
-  // VALIDAR CLIENTE ASAAS
+  // CORRIGIR ANO
+  // ==========================================================
+
+  if (
+    anoExpiracao.length === 2
+  ) {
+
+    anoExpiracao =
+      `20${anoExpiracao}`;
+  }
+
+  if (
+    !/^\d{4}$/.test(
+      anoExpiracao
+    )
+  ) {
+
+    throw new Error(
+      "Ano de validade do cartão inválido."
+    );
+  }
+
+  // ==========================================================
+  // VALIDAR CVV
+  // ==========================================================
+
+  if (
+    cvv.length < 3 ||
+    cvv.length > 4
+  ) {
+
+    throw new Error(
+      "CVV do cartão inválido."
+    );
+  }
+
+  // ==========================================================
+  // VALIDAR CPF
+  // ==========================================================
+
+  const documento =
+    String(cpf || "")
+      .replace(/\D/g, "");
+
+  if (!documento) {
+
+    throw new Error(
+      "CPF não cadastrado."
+    );
+  }
+
+  // ==========================================================
+  // VALIDAR IP
+  // ==========================================================
+
+  if (
+    !remoteIp ||
+    !String(remoteIp).trim()
+  ) {
+
+    throw new Error(
+      "Não foi possível identificar o IP do cliente."
+    );
+  }
+
+  // ==========================================================
+  // CLIENTE ASAAS
   // ==========================================================
 
   const cliente =
@@ -423,7 +504,8 @@ async function criarCartao({
           .trim()
           .toLowerCase(),
 
-      cpf,
+      cpf:
+        documento,
 
       telefone,
 
@@ -432,28 +514,43 @@ async function criarCartao({
     });
 
   // ==========================================================
-  // CORRIGIR ANO DA VALIDADE
+  // ENDEREÇO
   // ==========================================================
 
-  let anoFinal =
-    anoExpiracao;
+  const enderecoSeguro =
+    endereco || {};
+
+  const cep =
+    String(
+      enderecoSeguro.cep ||
+      enderecoSeguro.CEP ||
+      enderecoSeguro.codigoPostal ||
+      ""
+    )
+      .replace(/\D/g, "");
+
+  const numeroEndereco =
+    String(
+      enderecoSeguro.numero ||
+      enderecoSeguro.numeroEndereco ||
+      ""
+    ).trim();
 
   if (
-    anoFinal.length === 2
+    cep.length !== 8
   ) {
 
-    anoFinal =
-      `20${anoFinal}`;
+    throw new Error(
+      "CEP do endereço é obrigatório para pagamento com cartão."
+    );
   }
 
-  // ==========================================================
-  // CORRIGIR MÊS
-  // ==========================================================
+  if (!numeroEndereco) {
 
-  const mesFinal =
-    String(
-      Number(mesExpiracao)
-    ).padStart(2, "0");
+    throw new Error(
+      "Número do endereço é obrigatório para pagamento com cartão."
+    );
+  }
 
   // ==========================================================
   // DADOS DO TITULAR
@@ -470,10 +567,21 @@ async function criarCartao({
         .toLowerCase(),
 
     cpfCnpj:
-      String(cpf)
-        .replace(/\D/g, ""),
+      documento,
+
+    postalCode:
+      cep,
+
+    addressNumber:
+      numeroEndereco,
 
     phone:
+      telefone
+        ? String(telefone)
+            .replace(/\D/g, "")
+        : undefined,
+
+    mobilePhone:
       telefone
         ? String(telefone)
             .replace(/\D/g, "")
@@ -482,7 +590,7 @@ async function criarCartao({
   };
 
   // ==========================================================
-  // COBRANÇA
+  // COBRANÇA ASAAS
   // ==========================================================
 
   const body = {
@@ -524,10 +632,10 @@ async function criarCartao({
         numero,
 
       expiryMonth:
-        mesFinal,
+        mesExpiracao,
 
       expiryYear:
-        anoFinal,
+        anoExpiracao,
 
       ccv:
         cvv,
@@ -535,10 +643,17 @@ async function criarCartao({
     },
 
     // ========================================================
-    // DADOS DO TITULAR
+    // TITULAR
     // ========================================================
 
     creditCardHolderInfo,
+
+    // ========================================================
+    // IP DO COMPRADOR
+    // ========================================================
+
+    remoteIp:
+      String(remoteIp).trim(),
 
   };
 
@@ -569,13 +684,13 @@ async function criarCartao({
     );
 
     console.log(
-      "BANDEIRA:",
-      "CARTÃO"
+      "VALIDADE:",
+      `${mesExpiracao}/${anoExpiracao}`
     );
 
     console.log(
-      "VALIDADE:",
-      `${mesFinal}/${anoFinal}`
+      "IP CLIENTE:",
+      body.remoteIp
     );
 
     console.log(
@@ -583,7 +698,7 @@ async function criarCartao({
     );
 
     // ========================================================
-    // ENVIAR PARA ASAAS
+    // ENVIAR AO ASAAS
     // ========================================================
 
     const response =
@@ -592,13 +707,17 @@ async function criarCartao({
         body
       );
 
+    // ========================================================
+    // RESPOSTA
+    // ========================================================
+
     console.log("");
     console.log(
       "========================================"
     );
 
     console.log(
-      "✅ PAGAMENTO CARTÃO ENVIADO AO ASAAS"
+      "✅ CARTÃO ENVIADO AO ASAAS"
     );
 
     console.log(
@@ -622,9 +741,9 @@ async function criarCartao({
     );
 
     console.log(
-      "STATUS CARTÃO:",
+      "BANDEIRA:",
       response.data?.creditCard?.creditCardBrand ||
-      "NÃO INFORMADO"
+      "NÃO INFORMADA"
     );
 
     console.log(

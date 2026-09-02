@@ -154,6 +154,47 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     ].where((e) => e.trim().isNotEmpty).join("\n");
   }
 
+  Future<void> criarPedidoParaCartao() async {
+  final dados = await criarPedido();
+
+  if (dados == null) {
+    return;
+  }
+
+  final pedidoId = extrairPedidoId(dados);
+
+  if (pedidoId == null) {
+    mostrarMensagem(
+      "Pedido criado, mas o ID não foi retornado.",
+      erro: true,
+    );
+    return;
+  }
+
+  final pedidoIdString =
+      pedidoId.toString().trim();
+
+  if (!mounted) {
+    return;
+  }
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => PaymentScreen(
+        endereco: widget.endereco,
+        itens: widget.itens,
+        subtotal: widget.subtotal,
+        restauranteId: widget.restauranteId,
+        taxaEntrega: taxaEntrega,
+        taxaServico: taxaServico,
+        formaPagamento: "CREDITO",
+        pedidoId: pedidoIdString,
+      ),
+    ),
+  );
+}
+
   // ============================================================
   // TOKEN
   // ============================================================
@@ -580,11 +621,9 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
       // ========================================================
 
       if (formaPagamento == "CREDITO") {
-        mostrarMensagem(
-          "Pagamento com cartão de crédito será preparado.",
-        );
-        return;
-      }
+  await criarPedidoParaCartao();
+  return;
+}
 
       mostrarMensagem(
         "Forma de pagamento inválida.",
