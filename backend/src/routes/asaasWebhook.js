@@ -51,33 +51,17 @@ function normalizarStatusAsaas(status) {
 
     switch (valor) {
 
-        // ----------------------------------------------------
-        // PAGAMENTO AGUARDANDO
-        // ----------------------------------------------------
-
         case "PENDING":
         case "AWAITING_RISK_ANALYSIS":
         case "AWAITING_PAYMENT":
             return "pending";
 
-        // ----------------------------------------------------
-        // PAGAMENTO RECEBIDO / CONFIRMADO
-        // ----------------------------------------------------
-
         case "RECEIVED":
         case "CONFIRMED":
             return "approved";
 
-        // ----------------------------------------------------
-        // VENCIDO
-        // ----------------------------------------------------
-
         case "OVERDUE":
             return "overdue";
-
-        // ----------------------------------------------------
-        // CANCELADO
-        // ----------------------------------------------------
 
         case "REFUNDED":
         case "REFUND_REQUESTED":
@@ -252,18 +236,6 @@ function parseDados(valor) {
 // ============================================================
 // LOCALIZAR PEDIDO NO POSTGRESQL
 // ============================================================
-//
-// Procuramos na mesma ordem da implementação antiga:
-//
-// 1. pagamentoId
-// 2. referenciaPagamento
-// 3. externalReference
-// 4. pedidoReferencia
-// 5. pagamentoReferencia
-// 6. orderId
-// 7. referência FOODJET-123
-//
-// ============================================================
 
 async function localizarPedido(payment) {
 
@@ -400,11 +372,6 @@ async function localizarPedido(payment) {
 
     // --------------------------------------------------------
     // 4. REFERÊNCIA FOODJET
-    //
-    // Exemplo:
-    //
-    // FOODJET-1787794040158
-    //
     // --------------------------------------------------------
 
     if (referencia) {
@@ -541,10 +508,6 @@ async function atualizarPedido(
     const momento =
         agora();
 
-    // --------------------------------------------------------
-    // COPIAR PEDIDO
-    // --------------------------------------------------------
-
     const pedidoAtualizado = {
 
         ...pedido,
@@ -636,12 +599,6 @@ async function atualizarPedido(
             pedidoAtualizado.pagamentoAprovadoEm ||
             momento;
 
-        // ----------------------------------------------------
-        // NÃO colocamos diretamente em preparo.
-        //
-        // O restaurante ainda precisa aceitar.
-        // ----------------------------------------------------
-
         if (
             !pedidoAtualizado.status ||
             pedidoAtualizado.status ===
@@ -707,21 +664,11 @@ async function atualizarPedido(
 // ============================================================
 // SALVAR PAGAMENTO ASAAS
 // ============================================================
-//
-// Substitui:
-//
-// db.data.pagamentosAsaas
-//
-// Agora o pagamento fica no PostgreSQL.
-//
-// Isso permite que o webhook chegue antes do pedido sem
-// depender de foodjet.json.
-//
-// ============================================================
 
 async function salvarPagamentoPendente(
     payment,
-    evento
+    evento,
+    pedidoId = null
 ) {
 
     const pagamentoId =
@@ -755,6 +702,10 @@ async function salvarPagamentoPendente(
             payment?.value
         ) || 0;
 
+    // ========================================================
+    // DADOS COMPLETOS DO PAGAMENTO
+    // ========================================================
+
     const dadosPagamento = {
 
         pagamentoId,
@@ -769,9 +720,9 @@ async function salvarPagamentoPendente(
 
         statusPagamento,
 
-        valor,
-
         evento,
+
+        valor,
 
         atualizadoEm:
             agora(),
@@ -780,14 +731,17 @@ async function salvarPagamentoPendente(
 
     };
 
-    // --------------------------------------------------------
+    // ========================================================
     // VERIFICAR SE JÁ EXISTE
-    // --------------------------------------------------------
+    // ========================================================
 
     const existente =
         await pool.query(
             `
-            SELECT id
+            SELECT
+                id,
+                pedido_id,
+                dados
             FROM pagamentos_asaas
             WHERE pagamento_id = $1
             LIMIT 1
@@ -797,38 +751,45 @@ async function salvarPagamentoPendente(
             ]
         );
 
-    // --------------------------------------------------------
-    // ATUALIZAR EXISTENTE
-    // --------------------------------------------------------
+    // ========================================================
+    // ATUALIZAR PAGAMENTO EXISTENTE
+    // ========================================================
 
     if (
         existente.rows.length > 0
     ) {
 
+        const registro =
+            existente.rows[0];
+
         const id =
-            existente.rows[0].id;
+            registro.id;
 
         await pool.query(
             `
             UPDATE pagamentos_asaas
             SET
-                external_reference = $1,
-                status_asaas = $2,
-                status_pagamento = $3,
-                evento = $4,
-                valor = $5,
-                atualizado_em = $6,
-                dados = $7
-            WHERE id = $8
+                pedido_id = COALESCE($1, pedido_id),
+                external_reference = $2,
+                status = $3,
+                valor = $4,
+                dados = $5,
+                atualizado_em = NOW()
+            WHERE id = $6
             `,
             [
+                pedidoId
+                    ? String(pedidoId)
+                    : null,
+
                 referencia || null,
+
                 statusAsaas || null,
-                statusPagamento || null,
-                evento || null,
+
                 valor,
-                new Date(),
+
                 dadosPagamento,
+
                 id,
             ]
         );
@@ -838,26 +799,37 @@ async function salvarPagamentoPendente(
             pagamentoId
         );
 
+        console.log(
+            "📊 STATUS:",
+            statusAsaas
+        );
+
+        console.log(
+            "🔖 REFERÊNCIA:",
+            referencia
+        );
+
         return id;
 
     }
 
-    // --------------------------------------------------------
-    // INSERIR NOVO
-    // --------------------------------------------------------
+    // ========================================================
+    // INSERIR NOVO PAGAMENTO
+    // ========================================================
 
     const inserido =
         await pool.query(
             `
             INSERT INTO pagamentos_asaas (
+                id,
                 pagamento_id,
+                pedido_id,
                 external_reference,
-                status_asaas,
-                status_pagamento,
-                evento,
+                status,
                 valor,
-                atualizado_em,
-                dados
+                dados,
+                criado_em,
+                atualizado_em
             )
             VALUES (
                 $1,
@@ -867,18 +839,26 @@ async function salvarPagamentoPendente(
                 $5,
                 $6,
                 $7,
-                $8
+                NOW(),
+                NOW()
             )
             RETURNING id
             `,
             [
                 pagamentoId,
+
+                pagamentoId,
+
+                pedidoId
+                    ? String(pedidoId)
+                    : null,
+
                 referencia || null,
+
                 statusAsaas || null,
-                statusPagamento || null,
-                evento || null,
+
                 valor,
-                new Date(),
+
                 dadosPagamento,
             ]
         );
@@ -888,7 +868,20 @@ async function salvarPagamentoPendente(
         pagamentoId
     );
 
-    return inserido.rows[0]?.id || null;
+    console.log(
+        "📊 STATUS:",
+        statusAsaas
+    );
+
+    console.log(
+        "🔖 REFERÊNCIA:",
+        referencia
+    );
+
+    return (
+        inserido.rows[0]?.id ||
+        null
+    );
 
 }
 
@@ -1154,7 +1147,8 @@ async function webhook(
 
             await salvarPagamentoPendente(
                 payment,
-                evento
+                evento,
+                null
             );
 
             console.log(
@@ -1164,11 +1158,6 @@ async function webhook(
             console.log(
                 "========================================"
             );
-
-            /*
-             * Retornamos 200 porque o webhook foi recebido
-             * e persistido corretamente.
-             */
 
             return res.status(200).json({
 
@@ -1204,14 +1193,12 @@ async function webhook(
 
         // ====================================================
         // ATUALIZAR REGISTRO ASAAS
-        //
-        // Mesmo quando o pedido já existe, mantemos o evento
-        // registrado em pagamentos_asaas.
         // ====================================================
 
         await salvarPagamentoPendente(
             payment,
-            evento
+            evento,
+            pedido.id
         );
 
         console.log(
@@ -1316,12 +1303,6 @@ async function webhook(
         console.error(
             "========================================"
         );
-
-        /*
-         * Retornamos 500 para permitir que o Asaas tente
-         * entregar novamente quando ocorrer uma falha real
-         * de processamento/persistência.
-         */
 
         return res.status(500).json({
 
