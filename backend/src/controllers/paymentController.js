@@ -1043,31 +1043,66 @@ async function gerarCartao(req, res) {
             documento,
         } = dadosCliente;
 
-        const pagamento =
-            await criarCartao({
+        const cartao =
+    body.cartao || {};
 
-                valor:
-                    valorFinal,
+const validade =
+    String(
+        cartao.validade || ""
+    ).replace(/\D/g, "");
 
-                email,
+if (validade.length !== 4) {
 
-                referencia,
+    throw new Error(
+        "Validade do cartão inválida."
+    );
+}
 
-                descricao:
-                    `Pedido FoodJet #${referencia}`,
+const pagamento =
+    await criarCartao({
 
-                nome:
-                    nomeCliente,
+        valor:
+            valorFinal,
 
-                cpf:
-                    documento,
+        email,
 
-                telefone:
-                    telefoneCliente,
+        referencia,
 
-                usuarioId:
-                    String(usuario.id),
-            });
+        descricao:
+            `Pedido FoodJet #${referencia}`,
+
+        nome:
+            nomeCliente,
+
+        cpf:
+            documento,
+
+        telefone:
+            telefoneCliente,
+
+        usuarioId:
+            String(usuario.id),
+
+        cartao: {
+
+            numero:
+                cartao.numero,
+
+            nome:
+                cartao.nome,
+
+            mesExpiracao:
+                validade.substring(0, 2),
+
+            anoExpiracao:
+                validade.substring(2, 4),
+
+            cvv:
+                cartao.cvv,
+
+        },
+
+    });
 
         if (!pagamento?.id) {
 
