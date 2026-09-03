@@ -1,4 +1,40 @@
+
 const { pool } = require("../config/database");
+
+// ======================================================
+// CONFIGURAÇÃO
+// ======================================================
+
+// Pedidos finalizados/cancelados serão apagados após
+// este período.
+//
+// 24 horas = 1 dia
+const HORAS_HISTORICO_PEDIDOS = 24;
+
+// Intervalo para executar a limpeza automática.
+//
+// 1 hora
+const INTERVALO_LIMPEZA_MS =
+    60 * 60 * 1000;
+
+
+// ======================================================
+// STATUS QUE PODEM SER APAGADOS
+// ======================================================
+//
+// Somente pedidos que já terminaram ou foram cancelados.
+//
+// Pedidos em andamento NÃO serão apagados.
+// ======================================================
+
+const STATUS_FINAIS_PARA_LIMPEZA = [
+    "ENTREGUE",
+    "RECUSADO",
+    "CANCELADO",
+    "CANCELADA",
+    "CANCELLED",
+];
+
 
 // ======================================================
 // GARANTIR CONEXÃO
@@ -9,6 +45,192 @@ async function prepararBanco() {
     await pool.query("SELECT 1");
 
 }
+
+
+// ======================================================
+// LIMPAR PEDIDOS ANTIGOS
+// ======================================================
+//
+// IMPORTANTE:
+//
+// Esta função APAGA somente os pedidos da tabela:
+//
+// pedidos
+//
+// Ela NÃO apaga:
+//
+// pagamentos_asaas
+//
+// Portanto, o histórico de pagamentos do Asaas permanece
+// preservado.
+//
+// Somente pedidos:
+//
+// - finalizados/cancelados
+// - com mais de 24 horas
+// - sem suporte aberto
+//
+// serão removidos.
+// ======================================================
+
+async function limparPedidosAntigos() {
+
+    try {
+
+        await prepararBanco();
+
+        const resultado =
+            await pool.query(
+                `
+                DELETE FROM pedidos
+                WHERE
+                    UPPER(
+                        COALESCE(
+                            dados->>'status',
+                            ''
+                        )
+                    ) = ANY($1::text[])
+
+                    AND
+                    dados->>'criadoEm' IS NOT NULL
+
+                    AND
+                    dados->>'criadoEm'
+                        ~ '^\\d{4}-\\d{2}-\\d{2}T'
+
+                    AND
+                    (
+                        dados->>'criadoEm'
+                    )::timestamptz
+                    <
+                    NOW() -
+                    ($2 * INTERVAL '1 hour')
+
+                    AND
+                    COALESCE(
+                        (
+                            dados->'suporte'
+                            ->>'aberto'
+                        )::boolean,
+                        false
+                    ) = false
+
+                RETURNING id
+                `,
+                [
+                    STATUS_FINAIS_PARA_LIMPEZA,
+                    HORAS_HISTORICO_PEDIDOS,
+                ]
+            );
+
+        const quantidade =
+            resultado.rows.length;
+
+        if (quantidade > 0) {
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "🧹 LIMPEZA AUTOMÁTICA DE PEDIDOS"
+            );
+
+            console.log(
+                "⏱️ LIMITE:",
+                `${HORAS_HISTORICO_PEDIDOS} horas`
+            );
+
+            console.log(
+                "🗑️ PEDIDOS REMOVIDOS:",
+                quantidade
+            );
+
+            console.log(
+                "📦 IDS:",
+                resultado.rows
+                    .map(row => row.id)
+                    .join(", ")
+            );
+
+            console.log(
+                "💳 PAGAMENTOS ASAAS:",
+                "PRESERVADOS"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+        } else {
+
+            console.log(
+                "🧹 LIMPEZA AUTOMÁTICA: nenhum pedido antigo para remover."
+            );
+
+        }
+
+        return quantidade;
+
+    } catch (erro) {
+
+        console.error(
+            "❌ ERRO NA LIMPEZA AUTOMÁTICA DE PEDIDOS:",
+            erro.message
+        );
+
+        return 0;
+
+    }
+
+}
+
+
+// ======================================================
+// INICIAR LIMPEZA AUTOMÁTICA
+// ======================================================
+//
+// Executa:
+//
+// 1. Uma vez quando o backend inicia
+// 2. Depois a cada 1 hora
+//
+// Isso significa que um pedido que completou 24 horas
+// será removido na próxima execução da limpeza.
+//
+// Exemplo:
+//
+// Pedido criado:
+// 10:00
+//
+// Completa 24h:
+// dia seguinte às 10:00
+//
+// Próxima verificação:
+// pode ser 10:05, 10:30, 11:00 etc.
+//
+// Portanto, a exclusão acontece automaticamente após
+// completar 24 horas, com tolerância de até aproximadamente
+// 1 hora dependendo do momento da verificação.
+// ======================================================
+
+setTimeout(
+    () => {
+
+        limparPedidosAntigos();
+
+        setInterval(
+            () => {
+
+                limparPedidosAntigos();
+
+            },
+            INTERVALO_LIMPEZA_MS
+        );
+
+    },
+    5000
+);
 
 
 // ======================================================
@@ -51,19 +273,6 @@ async function gerarIdPedido() {
 
 // ======================================================
 // ENCONTRAR PAGAMENTO ASAAS PENDENTE
-// ======================================================
-//
-// Antes:
-// db.data.pagamentosAsaas
-//
-// Agora:
-// PostgreSQL -> pagamentos_asaas
-//
-// O webhook salva o pagamento nessa tabela caso o pedido
-// ainda não exista.
-//
-// Quando o pedido for criado, procuramos pela mesma
-// externalReference e fazemos a conciliação.
 // ======================================================
 
 async function encontrarPagamentoAsaasPendente(
@@ -112,10 +321,6 @@ async function encontrarPagamentoAsaasPendente(
     const row =
         resultado.rows[0];
 
-    // ==================================================
-    // DADOS JSONB
-    // ==================================================
-
     let dados =
         row.dados;
 
@@ -145,10 +350,6 @@ async function encontrarPagamentoAsaasPendente(
 
     }
 
-    // ==================================================
-    // NORMALIZAR STATUS
-    // ==================================================
-
     const statusAsaas =
         row.status ||
         dados.statusAsaas ||
@@ -158,11 +359,6 @@ async function encontrarPagamentoAsaasPendente(
     let statusPagamento =
         dados.statusPagamento ||
         "";
-
-    // --------------------------------------------------
-    // Se o status veio do Asaas, converter para o padrão
-    // utilizado pelo FoodJet.
-    // --------------------------------------------------
 
     const statusNormalizado =
         String(
@@ -207,19 +403,11 @@ async function encontrarPagamentoAsaasPendente(
 
     }
 
-    // ==================================================
-    // EVENTO
-    // ==================================================
-
     const evento =
         dados.evento ||
         dados.event ||
         dados.eventType ||
         "";
-
-    // ==================================================
-    // DATA DE ATUALIZAÇÃO
-    // ==================================================
 
     const atualizadoEm =
         row.atualizado_em
@@ -230,10 +418,6 @@ async function encontrarPagamentoAsaasPendente(
                 dados.atualizadoEm ||
                 new Date().toISOString()
             );
-
-    // ==================================================
-    // RETORNO PADRONIZADO
-    // ==================================================
 
     return {
 
@@ -286,18 +470,8 @@ async function encontrarPagamentoAsaasPendente(
 }
 
 
-
-
 // ======================================================
 // MARCAR PAGAMENTO ASAAS COMO CONCILIADO
-// ======================================================
-//
-// Não apagamos o registro.
-//
-// O histórico permanece no PostgreSQL.
-//
-// Apenas adicionamos informações de conciliação dentro
-// do JSONB `dados`.
 // ======================================================
 
 async function marcarPagamentoAsaasConciliado(
@@ -363,23 +537,10 @@ async function marcarPagamentoAsaasConciliado(
 // ======================================================
 // CRIAR PEDIDO
 // ======================================================
-//
-// IMPORTANTE:
-//
-// clienteId continua vindo do controller:
-//
-// req.usuario.id
-//
-// O Flutter NÃO define o cliente.
-// ======================================================
 
 async function criar(pedido) {
 
     await prepararBanco();
-
-    // ==================================================
-    // VALIDAÇÕES
-    // ==================================================
 
     if (
         !pedido ||
@@ -417,25 +578,13 @@ async function criar(pedido) {
         );
     }
 
-    // ==================================================
-    // ID
-    // ==================================================
-
     const id =
         await gerarIdPedido();
-
-    // ==================================================
-    // ITENS
-    // ==================================================
 
     const itens =
         Array.isArray(pedido.itens)
             ? pedido.itens
             : [];
-
-    // ==================================================
-    // VALORES
-    // ==================================================
 
     const subtotal =
         Number(
@@ -454,10 +603,6 @@ async function criar(pedido) {
         subtotal +
         taxaServico;
 
-    // ==================================================
-    // PAGAMENTO
-    // ==================================================
-
     const pagamento =
         String(
             pedido.pagamento ||
@@ -465,10 +610,6 @@ async function criar(pedido) {
         )
             .trim()
             .toUpperCase();
-
-    // ==================================================
-    // TROCO
-    // ==================================================
 
     const precisaTroco =
         pagamento === "DINHEIRO"
@@ -493,16 +634,6 @@ async function criar(pedido) {
             )
             : 0;
 
-    // ==================================================
-    // REFERÊNCIA ASAAS
-    // ==================================================
-    //
-    // Se o controller já tiver fornecido uma referência,
-    // preservamos.
-    //
-    // Caso contrário, usamos o ID do pedido.
-    // ==================================================
-
     const externalReference =
         String(
             pedido.externalReference ||
@@ -510,48 +641,24 @@ async function criar(pedido) {
             id
         ).trim();
 
-    // ==================================================
-    // NOVO PEDIDO
-    // ==================================================
-
     const novoPedido = {
 
         id,
-
-        // ------------------------------------------------
-        // CLIENTE
-        // ------------------------------------------------
 
         clienteId:
             String(
                 pedido.clienteId
             ),
 
-        // ------------------------------------------------
-        // RESTAURANTE
-        // ------------------------------------------------
-
         restauranteId:
             String(
                 pedido.restauranteId
             ),
 
-        // ------------------------------------------------
-        // ITENS
-        // ------------------------------------------------
-
         itens,
-
-        // ------------------------------------------------
-        // ENDEREÇO
-        // ------------------------------------------------
 
         endereco:
             pedido.endereco || {},
-
-        // ------------------------------------------------
-        // PAGAMENTO
-        // ------------------------------------------------
 
         pagamento,
 
@@ -566,19 +673,11 @@ async function criar(pedido) {
         pagamentoAprovado:
             false,
 
-        // ------------------------------------------------
-        // VALORES
-        // ------------------------------------------------
-
         subtotal,
 
         taxaServico,
 
         total,
-
-        // ------------------------------------------------
-        // TROCO
-        // ------------------------------------------------
 
         precisaTroco,
 
@@ -586,25 +685,13 @@ async function criar(pedido) {
 
         valorTroco,
 
-        // ------------------------------------------------
-        // ASAAS
-        // ------------------------------------------------
-
         externalReference,
 
         referenciaPagamento:
             externalReference,
 
-        // ------------------------------------------------
-        // STATUS
-        // ------------------------------------------------
-
         status:
             "AGUARDANDO_RESTAURANTE",
-
-        // ------------------------------------------------
-        // SUPORTE
-        // ------------------------------------------------
 
         suporte: {
 
@@ -616,24 +703,15 @@ async function criar(pedido) {
 
         },
 
-        // ------------------------------------------------
-        // DATA
-        // ------------------------------------------------
-
         criadoEm:
             pedido.criadoEm ||
             new Date().toISOString()
 
     };
 
+
     // ==================================================
-    // PRESERVAR DADOS EXTRAS DO PEDIDO
-    // ==================================================
-    //
-    // O objeto recebido pode possuir outros campos usados
-    // pelo restante do FoodJet.
-    //
-    // Copiamos somente campos que não foram definidos acima.
+    // PRESERVAR DADOS EXTRAS
     // ==================================================
 
     for (
@@ -652,23 +730,16 @@ async function criar(pedido) {
 
     }
 
+
     // ==================================================
     // NÃO SALVAR TAXA DE ENTREGA
     // ==================================================
 
     delete novoPedido.taxaEntrega;
 
+
     // ==================================================
     // RECONCILIAR ASAAS
-    // ==================================================
-    //
-    // O webhook pode ter chegado antes do pedido.
-    //
-    // Nesse caso o pagamento está em:
-    //
-    // pagamentos_asaas
-    //
-    // e agora tentamos associá-lo ao pedido.
     // ==================================================
 
     const pagamentoAsaas =
@@ -706,9 +777,6 @@ async function criar(pedido) {
             pagamentoAsaas.statusPagamento
         );
 
-        // ------------------------------------------------
-        // DADOS ASAAS
-        // ------------------------------------------------
 
         novoPedido.pagamentoId =
             pagamentoAsaas.pagamentoId ||
@@ -751,9 +819,6 @@ async function criar(pedido) {
                 pagamentoAsaas.valor
             ) || 0;
 
-        // ------------------------------------------------
-        // PAGAMENTO APROVADO
-        // ------------------------------------------------
 
         if (
             pagamentoAsaas.statusPagamento ===
@@ -802,13 +867,7 @@ async function criar(pedido) {
                 "========================================"
             );
 
-        }
-
-        // ------------------------------------------------
-        // PAGAMENTO AINDA PENDENTE
-        // ------------------------------------------------
-
-        else {
+        } else {
 
             novoPedido.pagamentoAprovado =
                 false;
@@ -820,6 +879,7 @@ async function criar(pedido) {
         }
 
     }
+
 
     // ==================================================
     // SALVAR NO POSTGRESQL
@@ -851,6 +911,7 @@ async function criar(pedido) {
             resultado.rows[0]
         );
 
+
     // ==================================================
     // MARCAR PAGAMENTO COMO CONCILIADO
     // ==================================================
@@ -863,6 +924,7 @@ async function criar(pedido) {
         );
 
     }
+
 
     // ==================================================
     // LOG
@@ -1213,6 +1275,13 @@ async function aceitarEntrega(
 // ======================================================
 // PEDIDOS DO RESTAURANTE
 // ======================================================
+//
+// Antes de buscar os pedidos, executamos uma limpeza.
+//
+// Assim, mesmo que o processo automático ainda não tenha
+// rodado naquele momento, pedidos com mais de 24 horas e
+// status final não serão devolvidos ao aplicativo.
+// ======================================================
 
 async function listarPorRestaurante(
     restauranteId
@@ -1225,6 +1294,18 @@ async function listarPorRestaurante(
     ) {
         return [];
     }
+
+
+    // ==================================================
+    // LIMPEZA AUTOMÁTICA
+    // ==================================================
+
+    await limparPedidosAntigos();
+
+
+    // ==================================================
+    // BUSCAR PEDIDOS
+    // ==================================================
 
     const resultado =
         await pool.query(
@@ -1597,10 +1678,6 @@ function montarPedido(row) {
     let dados =
         row.dados;
 
-    // --------------------------------------------------
-    // Segurança caso o driver devolva JSON como string
-    // --------------------------------------------------
-
     if (
         typeof dados === "string"
     ) {
@@ -1684,4 +1761,11 @@ module.exports = {
 
     fecharSuporte,
 
+    // --------------------------------------------------
+    // LIMPEZA AUTOMÁTICA
+    // --------------------------------------------------
+
+    limparPedidosAntigos,
+
 };
+
