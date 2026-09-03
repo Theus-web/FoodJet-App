@@ -2366,8 +2366,6 @@ class PixCheckoutPage extends StatefulWidget {
 
 class _PixCheckoutPageState
     extends State<PixCheckoutPage> {
-  static const Color laranja =
-      Color(0xFFF97316);
 
   static const Color verdePix =
       Color(0xFF00A884);

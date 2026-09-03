@@ -1,4 +1,6 @@
+
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../services/auth_service.dart';
 import '../home/home_screen.dart';
@@ -24,7 +26,30 @@ class _LoginScreenState extends State<LoginScreen> {
   bool carregando = false;
   bool mostrarSenha = false;
 
-  static const Color laranja = Color(0xFFF97316);
+  // ==================================================
+  // SALVAR LOGIN
+  // ==================================================
+
+  bool salvarSenha = false;
+
+  static const String chaveSalvarSenha =
+      'foodjet_salvar_senha';
+
+  static const String chaveEmailSalvo =
+      'foodjet_email_salvo';
+
+  static const String chaveSenhaSalva =
+      'foodjet_senha_salva';
+
+  static const Color laranja =
+      Color(0xFFF97316);
+
+  @override
+  void initState() {
+    super.initState();
+
+    _carregarLoginSalvo();
+  }
 
   @override
   void dispose() {
@@ -35,12 +60,107 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   // ==================================================
+  // CARREGAR LOGIN SALVO
+  // ==================================================
+
+  Future<void> _carregarLoginSalvo() async {
+    try {
+      final prefs =
+          await SharedPreferences.getInstance();
+
+      final salvo =
+          prefs.getBool(chaveSalvarSenha) ?? false;
+
+      final email =
+          prefs.getString(chaveEmailSalvo) ?? '';
+
+      final senha =
+          prefs.getString(chaveSenhaSalva) ?? '';
+
+      if (!mounted) return;
+
+      setState(() {
+        salvarSenha = salvo;
+
+        if (salvo) {
+          emailController.text = email;
+          senhaController.text = senha;
+        }
+      });
+
+      debugPrint(
+        'LOGIN SALVO: ${salvo ? "SIM" : "NÃO"}',
+      );
+    } catch (e) {
+      debugPrint(
+        'ERRO AO CARREGAR LOGIN SALVO: $e',
+      );
+    }
+  }
+
+  // ==================================================
+  // SALVAR OU REMOVER LOGIN
+  // ==================================================
+
+  Future<void> _salvarOuRemoverLogin() async {
+    try {
+      final prefs =
+          await SharedPreferences.getInstance();
+
+      if (salvarSenha) {
+        await prefs.setBool(
+          chaveSalvarSenha,
+          true,
+        );
+
+        await prefs.setString(
+          chaveEmailSalvo,
+          emailController.text
+              .trim()
+              .toLowerCase(),
+        );
+
+        await prefs.setString(
+          chaveSenhaSalva,
+          senhaController.text,
+        );
+
+        debugPrint(
+          'LOGIN SALVO COM SUCESSO',
+        );
+      } else {
+        await prefs.remove(
+          chaveSalvarSenha,
+        );
+
+        await prefs.remove(
+          chaveEmailSalvo,
+        );
+
+        await prefs.remove(
+          chaveSenhaSalva,
+        );
+
+        debugPrint(
+          'LOGIN SALVO REMOVIDO',
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        'ERRO AO SALVAR LOGIN: $e',
+      );
+    }
+  }
+
+  // ==================================================
   // LOGIN
   // ==================================================
 
   Future<void> entrar() async {
     final email =
-        emailController.text.trim().toLowerCase();
+        emailController.text
+            .trim()
+            .toLowerCase();
 
     final senha =
         senhaController.text;
@@ -66,12 +186,16 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
-      final resultado = await authService.login(
-        emailController.text.trim(),
-        senhaController.text,
+      final resultado =
+          await authService.login(
+        email,
+        senha,
       );
 
-      debugPrint('RESULTADO LOGIN: $resultado');
+      debugPrint(
+        'RESULTADO LOGIN: $resultado',
+      );
+
       debugPrint(
         'USUARIO LOGIN: ${resultado['usuario']}',
       );
@@ -79,10 +203,23 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (resultado['usuario'] != null) {
+        // ==============================================
+        // SALVAR OU REMOVER LOGIN
+        // ==============================================
+
+        await _salvarOuRemoverLogin();
+
+        if (!mounted) return;
+
+        // ==============================================
+        // IR PARA HOME
+        // ==============================================
+
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (context) => HomeScreen(
+            builder: (context) =>
+                HomeScreen(
               usuario:
                   Map<String, dynamic>.from(
                 resultado['usuario'],
@@ -193,33 +330,47 @@ class _LoginScreenState extends State<LoginScreen> {
               Container(
                 width: 120,
                 height: 120,
-                decoration: BoxDecoration(
+                decoration:
+                    BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(28),
+                  borderRadius:
+                      BorderRadius.circular(
+                    28,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.12),
+                      color: Colors.black
+                          .withValues(
+                        alpha: 0.12,
+                      ),
                       blurRadius: 15,
-                      offset: const Offset(0, 6),
+                      offset:
+                          const Offset(0, 6),
                     ),
                   ],
                 ),
                 child: const Center(
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
+                    mainAxisSize:
+                        MainAxisSize.min,
                     children: [
                       Icon(
-                        Icons.delivery_dining_rounded,
+                        Icons
+                            .delivery_dining_rounded,
                         size: 58,
                         color: laranja,
                       ),
-                      SizedBox(height: 2),
+                      SizedBox(
+                        height: 2,
+                      ),
                       Text(
                         'FoodJet',
-                        style: TextStyle(
+                        style:
+                            TextStyle(
                           color: laranja,
                           fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                          fontWeight:
+                              FontWeight.bold,
                           letterSpacing: 0.8,
                         ),
                       ),
@@ -237,7 +388,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 38,
-                  fontWeight: FontWeight.bold,
+                  fontWeight:
+                      FontWeight.bold,
                 ),
               ),
 
@@ -262,52 +414,67 @@ class _LoginScreenState extends State<LoginScreen> {
               // ==================================================
 
               TextField(
-                controller: emailController,
+                controller:
+                    emailController,
                 keyboardType:
-                    TextInputType.emailAddress,
+                    TextInputType
+                        .emailAddress,
                 textInputAction:
                     TextInputAction.next,
                 style: const TextStyle(
                   color: Colors.black,
                   fontSize: 16,
                 ),
-                decoration: InputDecoration(
+                decoration:
+                    InputDecoration(
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor:
+                      Colors.white,
                   hintText: 'E-mail',
-                  hintStyle: const TextStyle(
-                    color: Colors.black54,
+                  hintStyle:
+                      const TextStyle(
+                    color:
+                        Colors.black54,
                   ),
-                  prefixIcon: const Icon(
-                    Icons.email_outlined,
-                    color: Colors.black87,
+                  prefixIcon:
+                      const Icon(
+                    Icons
+                        .email_outlined,
+                    color:
+                        Colors.black87,
                   ),
                   contentPadding:
-                      const EdgeInsets.symmetric(
+                      const EdgeInsets
+                          .symmetric(
                     vertical: 18,
                     horizontal: 16,
                   ),
                   enabledBorder:
                       OutlineInputBorder(
                     borderRadius:
-                        BorderRadius.circular(
+                        BorderRadius
+                            .circular(
                       16,
                     ),
                     borderSide:
                         const BorderSide(
-                      color: Colors.white,
+                      color:
+                          Colors.white,
                       width: 1.5,
                     ),
                   ),
                   focusedBorder:
                       OutlineInputBorder(
                     borderRadius:
-                        BorderRadius.circular(
+                        BorderRadius
+                            .circular(
                       16,
                     ),
                     borderSide:
                         const BorderSide(
-                      color: Color(0xFFFFE1D1),
+                      color: Color(
+                        0xFFFFE1D1,
+                      ),
                       width: 2,
                     ),
                   ),
@@ -323,31 +490,44 @@ class _LoginScreenState extends State<LoginScreen> {
               // ==================================================
 
               TextField(
-                controller: senhaController,
-                obscureText: !mostrarSenha,
+                controller:
+                    senhaController,
+                obscureText:
+                    !mostrarSenha,
                 textInputAction:
                     TextInputAction.done,
                 style: const TextStyle(
                   color: Colors.black,
                   fontSize: 16,
                 ),
-                decoration: InputDecoration(
+                decoration:
+                    InputDecoration(
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor:
+                      Colors.white,
                   hintText: 'Senha',
-                  hintStyle: const TextStyle(
-                    color: Colors.black54,
+                  hintStyle:
+                      const TextStyle(
+                    color:
+                        Colors.black54,
                   ),
-                  prefixIcon: const Icon(
-                    Icons.lock_outline,
-                    color: Colors.black87,
+                  prefixIcon:
+                      const Icon(
+                    Icons
+                        .lock_outline,
+                    color:
+                        Colors.black87,
                   ),
-                  suffixIcon: IconButton(
+                  suffixIcon:
+                      IconButton(
                     icon: Icon(
                       mostrarSenha
-                          ? Icons.visibility_off
-                          : Icons.visibility,
-                      color: Colors.grey,
+                          ? Icons
+                              .visibility_off
+                          : Icons
+                              .visibility,
+                      color:
+                          Colors.grey,
                     ),
                     onPressed: () {
                       setState(() {
@@ -357,31 +537,37 @@ class _LoginScreenState extends State<LoginScreen> {
                     },
                   ),
                   contentPadding:
-                      const EdgeInsets.symmetric(
+                      const EdgeInsets
+                          .symmetric(
                     vertical: 18,
                     horizontal: 16,
                   ),
                   enabledBorder:
                       OutlineInputBorder(
                     borderRadius:
-                        BorderRadius.circular(
+                        BorderRadius
+                            .circular(
                       16,
                     ),
                     borderSide:
                         const BorderSide(
-                      color: Colors.white,
+                      color:
+                          Colors.white,
                       width: 1.5,
                     ),
                   ),
                   focusedBorder:
                       OutlineInputBorder(
                     borderRadius:
-                        BorderRadius.circular(
+                        BorderRadius
+                            .circular(
                       16,
                     ),
                     borderSide:
                         const BorderSide(
-                      color: Color(0xFFFFE1D1),
+                      color: Color(
+                        0xFFFFE1D1,
+                      ),
                       width: 2,
                     ),
                   ),
@@ -389,7 +575,83 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
 
               const SizedBox(
-                height: 12,
+                height: 8,
+              ),
+
+              // ==================================================
+              // SALVAR SENHA
+              // ==================================================
+
+              Align(
+                alignment:
+                    Alignment.centerLeft,
+                child: Theme(
+                  data:
+                      Theme.of(context)
+                          .copyWith(
+                    checkboxTheme:
+                        CheckboxThemeData(
+                      fillColor:
+                          WidgetStateProperty
+                              .resolveWith(
+                        (states) {
+                          if (states.contains(
+                            WidgetState
+                                .selected,
+                          )) {
+                            return Colors
+                                .black;
+                          }
+
+                          return Colors
+                              .white;
+                        },
+                      ),
+                      checkColor:
+                          WidgetStateProperty
+                              .all(
+                        Colors.white,
+                      ),
+                      side:
+                          const BorderSide(
+                        color:
+                            Colors.white,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize:
+                        MainAxisSize.min,
+                    children: [
+                      Checkbox(
+                        value:
+                            salvarSenha,
+                        onChanged:
+                            carregando
+                                ? null
+                                : (valor) {
+                                    setState(() {
+                                      salvarSenha =
+                                          valor ??
+                                              false;
+                                    });
+                                  },
+                      ),
+                      const Text(
+                        'Salvar senha',
+                        style:
+                            TextStyle(
+                          color:
+                              Colors.white,
+                          fontSize: 15,
+                          fontWeight:
+                              FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
 
               // ==================================================
@@ -406,8 +668,10 @@ class _LoginScreenState extends State<LoginScreen> {
                           : esqueciSenha,
                   child: const Text(
                     'Esqueci minha senha',
-                    style: TextStyle(
-                      color: Colors.white,
+                    style:
+                        TextStyle(
+                      color:
+                          Colors.white,
                       fontWeight:
                           FontWeight.bold,
                     ),
@@ -443,7 +707,8 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape:
                         RoundedRectangleBorder(
                       borderRadius:
-                          BorderRadius.circular(
+                          BorderRadius
+                              .circular(
                         15,
                       ),
                     ),
@@ -457,7 +722,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                   CircularProgressIndicator(
                                 color:
                                     Colors.white,
-                                strokeWidth: 3,
+                                strokeWidth:
+                                    3,
                               ),
                             )
                           : const Text(
@@ -467,7 +733,8 @@ class _LoginScreenState extends State<LoginScreen> {
                                 fontSize:
                                     18,
                                 fontWeight:
-                                    FontWeight.bold,
+                                    FontWeight
+                                        .bold,
                               ),
                             ),
                 ),
@@ -489,7 +756,6 @@ class _LoginScreenState extends State<LoginScreen> {
                           Colors.white54,
                     ),
                   ),
-
                   const Padding(
                     padding:
                         EdgeInsets
@@ -507,7 +773,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                   ),
-
                   const Expanded(
                     child: Divider(
                       color:
@@ -555,14 +820,16 @@ class _LoginScreenState extends State<LoginScreen> {
                     shape:
                         RoundedRectangleBorder(
                       borderRadius:
-                          BorderRadius.circular(
+                          BorderRadius
+                              .circular(
                         15,
                       ),
                     ),
                   ),
                   child: const Text(
                     'CRIAR UMA CONTA',
-                    style: TextStyle(
+                    style:
+                        TextStyle(
                       fontSize: 16,
                       fontWeight:
                           FontWeight.bold,
@@ -601,3 +868,4 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+

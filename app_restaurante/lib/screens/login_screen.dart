@@ -1,4 +1,6 @@
+
 import 'package:flutter/material.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import '../core/services/auth_service.dart';
 import 'register_screen.dart';
@@ -24,8 +26,29 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController senhaController =
       TextEditingController();
 
+  // ==================================================
+  // ARMAZENAMENTO SEGURO
+  // ==================================================
+
+  static const FlutterSecureStorage storage =
+      FlutterSecureStorage();
+
+  static const String chaveSalvarSenha =
+      'foodjet_restaurante_salvar_senha';
+
+  static const String chaveEmailSalvo =
+      'foodjet_restaurante_email';
+
+  static const String chaveSenhaSalva =
+      'foodjet_restaurante_senha';
+
+  // ==================================================
+  // ESTADO
+  // ==================================================
+
   bool carregando = false;
   bool mostrarSenha = false;
+  bool salvarSenha = false;
 
   // ==================================================
   // CORES
@@ -36,6 +59,114 @@ class _LoginScreenState extends State<LoginScreen> {
 
   static const Color fundo =
       Color(0xFFF5F5F5);
+
+  // ==================================================
+  // INIT
+  // ==================================================
+
+  @override
+  void initState() {
+    super.initState();
+
+    _carregarLoginSalvo();
+  }
+
+  // ==================================================
+  // CARREGAR LOGIN SALVO
+  // ==================================================
+
+  Future<void> _carregarLoginSalvo() async {
+    try {
+      final salvar =
+          await storage.read(
+        key: chaveSalvarSenha,
+      );
+
+      if (salvar != 'true') {
+        return;
+      }
+
+      final email =
+          await storage.read(
+        key: chaveEmailSalvo,
+      );
+
+      final senha =
+          await storage.read(
+        key: chaveSenhaSalva,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        salvarSenha = true;
+
+        if (email != null) {
+          emailController.text = email;
+        }
+
+        if (senha != null) {
+          senhaController.text = senha;
+        }
+      });
+    } catch (e) {
+      print(
+        '⚠️ ERRO AO CARREGAR LOGIN SALVO: $e',
+      );
+    }
+  }
+
+  // ==================================================
+  // SALVAR / REMOVER LOGIN
+  // ==================================================
+
+  Future<void> _salvarOuRemoverLogin({
+    required String email,
+    required String senha,
+  }) async {
+    try {
+      if (salvarSenha) {
+        await storage.write(
+          key: chaveSalvarSenha,
+          value: 'true',
+        );
+
+        await storage.write(
+          key: chaveEmailSalvo,
+          value: email,
+        );
+
+        await storage.write(
+          key: chaveSenhaSalva,
+          value: senha,
+        );
+
+        print(
+          '🔐 LOGIN DO RESTAURANTE SALVO COM SEGURANÇA',
+        );
+      } else {
+        await storage.delete(
+          key: chaveSalvarSenha,
+        );
+
+        await storage.delete(
+          key: chaveEmailSalvo,
+        );
+
+        await storage.delete(
+          key: chaveSenhaSalva,
+        );
+
+        print(
+          '🗑️ LOGIN SALVO DO RESTAURANTE REMOVIDO',
+        );
+      }
+    } catch (e) {
+      print(
+        '⚠️ ERRO AO SALVAR LOGIN: $e',
+      );
+    }
+  }
 
   // ==================================================
   // DISPOSE
@@ -112,6 +243,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
       print(
         '✅ RESTAURANTE AUTENTICADO',
+      );
+
+      // ==================================================
+      // SALVAR LOGIN SOMENTE APÓS LOGIN BEM-SUCEDIDO
+      // ==================================================
+
+      await _salvarOuRemoverLogin(
+        email: email,
+        senha: senha,
       );
 
       if (!mounted) return;
@@ -483,6 +623,54 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
 
               // ==================================================
+              // SALVAR SENHA
+              // ==================================================
+
+              Row(
+                children: [
+                  Checkbox(
+                    value: salvarSenha,
+
+                    activeColor: laranja,
+
+                    checkColor: Colors.white,
+
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(
+                        5,
+                      ),
+                    ),
+
+                    onChanged:
+                        carregando
+                            ? null
+                            : (valor) {
+                                setState(() {
+                                  salvarSenha =
+                                      valor ??
+                                          false;
+                                });
+                              },
+                  ),
+
+                  const Expanded(
+                    child: Text(
+                      'Salvar senha',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color:
+                            Colors.black87,
+                        fontWeight:
+                            FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              // ==================================================
               // ESQUECI SENHA
               // ==================================================
 
@@ -761,3 +949,4 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 }
+
