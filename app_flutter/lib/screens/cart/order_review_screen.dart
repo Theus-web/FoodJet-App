@@ -154,47 +154,6 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     ].where((e) => e.trim().isNotEmpty).join("\n");
   }
 
-  Future<void> criarPedidoParaCartao() async {
-  final dados = await criarPedido();
-
-  if (dados == null) {
-    return;
-  }
-
-  final pedidoId = extrairPedidoId(dados);
-
-  if (pedidoId == null) {
-    mostrarMensagem(
-      "Pedido criado, mas o ID não foi retornado.",
-      erro: true,
-    );
-    return;
-  }
-
-  final pedidoIdString =
-      pedidoId.toString().trim();
-
-  if (!mounted) {
-    return;
-  }
-
-  Navigator.push(
-    context,
-    MaterialPageRoute(
-      builder: (_) => PaymentScreen(
-        endereco: widget.endereco,
-        itens: widget.itens,
-        subtotal: widget.subtotal,
-        restauranteId: widget.restauranteId,
-        taxaEntrega: taxaEntrega,
-        taxaServico: taxaServico,
-        formaPagamento: "CREDITO",
-        pedidoId: pedidoIdString,
-      ),
-    ),
-  );
-}
-
   // ============================================================
   // TOKEN
   // ============================================================
@@ -211,7 +170,13 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
     for (final token in tokens) {
       if (token != null && token.trim().isNotEmpty) {
-        return token.trim();
+        var valor = token.trim();
+
+        if (valor.toLowerCase().startsWith("bearer ")) {
+          valor = valor.substring(7).trim();
+        }
+
+        return valor;
       }
     }
 
@@ -237,13 +202,12 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   // ============================================================
   // CRIAR PEDIDO
   //
-  // IMPORTANTE:
-  // O backend FoodJet usa:
+  // Usado por:
+  // PIX
+  // DINHEIRO
+  // DÉBITO
   //
-  // POST /api/orders
-  //
-  // NÃO:
-  // /api/pedidos
+  // NÃO é usado para CRÉDITO.
   // ============================================================
 
   Future<Map<String, dynamic>?> criarPedido() async {
@@ -257,13 +221,10 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
       return null;
     }
 
-    final url = Uri.parse(
-      "${Api.baseUrl}/orders",
-    );
+    final url = Uri.parse("${Api.baseUrl}/orders");
 
-    final valorTroco = formaPagamento == "DINHEIRO"
-        ? valorTrocoPara
-        : null;
+    final valorTroco =
+        formaPagamento == "DINHEIRO" ? valorTrocoPara : null;
 
     final body = {
       "restauranteId": widget.restauranteId,
@@ -275,14 +236,10 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
       "taxaEntrega": taxaEntrega,
       "total": totalPedido,
       "precisaTroco":
-          formaPagamento == "DINHEIRO"
-              ? precisaTroco
-              : false,
+          formaPagamento == "DINHEIRO" ? precisaTroco : false,
       "trocoPara": valorTroco,
       "valorTroco":
-          valorTroco != null
-              ? valorTroco - totalPedido
-              : 0,
+          valorTroco != null ? valorTroco - totalPedido : 0,
     };
 
     debugPrint("");
@@ -296,8 +253,6 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     debugPrint("TAXA SERVIÇO: $taxaServico");
     debugPrint("TAXA ENTREGA: $taxaEntrega");
     debugPrint("TOTAL: $totalPedido");
-    debugPrint("BODY:");
-    debugPrint(jsonEncode(body));
     debugPrint("========================================");
 
     try {
@@ -332,9 +287,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           dados = Map<String, dynamic>.from(decoded);
         }
       } catch (e) {
-        debugPrint(
-          "⚠️ Backend não retornou JSON: $e",
-        );
+        debugPrint("⚠️ Backend não retornou JSON: $e");
       }
 
       if (response.statusCode < 200 ||
@@ -353,11 +306,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
         return null;
       }
 
-      // Aceita sucesso=true quando o controller retorna isso.
-      // Também aceita uma resposta contendo pedido/pedidoId,
-      // evitando falso erro caso o backend não envie sucesso.
-      final sucessoExplicito =
-          dados["sucesso"] == true;
+      final sucessoExplicito = dados["sucesso"] == true;
 
       final possuiPedido =
           dados["pedido"] != null ||
@@ -397,7 +346,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   }
 
   // ============================================================
-  // PEGAR ID
+  // PEGAR ID DO PEDIDO
   // ============================================================
 
   dynamic extrairPedidoId(
@@ -432,9 +381,28 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
   // ============================================================
   // FLUXO PIX
+  //
+  // PIX:
+  // 1. Cria o pedido.
+  // 2. Pega o ID.
+  // 3. Abre PaymentScreen.
+  // 4. PaymentScreen gera o PIX.
   // ============================================================
 
   Future<void> criarPedidoParaPix() async {
+    if (!mounted) {
+      return;
+    }
+
+    debugPrint("");
+    debugPrint("========================================");
+    debugPrint("💚 FOODJET - PAGAMENTO PIX");
+    debugPrint("========================================");
+    debugPrint("📦 Criando pedido antes do PIX");
+    debugPrint("🏪 RESTAURANTE: ${widget.restauranteId}");
+    debugPrint("💰 TOTAL: $totalPedido");
+    debugPrint("========================================");
+
     final dados = await criarPedido();
 
     if (dados == null) {
@@ -444,30 +412,29 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     final pedidoId = extrairPedidoId(dados);
 
     if (pedidoId == null) {
-      debugPrint(
-        "❌ Pedido criado, mas ID não encontrado.",
-      );
-
       mostrarMensagem(
-        "O pedido foi criado, mas o servidor não retornou o ID.",
+        "Pedido criado, mas o ID não foi retornado.",
         erro: true,
       );
-
       return;
     }
 
-    final pedidoIdString =
-        pedidoId.toString().trim();
+    final id = int.tryParse(pedidoId.toString());
 
-    debugPrint("");
-    debugPrint("========================================");
-    debugPrint("✅ PEDIDO CRIADO");
-    debugPrint("🆔 ID: $pedidoIdString");
-    debugPrint("========================================");
+    if (id == null) {
+      mostrarMensagem(
+        "ID do pedido inválido.",
+        erro: true,
+      );
+      return;
+    }
 
     if (!mounted) {
       return;
     }
+
+    debugPrint("✅ PEDIDO CRIADO: $id");
+    debugPrint("➡️ Abrindo tela de pagamento PIX");
 
     Navigator.push(
       context,
@@ -480,7 +447,56 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           taxaEntrega: taxaEntrega,
           taxaServico: taxaServico,
           formaPagamento: "PIX",
-          pedidoId: pedidoIdString,
+          pedidoId: id.toString(),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // FLUXO CARTÃO DE CRÉDITO
+  //
+  // IMPORTANTE:
+  // NÃO cria pedido antes do pagamento.
+  //
+  // O PaymentScreen envia os dados do checkout para:
+  //
+  // POST /pagamentos/cartao
+  //
+  // O backend cria o pedido somente depois
+  // que o Asaas aprovar o pagamento.
+  // ============================================================
+
+  Future<void> criarPedidoParaCartao() async {
+    if (!mounted) {
+      return;
+    }
+
+    debugPrint("");
+    debugPrint("========================================");
+    debugPrint("💳 FOODJET - CARTÃO DE CRÉDITO");
+    debugPrint("========================================");
+    debugPrint("🚫 NÃO criando pedido antes do pagamento");
+    debugPrint("🏪 RESTAURANTE: ${widget.restauranteId}");
+    debugPrint("💰 TOTAL: $totalPedido");
+    debugPrint("========================================");
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => PaymentScreen(
+          endereco: widget.endereco,
+          itens: widget.itens,
+          subtotal: widget.subtotal,
+          restauranteId: widget.restauranteId,
+          taxaEntrega: taxaEntrega,
+          taxaServico: taxaServico,
+          formaPagamento: "CREDITO",
+
+          // CRÉDITO ainda não possui pedido.
+          // O backend deverá criar o pedido
+          // somente depois da aprovação do Asaas.
+          pedidoId: null,
         ),
       ),
     );
@@ -488,6 +504,13 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
   // ============================================================
   // FLUXO PAGAMENTO LOCAL
+  //
+  // DINHEIRO:
+  // pedido criado imediatamente.
+  //
+  // DÉBITO:
+  // pedido criado imediatamente.
+  // pagamento será feito na entrega.
   // ============================================================
 
   Future<void> criarPedidoPagamentoLocal() async {
@@ -533,15 +556,21 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
       return;
     }
 
+    final id = int.tryParse(pedidoId.toString());
+
+    if (id == null) {
+      mostrarMensagem(
+        "ID do pedido inválido.",
+        erro: true,
+      );
+      return;
+    }
+
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
         builder: (_) => OrderTrackingScreen(
-          pedidoId:
-              int.tryParse(
-                    pedidoId.toString(),
-                  ) ??
-                  0,
+          pedidoId: id,
         ),
       ),
     );
@@ -618,12 +647,14 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
       // ========================================================
       // CRÉDITO
+      //
+      // NÃO chama criarPedido().
       // ========================================================
 
       if (formaPagamento == "CREDITO") {
-  await criarPedidoParaCartao();
-  return;
-}
+        await criarPedidoParaCartao();
+        return;
+      }
 
       mostrarMensagem(
         "Forma de pagamento inválida.",
@@ -642,7 +673,9 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   // CARD
   // ============================================================
 
-  Widget cardPadrao(Widget child) {
+  Widget cardPadrao(
+    Widget child,
+  ) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(16),
@@ -662,7 +695,9 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     );
   }
 
-  Widget titulo(String texto) {
+  Widget titulo(
+    String texto,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Text(
@@ -679,7 +714,9 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   // ITEM
   // ============================================================
 
-  Widget itemPedido(CartItem item) {
+  Widget itemPedido(
+    CartItem item,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: Row(
@@ -703,8 +740,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   item.nome,
@@ -724,9 +760,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
             ),
           ),
           Text(
-            dinheiro(
-              item.preco * item.quantidade,
-            ),
+            dinheiro(item.preco * item.quantidade),
             style: const TextStyle(
               fontWeight: FontWeight.bold,
             ),
@@ -743,16 +777,14 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   Widget enderecoEntrega() {
     return cardPadrao(
       Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: 46,
             height: 46,
             decoration: BoxDecoration(
               color: const Color(0xFFFFE8D8),
-              borderRadius:
-                  BorderRadius.circular(14),
+              borderRadius: BorderRadius.circular(14),
             ),
             child: const Icon(
               Icons.location_on_outlined,
@@ -762,8 +794,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   "Endereço de entrega",
@@ -799,8 +830,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     required IconData icone,
     required Color cor,
   }) {
-    final selecionado =
-        formaPagamento == valor;
+    final selecionado = formaPagamento == valor;
 
     return InkWell(
       borderRadius: BorderRadius.circular(14),
@@ -823,8 +853,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           color: selecionado
               ? laranja.withValues(alpha: 0.05)
               : Colors.transparent,
-          borderRadius:
-              BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(14),
         ),
         child: Row(
           children: [
@@ -832,10 +861,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color:
-                    cor.withValues(alpha: 0.10),
-                borderRadius:
-                    BorderRadius.circular(14),
+                color: cor.withValues(alpha: 0.10),
+                borderRadius: BorderRadius.circular(14),
               ),
               child: Icon(
                 icone,
@@ -845,8 +872,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     titulo,
@@ -871,13 +897,14 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               groupValue: formaPagamento,
               activeColor: laranja,
               onChanged: (v) {
-                if (v == null) return;
+                if (v == null) {
+                  return;
+                }
 
                 setState(() {
                   formaPagamento = v;
 
-                  if (formaPagamento !=
-                      "DINHEIRO") {
+                  if (formaPagamento != "DINHEIRO") {
                     precisaTroco = false;
                     trocoController.clear();
                   }
@@ -901,44 +928,32 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           opcaoPagamento(
             valor: "PIX",
             titulo: "Pix",
-            subtitulo:
-                "Pagamento instantâneo",
+            subtitulo: "Pagamento instantâneo",
             icone: Icons.pix,
             cor: const Color(0xFF00A884),
           ),
-
           const Divider(),
-
           opcaoPagamento(
             valor: "CREDITO",
             titulo: "Cartão de Crédito",
-            subtitulo:
-                "Pagamento seguro pelo Asaas",
+            subtitulo: "Pagamento seguro pelo Asaas",
             icone: Icons.credit_card,
             cor: Colors.blue,
           ),
-
           const Divider(),
-
           opcaoPagamento(
             valor: "DEBITO",
             titulo: "Cartão de Débito",
-            subtitulo:
-                "Pagamento na entrega",
-            icone:
-                Icons.credit_card_outlined,
+            subtitulo: "Pagamento na entrega",
+            icone: Icons.credit_card_outlined,
             cor: Colors.indigo,
           ),
-
           const Divider(),
-
           opcaoPagamento(
             valor: "DINHEIRO",
             titulo: "Dinheiro",
-            subtitulo:
-                "Pague quando receber o pedido",
-            icone:
-                Icons.payments_outlined,
+            subtitulo: "Pague quando receber o pedido",
+            icone: Icons.payments_outlined,
             cor: laranja,
           ),
         ],
@@ -957,8 +972,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
 
     return cardPadrao(
       Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             "Precisa de troco?",
@@ -986,38 +1000,30 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                       trocoController.clear();
                     });
                   },
-                  borderRadius:
-                      BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(14),
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(
+                    padding: const EdgeInsets.symmetric(
                       vertical: 14,
                       horizontal: 12,
                     ),
                     decoration: BoxDecoration(
                       color: !precisaTroco
-                          ? laranja.withValues(
-                              alpha: 0.08,
-                            )
+                          ? laranja.withValues(alpha: 0.08)
                           : Colors.grey.shade50,
-                      borderRadius:
-                          BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: !precisaTroco
                             ? laranja
                             : Colors.black12,
-                        width:
-                            !precisaTroco ? 1.5 : 1,
+                        width: !precisaTroco ? 1.5 : 1,
                       ),
                     ),
                     child: Row(
                       children: [
                         Icon(
                           !precisaTroco
-                              ? Icons
-                                  .radio_button_checked
-                              : Icons
-                                  .radio_button_off,
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_off,
                           color: !precisaTroco
                               ? laranja
                               : Colors.grey,
@@ -1027,8 +1033,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                           child: Text(
                             "Não",
                             style: TextStyle(
-                              fontWeight:
-                                  FontWeight.w600,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
@@ -1045,38 +1050,30 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                       precisaTroco = true;
                     });
                   },
-                  borderRadius:
-                      BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(14),
                   child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(
+                    padding: const EdgeInsets.symmetric(
                       vertical: 14,
                       horizontal: 12,
                     ),
                     decoration: BoxDecoration(
                       color: precisaTroco
-                          ? laranja.withValues(
-                              alpha: 0.08,
-                            )
+                          ? laranja.withValues(alpha: 0.08)
                           : Colors.grey.shade50,
-                      borderRadius:
-                          BorderRadius.circular(14),
+                      borderRadius: BorderRadius.circular(14),
                       border: Border.all(
                         color: precisaTroco
                             ? laranja
                             : Colors.black12,
-                        width:
-                            precisaTroco ? 1.5 : 1,
+                        width: precisaTroco ? 1.5 : 1,
                       ),
                     ),
                     child: Row(
                       children: [
                         Icon(
                           precisaTroco
-                              ? Icons
-                                  .radio_button_checked
-                              : Icons
-                                  .radio_button_off,
+                              ? Icons.radio_button_checked
+                              : Icons.radio_button_off,
                           color: precisaTroco
                               ? laranja
                               : Colors.grey,
@@ -1086,8 +1083,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                           child: Text(
                             "Sim",
                             style: TextStyle(
-                              fontWeight:
-                                  FontWeight.w600,
+                              fontWeight: FontWeight.w600,
                             ),
                           ),
                         ),
@@ -1117,24 +1113,17 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                 filled: true,
                 fillColor: Colors.white,
                 border: OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(12),
                 ),
-                enabledBorder:
-                    OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(12),
-                  borderSide:
-                      const BorderSide(
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
                     color: Colors.black12,
                   ),
                 ),
-                focusedBorder:
-                    OutlineInputBorder(
-                  borderRadius:
-                      BorderRadius.circular(12),
-                  borderSide:
-                      const BorderSide(
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: const BorderSide(
                     color: laranja,
                     width: 2,
                   ),
@@ -1177,24 +1166,20 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     bool destaque = false,
   }) {
     return Row(
-      mainAxisAlignment:
-          MainAxisAlignment.spaceBetween,
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           titulo,
           style: TextStyle(
             fontSize: destaque ? 15 : 13,
-            fontWeight: destaque
-                ? FontWeight.bold
-                : FontWeight.w500,
+            fontWeight:
+                destaque ? FontWeight.bold : FontWeight.w500,
           ),
         ),
         Text(
           dinheiro(valor),
           style: TextStyle(
-            color: destaque
-                ? laranja
-                : Colors.black87,
+            color: destaque ? laranja : Colors.black87,
             fontWeight: FontWeight.bold,
             fontSize: destaque ? 18 : 13,
           ),
@@ -1222,8 +1207,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
             taxaEntrega,
           ),
           const Padding(
-            padding:
-                EdgeInsets.symmetric(vertical: 14),
+            padding: EdgeInsets.symmetric(vertical: 14),
             child: Divider(height: 1),
           ),
           linhaResumo(
@@ -1246,8 +1230,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFF0FBF5),
-        borderRadius:
-            BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(15),
         border: Border.all(
           color: const Color(0xFFD8F1E1),
         ),
@@ -1281,18 +1264,18 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     String mensagem, {
     bool erro = false,
   }) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(mensagem),
         backgroundColor:
             erro ? Colors.red.shade700 : laranja,
-        behavior:
-            SnackBarBehavior.floating,
+        behavior: SnackBarBehavior.floating,
       ),
     );
   }
@@ -1326,33 +1309,28 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
           children: [
             Expanded(
               child: SingleChildScrollView(
-                physics:
-                    const BouncingScrollPhysics(),
-                padding:
-                    const EdgeInsets.fromLTRB(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.fromLTRB(
                   18,
                   12,
                   18,
                   25,
                 ),
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
                       "Confira seu pedido",
                       style: TextStyle(
                         fontSize: 23,
-                        fontWeight:
-                            FontWeight.w800,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: 5),
                     Text(
                       "Revise os detalhes antes de realizar o pagamento.",
                       style: TextStyle(
-                        color:
-                            Colors.grey.shade600,
+                        color: Colors.grey.shade600,
                         fontSize: 13,
                       ),
                     ),
@@ -1361,8 +1339,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                     cardPadrao(
                       Column(
                         children: [
-                          for (final item
-                              in widget.itens)
+                          for (final item in widget.itens)
                             itemPedido(item),
                         ],
                       ),
@@ -1382,8 +1359,7 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
             ),
             Container(
               width: double.infinity,
-              padding:
-                  const EdgeInsets.fromLTRB(
+              padding: const EdgeInsets.fromLTRB(
                 18,
                 13,
                 18,
@@ -1391,18 +1367,14 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
               ),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius:
-                    const BorderRadius.vertical(
+                borderRadius: const BorderRadius.vertical(
                   top: Radius.circular(24),
                 ),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withValues(
-                      alpha: 0.08,
-                    ),
+                    color: Colors.black.withValues(alpha: 0.08),
                     blurRadius: 18,
-                    offset:
-                        const Offset(0, -5),
+                    offset: const Offset(0, -5),
                   ),
                 ],
               ),
@@ -1412,26 +1384,21 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                   children: [
                     Row(
                       mainAxisAlignment:
-                          MainAxisAlignment
-                              .spaceBetween,
+                          MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
                           "Total a pagar",
                           style: TextStyle(
                             fontSize: 14,
-                            fontWeight:
-                                FontWeight.w600,
-                            color:
-                                Colors.black54,
+                            fontWeight: FontWeight.w600,
+                            color: Colors.black54,
                           ),
                         ),
                         Text(
                           dinheiro(totalPedido),
-                          style:
-                              const TextStyle(
+                          style: const TextStyle(
                             fontSize: 21,
-                            fontWeight:
-                                FontWeight.w900,
+                            fontWeight: FontWeight.w900,
                             color: laranja,
                           ),
                         ),
@@ -1442,24 +1409,18 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                       width: double.infinity,
                       height: 56,
                       child: ElevatedButton(
-                        onPressed:
-                            enviandoPedido
-                                ? null
-                                : _irParaPagamento,
-                        style:
-                            ElevatedButton.styleFrom(
-                          backgroundColor:
-                              laranja,
+                        onPressed: enviandoPedido
+                            ? null
+                            : _irParaPagamento,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: laranja,
                           disabledBackgroundColor:
                               Colors.grey.shade400,
-                          foregroundColor:
-                              Colors.white,
+                          foregroundColor: Colors.white,
                           elevation: 0,
-                          shape:
-                              RoundedRectangleBorder(
+                          shape: RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius
-                                    .circular(16),
+                                BorderRadius.circular(16),
                           ),
                         ),
                         child: enviandoPedido
@@ -1469,36 +1430,29 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                                 child:
                                     CircularProgressIndicator(
                                   strokeWidth: 2.5,
-                                  color:
-                                      Colors.white,
+                                  color: Colors.white,
                                 ),
                               )
                             : Row(
                                 mainAxisAlignment:
-                                    MainAxisAlignment
-                                        .center,
+                                    MainAxisAlignment.center,
                                 children: [
                                   Icon(
                                     pagamentoLocal
                                         ? Icons
                                             .check_circle_outline
-                                        : Icons
-                                            .lock_outline,
+                                        : Icons.lock_outline,
                                     size: 20,
                                   ),
-                                  const SizedBox(
-                                    width: 9,
-                                  ),
+                                  const SizedBox(width: 9),
                                   Text(
-                                    formaPagamento ==
-                                            "PIX"
+                                    formaPagamento == "PIX"
                                         ? "PAGAR COM PIX"
                                         : formaPagamento ==
                                                 "CREDITO"
                                             ? "PAGAR COM CARTÃO"
                                             : "CONFIRMAR PEDIDO",
-                                    style:
-                                        const TextStyle(
+                                    style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight:
                                           FontWeight.w800,
@@ -1514,18 +1468,15 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
                           MainAxisAlignment.center,
                       children: [
                         Icon(
-                          Icons
-                              .verified_user_outlined,
+                          Icons.verified_user_outlined,
                           size: 14,
-                          color:
-                              Colors.green.shade600,
+                          color: Colors.green.shade600,
                         ),
                         const SizedBox(width: 5),
                         Text(
                           "Ambiente 100% seguro",
                           style: TextStyle(
-                            color:
-                                Colors.grey.shade600,
+                            color: Colors.grey.shade600,
                             fontSize: 11,
                           ),
                         ),
@@ -1541,3 +1492,4 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
     );
   }
 }
+

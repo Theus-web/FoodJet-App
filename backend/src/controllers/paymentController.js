@@ -1,3 +1,6 @@
+
+const crypto = require("crypto");
+
 const asaasService =
     require("../services/asaasService");
 
@@ -14,6 +17,10 @@ const User =
 
 const Order =
     require("../models/order");
+
+const {
+    pool,
+} = require("../config/database");
 
 
 // ============================================================
@@ -50,42 +57,9 @@ if (typeof obterQrCodePix !== "function") {
     );
 }
 
-console.log(
-    "========================================"
-);
-
-console.log(
-    "✅ ASAAS SERVICE CARREGADO"
-);
-
-console.log(
-    "✅ criarPix:",
-    typeof criarPix
-);
-
-console.log(
-    "✅ criarCartao:",
-    typeof criarCartao
-);
-
-console.log(
-    "✅ criarDebito:",
-    typeof criarDebito
-);
-
-console.log(
-    "✅ consultarPagamento:",
-    typeof consultarPagamento
-);
-
-console.log(
-    "✅ obterQrCodePix:",
-    typeof obterQrCodePix
-);
-
-console.log(
-    "========================================"
-);
+console.log("========================================");
+console.log("✅ ASAAS SERVICE CARREGADO");
+console.log("========================================");
 
 
 // ============================================================
@@ -112,11 +86,6 @@ async function buscarUsuarioAutenticado(req) {
         usuarioToken._id ||
         null;
 
-    console.log(
-        "🔐 ID DO USUÁRIO NO TOKEN:",
-        usuarioId
-    );
-
     if (
         usuarioId === undefined ||
         usuarioId === null ||
@@ -135,11 +104,6 @@ async function buscarUsuarioAutenticado(req) {
             "Cliente não identificado. Faça login novamente."
         );
     }
-
-    console.log(
-        "✅ CLIENTE AUTENTICADO:",
-        usuario.id
-    );
 
     return usuario;
 }
@@ -174,27 +138,6 @@ function prepararDadosCliente(usuario, body = {}) {
                     : ""
             );
 
-    // ========================================================
-    // TELEFONE
-    // ========================================================
-    //
-    // Aceita vários nomes possíveis:
-    //
-    // usuario.telefone
-    // usuario.celular
-    // usuario.phone
-    // usuario.mobilePhone
-    //
-    // body.telefone
-    // body.celular
-    // body.phone
-    // body.mobilePhone
-    //
-    // endereco.telefone
-    // endereco.celular
-    // endereco.phone
-    // ========================================================
-
     const telefoneCliente =
         usuario.telefone ||
         usuario.celular ||
@@ -209,10 +152,6 @@ function prepararDadosCliente(usuario, body = {}) {
         endereco.celular ||
         endereco.phone ||
         "";
-
-    // ========================================================
-    // CPF / CNPJ
-    // ========================================================
 
     const cpfCliente =
         usuario.cpf ||
@@ -244,7 +183,7 @@ function prepararDadosCliente(usuario, body = {}) {
 
 
 // ============================================================
-// VALIDAR DADOS DO CLIENTE
+// VALIDAR CLIENTE
 // ============================================================
 
 function validarDadosCliente({
@@ -315,30 +254,16 @@ async function buscarPedidoObrigatorio(pedidoId) {
         );
     }
 
-    const idString =
-        String(pedidoId).trim();
-
-    console.log(
-        "🔎 BUSCANDO PEDIDO:",
-        idString
-    );
-
     const pedido =
         await Order.buscarPorId(
             pedidoId
         );
 
     if (!pedido) {
-
         throw new Error(
-            `Pedido ${idString} não encontrado no PostgreSQL.`
+            `Pedido ${String(pedidoId).trim()} não encontrado no PostgreSQL.`
         );
     }
-
-    console.log(
-        "✅ PEDIDO ENCONTRADO:",
-        pedido.id
-    );
 
     return pedido;
 }
@@ -346,6 +271,12 @@ async function buscarPedidoObrigatorio(pedidoId) {
 
 // ============================================================
 // CRIAR PEDIDO QUANDO NÃO EXISTE
+// ============================================================
+//
+// Mantido para PIX / débito / outros fluxos existentes.
+//
+// IMPORTANTE:
+// O CARTÃO NÃO USA ESTA FUNÇÃO.
 // ============================================================
 
 async function criarPedidoSeNecessario(
@@ -355,10 +286,6 @@ async function criarPedidoSeNecessario(
 
     const pedidoId =
         body.pedidoId;
-
-    // --------------------------------------------------------
-    // PEDIDO JÁ EXISTE
-    // --------------------------------------------------------
 
     if (
         pedidoId !== undefined &&
@@ -377,10 +304,6 @@ async function criarPedidoSeNecessario(
         };
     }
 
-    // --------------------------------------------------------
-    // RESTAURANTE
-    // --------------------------------------------------------
-
     const restauranteId =
         body.restauranteId ||
         body.restaurantId ||
@@ -396,10 +319,6 @@ async function criarPedidoSeNecessario(
         );
     }
 
-    // --------------------------------------------------------
-    // ITENS
-    // --------------------------------------------------------
-
     const itens =
         Array.isArray(body.itens)
             ? body.itens
@@ -410,10 +329,6 @@ async function criarPedidoSeNecessario(
             "Nenhum item foi informado no pedido."
         );
     }
-
-    // --------------------------------------------------------
-    // VALORES
-    // --------------------------------------------------------
 
     const subtotal =
         validarValor(
@@ -449,17 +364,9 @@ async function criarPedidoSeNecessario(
             totalInformado
         );
 
-    // --------------------------------------------------------
-    // ENDEREÇO
-    // --------------------------------------------------------
-
     const endereco =
         body.endereco ||
         null;
-
-    // --------------------------------------------------------
-    // PAGAMENTO
-    // --------------------------------------------------------
 
     const pagamento =
         String(
@@ -467,19 +374,6 @@ async function criarPedidoSeNecessario(
             body.formaPagamento ||
             "PIX"
         ).toUpperCase();
-
-    // --------------------------------------------------------
-    // CRIAR PEDIDO
-    // --------------------------------------------------------
-
-    console.log("");
-    console.log(
-        "📦 PEDIDO AINDA NÃO EXISTE."
-    );
-
-    console.log(
-        "📦 CRIANDO PEDIDO NO POSTGRESQL..."
-    );
 
     const pedidoCriado =
         await Order.criar({
@@ -536,11 +430,6 @@ async function criarPedidoSeNecessario(
         );
     }
 
-    console.log(
-        "✅ PEDIDO CRIADO NO POSTGRESQL:",
-        pedidoCriado.id
-    );
-
     return {
         pedido: pedidoCriado,
         criadoAgora: true,
@@ -549,7 +438,7 @@ async function criarPedidoSeNecessario(
 
 
 // ============================================================
-// REFERÊNCIA ASAAS
+// REFERÊNCIA ASAAS DE PEDIDO EXISTENTE
 // ============================================================
 
 function obterReferencia(pedido) {
@@ -603,7 +492,7 @@ function validarClienteDoPedido(
 
 
 // ============================================================
-// ATUALIZAR PEDIDO COM PAGAMENTO ASAAS
+// ATUALIZAR PEDIDO COM ASAAS
 // ============================================================
 
 async function vincularPagamentoAoPedido(
@@ -619,15 +508,9 @@ async function vincularPagamentoAoPedido(
         return pedido;
     }
 
-    console.log(
-        "🔗 VINCULANDO ASAAS AO PEDIDO:",
-        pedido.id
-    );
-
     const dadosAtualizados = {
 
-        pagamentoId:
-            pagamentoId,
+        pagamentoId,
 
         paymentId:
             pagamentoId,
@@ -657,24 +540,465 @@ async function vincularPagamentoAoPedido(
             false,
     };
 
-    const pedidoAtualizado =
-        await Order.atualizarDadosPedido(
-            pedido.id,
-            dadosAtualizados
+    return await Order.atualizarDadosPedido(
+        pedido.id,
+        dadosAtualizados
+    );
+}
+
+
+// ============================================================
+// GERAR REFERÊNCIA TEMPORÁRIA DO CHECKOUT
+// ============================================================
+
+function gerarReferenciaCheckout(usuarioId) {
+
+    const agora =
+        Date.now();
+
+    const aleatorio =
+        crypto.randomInt(
+            10000,
+            99999
         );
 
-    console.log(
-        "✅ PEDIDO VINCULADO AO PAGAMENTO ASAAS"
+    return (
+        `FOODJET-CHK-${usuarioId}-${agora}-${aleatorio}`
+    );
+}
+
+
+// ============================================================
+// CRIAR SNAPSHOT DO CHECKOUT
+// ============================================================
+//
+// NÃO salva cartão.
+// NÃO salva CVV.
+// NÃO salva número do cartão.
+// ============================================================
+
+function prepararCheckoutCartao(
+    usuario,
+    body,
+    valorFinal
+) {
+
+    const restauranteId =
+        body.restauranteId ||
+        body.restaurantId ||
+        null;
+
+    if (
+        restauranteId === null ||
+        String(restauranteId).trim() === ""
+    ) {
+        throw new Error(
+            "Restaurante não informado."
+        );
+    }
+
+    const itens =
+        Array.isArray(body.itens)
+            ? body.itens
+            : [];
+
+    if (itens.length === 0) {
+        throw new Error(
+            "Nenhum item foi informado no pedido."
+        );
+    }
+
+    const subtotal =
+        validarValor(
+            body.subtotal ??
+            valorFinal
+        );
+
+    const taxaServico =
+        Number(
+            Number(
+                body.taxaServico ?? 0
+            ).toFixed(2)
+        );
+
+    const taxaEntrega =
+        Number(
+            Number(
+                body.taxaEntrega ?? 0
+            ).toFixed(2)
+        );
+
+    const total =
+        validarValor(
+            body.total ??
+            valorFinal
+        );
+
+    const endereco =
+        body.endereco ||
+        {};
+
+    const pagamento =
+        String(
+            body.pagamento ||
+            "CREDITO"
+        ).toUpperCase();
+
+    return {
+
+        clienteId:
+            String(usuario.id),
+
+        restauranteId:
+            String(restauranteId),
+
+        itens,
+
+        endereco,
+
+        pagamento,
+
+        subtotal,
+
+        taxaServico,
+
+        taxaEntrega,
+
+        total,
+
+        precisaTroco:
+            false,
+
+        trocoPara:
+            null,
+
+        valorTroco:
+            0,
+
+        status:
+            "AGUARDANDO_RESTAURANTE",
+
+        pagamentoStatus:
+            "PENDENTE",
+
+        statusPagamento:
+            "pending",
+
+        pagamentoAprovado:
+            false,
+
+        checkoutCriadoEm:
+            new Date().toISOString(),
+    };
+}
+
+
+// ============================================================
+// SALVAR CHECKOUT PENDENTE
+// ============================================================
+//
+// O pedido ainda NÃO existe em "pedidos".
+// ============================================================
+
+async function salvarCheckoutPendente({
+    referencia,
+    usuario,
+    checkout,
+}) {
+
+    const dados =
+        {
+
+            tipo:
+                "CHECKOUT_CARTAO",
+
+            checkout,
+
+            externalReference:
+                referencia,
+
+            clienteId:
+                String(usuario.id),
+
+            atualizadoEm:
+                new Date().toISOString(),
+
+        };
+
+    const existente =
+        await pool.query(
+            `
+            SELECT
+                id,
+                pagamento_id
+            FROM pagamentos_asaas
+            WHERE external_reference = $1
+            ORDER BY criado_em DESC
+            LIMIT 1
+            `,
+            [
+                referencia,
+            ]
+        );
+
+    if (
+        existente.rows.length > 0
+    ) {
+
+        await pool.query(
+            `
+            UPDATE pagamentos_asaas
+            SET
+                dados = $1,
+                atualizado_em = NOW()
+            WHERE id = $2
+            `,
+            [
+                dados,
+                existente.rows[0].id,
+            ]
+        );
+
+        return existente.rows[0].id;
+    }
+
+    const idTemporario =
+        `CHK-${crypto.randomUUID()}`;
+
+    await pool.query(
+        `
+        INSERT INTO pagamentos_asaas (
+            id,
+            pagamento_id,
+            pedido_id,
+            external_reference,
+            status,
+            valor,
+            dados,
+            criado_em,
+            atualizado_em
+        )
+        VALUES (
+            $1,
+            $2,
+            NULL,
+            $3,
+            'PENDING',
+            $4,
+            $5,
+            NOW(),
+            NOW()
+        )
+        `,
+        [
+            idTemporario,
+
+            idTemporario,
+
+            referencia,
+
+            checkout.total,
+
+            dados,
+        ]
     );
 
-    return pedidoAtualizado ||
-        pedido;
+    console.log(
+        "💾 CHECKOUT DE CARTÃO SALVO:",
+        referencia
+    );
+
+    return idTemporario;
+}
+
+
+// ============================================================
+// ATUALIZAR CHECKOUT COM PAGAMENTO ASAAS
+// ============================================================
+
+async function vincularCheckoutAoPagamento(
+    referencia,
+    pagamento
+) {
+
+    const pagamentoId =
+        String(
+            pagamento?.id ||
+            ""
+        ).trim();
+
+    if (!pagamentoId) {
+        throw new Error(
+            "Pagamento Asaas sem ID."
+        );
+    }
+
+    const resultado =
+        await pool.query(
+            `
+            SELECT
+                id,
+                pedido_id,
+                dados
+            FROM pagamentos_asaas
+            WHERE
+                external_reference = $1
+            ORDER BY criado_em DESC
+            LIMIT 1
+            `,
+            [
+                referencia,
+            ]
+        );
+
+    const dadosPagamento = {
+
+        tipo:
+            "CHECKOUT_CARTAO",
+
+        checkout:
+            parseDados(
+                resultado.rows[0]?.dados
+            ).checkout || null,
+
+        pagamentoId,
+
+        paymentId:
+            pagamentoId,
+
+        externalReference:
+            referencia,
+
+        statusAsaas:
+            pagamento?.status ||
+            "PENDING",
+
+        statusPagamento:
+            String(
+                pagamento?.status ||
+                "PENDING"
+            ).toLowerCase(),
+
+        valor:
+            Number(
+                pagamento?.value || 0
+            ),
+
+        atualizadoEm:
+            new Date().toISOString(),
+
+        asaas:
+            pagamento,
+    };
+
+    if (
+        resultado.rows.length > 0
+    ) {
+
+        await pool.query(
+            `
+            UPDATE pagamentos_asaas
+            SET
+                pagamento_id = $1,
+                external_reference = $2,
+                status = $3,
+                valor = $4,
+                dados = $5,
+                atualizado_em = NOW()
+            WHERE id = $6
+            `,
+            [
+                pagamentoId,
+
+                referencia,
+
+                pagamento?.status ||
+                    "PENDING",
+
+                Number(
+                    pagamento?.value || 0
+                ),
+
+                dadosPagamento,
+
+                resultado.rows[0].id,
+            ]
+        );
+
+        return;
+    }
+
+    await pool.query(
+        `
+        INSERT INTO pagamentos_asaas (
+            id,
+            pagamento_id,
+            pedido_id,
+            external_reference,
+            status,
+            valor,
+            dados,
+            criado_em,
+            atualizado_em
+        )
+        VALUES (
+            $1,
+            $2,
+            NULL,
+            $3,
+            $4,
+            $5,
+            $6,
+            NOW(),
+            NOW()
+        )
+        `,
+        [
+            pagamentoId,
+
+            pagamentoId,
+
+            referencia,
+
+            pagamento?.status ||
+                "PENDING",
+
+            Number(
+                pagamento?.value || 0
+            ),
+
+            dadosPagamento,
+        ]
+    );
+}
+
+
+// ============================================================
+// PARSE DADOS
+// ============================================================
+
+function parseDados(valor) {
+
+    if (!valor) {
+        return {};
+    }
+
+    if (
+        typeof valor === "object"
+    ) {
+        return valor;
+    }
+
+    try {
+        return JSON.parse(valor);
+    } catch {
+        return {};
+    }
 }
 
 
 // ============================================================
 // PIX
-// POST /pagamentos/pix
 // ============================================================
 
 async function gerarPix(req, res) {
@@ -683,31 +1007,11 @@ async function gerarPix(req, res) {
 
     try {
 
-        console.log("");
-        console.log(
-            "========================================"
-        );
-        console.log(
-            "💚 POST /pagamentos/pix"
-        );
-        console.log(
-            "========================================"
-        );
-
         const usuario =
             await buscarUsuarioAutenticado(req);
 
         const body =
             req.body || {};
-
-        const {
-            valor,
-        } = body;
-
-        console.log(
-            "🆔 PEDIDO RECEBIDO:",
-            body.pedidoId
-        );
 
         const resultadoPedido =
             await criarPedidoSeNecessario(
@@ -728,7 +1032,7 @@ async function gerarPix(req, res) {
 
         const valorFinal =
             validarValor(
-                valor ??
+                body.valor ??
                 pedido.total
             );
 
@@ -742,54 +1046,14 @@ async function gerarPix(req, res) {
             dadosCliente
         );
 
-        const {
-            nomeCliente,
-            email,
-            telefoneCliente,
-            documento,
-        } = dadosCliente;
-
-        console.log(
-            "👤 CLIENTE:",
-            usuario.id
-        );
-
-        console.log(
-            "📧 EMAIL:",
-            email
-        );
-
-        console.log(
-            "🪪 DOCUMENTO:",
-            documento
-        );
-
-        console.log(
-            "💰 VALOR:",
-            valorFinal
-        );
-
-        console.log(
-            "🆔 PEDIDO:",
-            pedido.id
-        );
-
-        console.log(
-            "🔖 REFERÊNCIA:",
-            referencia
-        );
-
-        console.log(
-            "💚 CRIANDO PIX NO ASAAS..."
-        );
-
         const pagamento =
             await criarPix({
 
                 valor:
                     valorFinal,
 
-                email,
+                email:
+                    dadosCliente.email,
 
                 referencia,
 
@@ -797,32 +1061,23 @@ async function gerarPix(req, res) {
                     `Pedido FoodJet #${referencia}`,
 
                 nome:
-                    String(nomeCliente).trim(),
+                    dadosCliente.nomeCliente,
 
                 cpf:
-                    documento,
+                    dadosCliente.documento,
 
                 telefone:
-                    telefoneCliente,
+                    dadosCliente.telefoneCliente,
 
                 usuarioId:
                     String(usuario.id),
             });
 
-        const pagamentoId =
-            pagamento?.id;
-
-        if (!pagamentoId) {
-
+        if (!pagamento?.id) {
             throw new Error(
                 "O Asaas não retornou o ID da cobrança."
             );
         }
-
-        console.log(
-            "✅ PAGAMENTO PIX CRIADO:",
-            pagamentoId
-        );
 
         pedido =
             await vincularPagamentoAoPedido(
@@ -832,51 +1087,47 @@ async function gerarPix(req, res) {
 
         const pix =
             await obterQrCodePix(
-                pagamentoId
+                pagamento.id
             );
 
         if (
             !pix ||
             !pix.payload
         ) {
-
             throw new Error(
                 "O Asaas criou a cobrança, mas não retornou o código PIX."
             );
         }
 
-        console.log(
-            "✅ QR CODE PIX OBTIDO"
-        );
-
         return res.status(201).json({
 
             sucesso: true,
 
-            pagamentoId,
+            pagamentoId:
+                pagamento.id,
 
             paymentId:
-                pagamentoId,
+                pagamento.id,
 
             pedidoId:
                 pedido.id,
 
             externalReference:
-                pagamento?.externalReference ||
+                pagamento.externalReference ||
                 referencia,
 
             status:
-                pagamento?.status ||
+                pagamento.status ||
                 "PENDING",
 
             totalAmount:
                 Number(
-                    pagamento?.value ??
+                    pagamento.value ??
                     valorFinal
                 ),
 
             billingType:
-                pagamento?.billingType ||
+                pagamento.billingType ||
                 "PIX",
 
             pix: {
@@ -900,43 +1151,10 @@ async function gerarPix(req, res) {
 
     } catch (erro) {
 
-        console.error("");
         console.error(
-            "========================================"
+            "❌ ERRO GERANDO PIX:",
+            erro?.message || erro
         );
-
-        console.error(
-            "❌ ERRO GERANDO PIX"
-        );
-
-        console.error(
-            "========================================"
-        );
-
-        console.error(
-            erro?.message ||
-            erro
-        );
-
-        if (pedido) {
-
-            console.error(
-                "📦 PEDIDO ENVOLVIDO:",
-                pedido.id
-            );
-        }
-
-        if (erro?.response?.data) {
-
-            console.error(
-                "ASAAS:",
-                JSON.stringify(
-                    erro.response.data,
-                    null,
-                    2
-                )
-            );
-        }
 
         const status =
             erro?.response?.status >= 400 &&
@@ -957,11 +1175,6 @@ async function gerarPix(req, res) {
 
             erro:
                 mensagem,
-
-            detalhe:
-                erro?.response?.data
-                    ?.errors ||
-                null,
         });
     }
 }
@@ -969,12 +1182,17 @@ async function gerarPix(req, res) {
 
 // ============================================================
 // CARTÃO DE CRÉDITO
-// POST /pagamentos/cartao
+// ============================================================
+//
+// IMPORTANTE:
+//
+// NÃO CRIA PEDIDO NO POSTGRESQL.
+//
+// Primeiro cria a cobrança no ASAAS.
+// O pedido será criado somente após aprovação.
 // ============================================================
 
 async function gerarCartao(req, res) {
-
-    let pedido = null;
 
     try {
 
@@ -982,18 +1200,15 @@ async function gerarCartao(req, res) {
         console.log(
             "========================================"
         );
-
         console.log(
             "💳 POST /pagamentos/cartao"
         );
-
+        console.log(
+            "💳 MODO: PAGAR PRIMEIRO / PEDIDO DEPOIS"
+        );
         console.log(
             "========================================"
         );
-
-        // ====================================================
-        // USUÁRIO
-        // ====================================================
 
         const usuario =
             await buscarUsuarioAutenticado(req);
@@ -1001,43 +1216,10 @@ async function gerarCartao(req, res) {
         const body =
             req.body || {};
 
-        const {
-            valor,
-        } = body;
-
-        // ====================================================
-        // PEDIDO
-        // ====================================================
-
-        const resultadoPedido =
-            await criarPedidoSeNecessario(
-                usuario,
-                body
-            );
-
-        pedido =
-            resultadoPedido.pedido;
-
-        validarClienteDoPedido(
-            pedido,
-            usuario
-        );
-
-        // ====================================================
-        // REFERÊNCIA
-        // ====================================================
-
-        const referencia =
-            obterReferencia(pedido);
-
-        // ====================================================
-        // VALOR
-        // ====================================================
-
         const valorFinal =
             validarValor(
-                valor ??
-                pedido.total
+                body.valor ??
+                body.total
             );
 
         // ====================================================
@@ -1062,7 +1244,7 @@ async function gerarCartao(req, res) {
         } = dadosCliente;
 
         // ====================================================
-        // TELEFONE DO TITULAR
+        // TELEFONE
         // ====================================================
 
         const telefone =
@@ -1072,18 +1254,10 @@ async function gerarCartao(req, res) {
                 .replace(/\D/g, "")
                 .trim();
 
-        console.log(
-            "📱 TELEFONE ENCONTRADO:",
-            telefone
-                ? "SIM"
-                : "NÃO"
-        );
-
         if (
             telefone.length < 10 ||
             telefone.length > 11
         ) {
-
             throw new Error(
                 "Número de contato com DDD do titular do cartão é obrigatório."
             );
@@ -1103,8 +1277,6 @@ async function gerarCartao(req, res) {
                 enderecoOriginal.CEP ||
                 enderecoOriginal.codigoPostal ||
                 enderecoOriginal.postalCode ||
-                enderecoOriginal.cepCodigo ||
-                enderecoOriginal.cepEndereco ||
                 "",
 
             numero:
@@ -1121,10 +1293,6 @@ async function gerarCartao(req, res) {
                 "",
         };
 
-        // ====================================================
-        // CEP
-        // ====================================================
-
         const cep =
             String(
                 endereco.cep || ""
@@ -1132,25 +1300,13 @@ async function gerarCartao(req, res) {
                 .replace(/\D/g, "")
                 .trim();
 
-        console.log(
-            "📍 CEP ENCONTRADO:",
-            cep
-                ? "SIM"
-                : "NÃO"
-        );
-
         if (
             cep.length !== 8
         ) {
-
             throw new Error(
                 "CEP do titular do cartão é obrigatório."
             );
         }
-
-        // ====================================================
-        // NÚMERO DO ENDEREÇO
-        // ====================================================
 
         const numeroEndereco =
             String(
@@ -1158,7 +1314,6 @@ async function gerarCartao(req, res) {
             ).trim();
 
         if (!numeroEndereco) {
-
             throw new Error(
                 "Número do endereço é obrigatório para pagamento com cartão."
             );
@@ -1171,10 +1326,6 @@ async function gerarCartao(req, res) {
         const cartao =
             body.cartao || {};
 
-        // ====================================================
-        // NÚMERO
-        // ====================================================
-
         const numero =
             String(
                 cartao.numero || ""
@@ -1185,15 +1336,10 @@ async function gerarCartao(req, res) {
             numero.length < 13 ||
             numero.length > 19
         ) {
-
             throw new Error(
                 "Número do cartão inválido."
             );
         }
-
-        // ====================================================
-        // TITULAR
-        // ====================================================
 
         const nomeCartao =
             String(
@@ -1201,15 +1347,10 @@ async function gerarCartao(req, res) {
             ).trim();
 
         if (!nomeCartao) {
-
             throw new Error(
                 "Nome do titular do cartão é obrigatório."
             );
         }
-
-        // ====================================================
-        // VALIDADE
-        // ====================================================
 
         const validade =
             String(
@@ -1218,11 +1359,8 @@ async function gerarCartao(req, res) {
                 .replace(/\D/g, "");
 
         if (
-            !/^\d{4}$/.test(
-                validade
-            )
+            !/^\d{4}$/.test(validade)
         ) {
-
             throw new Error(
                 "Validade do cartão inválida. Use MM/AA."
             );
@@ -1237,7 +1375,6 @@ async function gerarCartao(req, res) {
             mes < 1 ||
             mes > 12
         ) {
-
             throw new Error(
                 "Mês de validade do cartão inválido."
             );
@@ -1249,10 +1386,6 @@ async function gerarCartao(req, res) {
         const anoExpiracao =
             `20${validade.substring(2, 4)}`;
 
-        // ====================================================
-        // CVV
-        // ====================================================
-
         const cvv =
             String(
                 cartao.cvv || ""
@@ -1263,7 +1396,6 @@ async function gerarCartao(req, res) {
             cvv.length < 3 ||
             cvv.length > 4
         ) {
-
             throw new Error(
                 "CVV do cartão inválido."
             );
@@ -1274,9 +1406,7 @@ async function gerarCartao(req, res) {
         // ====================================================
 
         const forwardedFor =
-            req.headers[
-                "x-forwarded-for"
-            ];
+            req.headers["x-forwarded-for"];
 
         const remoteIp =
             forwardedFor
@@ -1291,137 +1421,123 @@ async function gerarCartao(req, res) {
                 ).trim();
 
         if (!remoteIp) {
-
             throw new Error(
                 "Não foi possível identificar o IP do cliente."
             );
         }
 
         // ====================================================
-        // LOG SEGURO
+        // CHECKOUT
         // ====================================================
 
-        console.log(
-            "👤 CLIENTE:",
-            usuario.id
-        );
+        const referencia =
+            gerarReferenciaCheckout(
+                usuario.id
+            );
+
+        const checkout =
+            prepararCheckoutCartao(
+                usuario,
+                body,
+                valorFinal
+            );
+
+        // ====================================================
+        // SALVAR CHECKOUT ANTES DO ASAAS
+        // ====================================================
+
+        await salvarCheckoutPendente({
+
+            referencia,
+
+            usuario,
+
+            checkout,
+
+        });
 
         console.log(
-            "📧 EMAIL:",
-            email
-        );
-
-        console.log(
-            "📱 TELEFONE:",
-            telefone
-                ? "OK"
-                : "NÃO"
-        );
-
-        console.log(
-            "🪪 DOCUMENTO:",
-            documento
-                ? "OK"
-                : "NÃO"
-        );
-
-        console.log(
-            "📍 CEP:",
-            cep
-                ? "OK"
-                : "NÃO"
-        );
-
-        console.log(
-            "🏠 NÚMERO:",
-            numeroEndereco
-                ? "OK"
-                : "NÃO"
-        );
-
-        console.log(
-            "💰 VALOR:",
-            valorFinal
-        );
-
-        console.log(
-            "🆔 PEDIDO:",
-            pedido.id
-        );
-
-        console.log(
-            "🔖 REFERÊNCIA:",
+            "🧾 CHECKOUT CRIADO:",
             referencia
         );
 
         console.log(
-            "💳 CARTÃO:",
-            "DADOS RECEBIDOS"
+            "📦 PEDIDO AINDA NÃO FOI CRIADO."
         );
 
         // ====================================================
-        // CRIAR PAGAMENTO ASAAS
+        // ASAAS
         // ====================================================
 
-        const pagamento =
-            await criarCartao({
+        let pagamento;
 
-                valor:
-                    valorFinal,
+        try {
 
-                email,
+            pagamento =
+                await criarCartao({
 
-                referencia,
+                    valor:
+                        valorFinal,
 
-                descricao:
-                    `Pedido FoodJet #${referencia}`,
+                    email,
 
-                nome:
-                    nomeCliente,
+                    referencia,
 
-                cpf:
-                    documento,
-
-                telefone,
-
-                usuarioId:
-                    String(usuario.id),
-
-                cartao: {
-
-                    numero,
+                    descricao:
+                        `Pagamento FoodJet ${referencia}`,
 
                     nome:
-                        nomeCartao,
+                        nomeCliente,
 
-                    mesExpiracao,
+                    cpf:
+                        documento,
 
-                    anoExpiracao,
+                    telefone,
 
-                    cvv,
-                },
+                    usuarioId:
+                        String(usuario.id),
 
-                endereco: {
+                    cartao: {
 
-                    cep,
+                        numero,
 
-                    numero:
-                        numeroEndereco,
+                        nome:
+                            nomeCartao,
 
-                    complemento:
-                        endereco.complemento,
-                },
+                        mesExpiracao,
 
-                remoteIp,
-            });
+                        anoExpiracao,
 
-        // ====================================================
-        // VALIDAR ASAAS
-        // ====================================================
+                        cvv,
+                    },
 
-        if (
-            !pagamento?.id
-        ) {
+                    endereco: {
+
+                        cep,
+
+                        numero:
+                            numeroEndereco,
+
+                        complemento:
+                            endereco.complemento,
+                    },
+
+                    remoteIp,
+                });
+
+        } catch (asaasErro) {
+
+            // O checkout continua registrado apenas
+            // como tentativa, mas nenhum pedido existe.
+
+            console.error(
+                "❌ ASAAS RECUSOU/ERROU A COBRANÇA."
+            );
+
+            throw asaasErro;
+        }
+
+        if (!pagamento?.id) {
 
             throw new Error(
                 "O Asaas não retornou o ID do pagamento com cartão."
@@ -1429,27 +1545,16 @@ async function gerarCartao(req, res) {
         }
 
         // ====================================================
-        // VINCULAR AO PEDIDO
+        // VINCULAR ASAAS AO CHECKOUT
         // ====================================================
 
-        pedido =
-            await vincularPagamentoAoPedido(
-                pedido,
-                pagamento
-            );
-
-        // ====================================================
-        // SUCESSO
-        // ====================================================
-
-        console.log("");
-
-        console.log(
-            "========================================"
+        await vincularCheckoutAoPagamento(
+            referencia,
+            pagamento
         );
 
         console.log(
-            "✅ CARTÃO CRIADO NO ASAAS"
+            "✅ COBRANÇA ASAAS CRIADA:"
         );
 
         console.log(
@@ -1458,8 +1563,8 @@ async function gerarCartao(req, res) {
         );
 
         console.log(
-            "📦 PEDIDO:",
-            pedido.id
+            "🔖 CHECKOUT:",
+            referencia
         );
 
         console.log(
@@ -1467,9 +1572,14 @@ async function gerarCartao(req, res) {
             pagamento.status
         );
 
-        console.log(
-            "========================================"
-        );
+        // ====================================================
+        // IMPORTANTE
+        // ====================================================
+        //
+        // Não retornamos pedidoId aqui.
+        //
+        // O pedido só existirá depois da aprovação.
+        // ====================================================
 
         return res.status(201).json({
 
@@ -1482,72 +1592,57 @@ async function gerarCartao(req, res) {
                 pagamento.id,
 
             pedidoId:
-                pedido.id,
+                null,
 
             externalReference:
-                pagamento?.externalReference ||
+                pagamento.externalReference ||
                 referencia,
 
             status:
-                pagamento?.status ||
+                pagamento.status ||
                 "PENDING",
 
             totalAmount:
                 Number(
-                    pagamento?.value ??
+                    pagamento.value ??
                     valorFinal
                 ),
 
             billingType:
-                pagamento?.billingType ||
+                pagamento.billingType ||
                 "CREDIT_CARD",
 
             invoiceUrl:
-                pagamento?.invoiceUrl ||
+                pagamento.invoiceUrl ||
                 "",
         });
 
     } catch (erro) {
 
         console.error("");
-
         console.error(
             "========================================"
         );
-
         console.error(
             "❌ ERRO GERANDO CARTÃO"
         );
-
         console.error(
             "========================================"
         );
 
         console.error(
-            "MENSAGEM:",
             erro?.message || erro
         );
 
         if (erro?.response?.data) {
 
             console.error(
-                "ASAAS:"
-            );
-
-            console.error(
+                "ASAAS:",
                 JSON.stringify(
                     erro.response.data,
                     null,
                     2
                 )
-            );
-        }
-
-        if (pedido) {
-
-            console.error(
-                "📦 PEDIDO:",
-                pedido.id
             );
         }
 
@@ -1582,7 +1677,9 @@ async function gerarCartao(req, res) {
 
 // ============================================================
 // DÉBITO
-// POST /pagamentos/debito
+// ============================================================
+//
+// Mantido como estava.
 // ============================================================
 
 async function gerarDebito(req, res) {
@@ -1591,28 +1688,11 @@ async function gerarDebito(req, res) {
 
     try {
 
-        console.log("");
-        console.log(
-            "========================================"
-        );
-
-        console.log(
-            "💳 POST /pagamentos/debito"
-        );
-
-        console.log(
-            "========================================"
-        );
-
         const usuario =
             await buscarUsuarioAutenticado(req);
 
         const body =
             req.body || {};
-
-        const {
-            valor,
-        } = body;
 
         const resultadoPedido =
             await criarPedidoSeNecessario(
@@ -1633,7 +1713,7 @@ async function gerarDebito(req, res) {
 
         const valorFinal =
             validarValor(
-                valor ??
+                body.valor ??
                 pedido.total
             );
 
@@ -1647,20 +1727,14 @@ async function gerarDebito(req, res) {
             dadosCliente
         );
 
-        const {
-            nomeCliente,
-            email,
-            telefoneCliente,
-            documento,
-        } = dadosCliente;
-
         const pagamento =
             await criarDebito({
 
                 valor:
                     valorFinal,
 
-                email,
+                email:
+                    dadosCliente.email,
 
                 referencia,
 
@@ -1668,13 +1742,13 @@ async function gerarDebito(req, res) {
                     `Pedido FoodJet #${referencia}`,
 
                 nome:
-                    nomeCliente,
+                    dadosCliente.nomeCliente,
 
                 cpf:
-                    documento,
+                    dadosCliente.documento,
 
                 telefone:
-                    telefoneCliente,
+                    dadosCliente.telefoneCliente,
 
                 usuarioId:
                     String(usuario.id),
@@ -1692,11 +1766,6 @@ async function gerarDebito(req, res) {
             pagamento
         );
 
-        console.log(
-            "✅ DÉBITO CRIADO:",
-            pagamento.id
-        );
-
         return res.status(201).json({
 
             sucesso: true,
@@ -1711,25 +1780,25 @@ async function gerarDebito(req, res) {
                 pedido.id,
 
             externalReference:
-                pagamento?.externalReference ||
+                pagamento.externalReference ||
                 referencia,
 
             status:
-                pagamento?.status ||
+                pagamento.status ||
                 "PENDING",
 
             totalAmount:
                 Number(
-                    pagamento?.value ??
+                    pagamento.value ??
                     valorFinal
                 ),
 
             billingType:
-                pagamento?.billingType ||
+                pagamento.billingType ||
                 "DEBIT_CARD",
 
             invoiceUrl:
-                pagamento?.invoiceUrl ||
+                pagamento.invoiceUrl ||
                 "",
         });
 
@@ -1739,18 +1808,6 @@ async function gerarDebito(req, res) {
             "❌ ERRO GERANDO DÉBITO:",
             erro?.message || erro
         );
-
-        if (erro?.response?.data) {
-
-            console.error(
-                "ASAAS:",
-                JSON.stringify(
-                    erro.response.data,
-                    null,
-                    2
-                )
-            );
-        }
 
         const status =
             erro?.response?.status >= 400 &&
@@ -1771,11 +1828,6 @@ async function gerarDebito(req, res) {
 
             erro:
                 mensagem,
-
-            detalhe:
-                erro?.response?.data
-                    ?.errors ||
-                null,
         });
     }
 }
@@ -1783,6 +1835,7 @@ async function gerarDebito(req, res) {
 
 // ============================================================
 // CONSULTAR PAGAMENTO
+// ============================================================
 // GET /pagamentos/:pagamentoId
 // ============================================================
 
@@ -1810,43 +1863,114 @@ async function consultar(req, res) {
             });
         }
 
-        console.log(
-            "🔎 CONSULTANDO PAGAMENTO:",
-            pagamentoId
-        );
-
         const pagamento =
             await consultarPagamento(
                 pagamentoId
             );
 
         const externalReference =
-            pagamento?.externalReference ||
-            "";
+            String(
+                pagamento?.externalReference ||
+                ""
+            ).trim();
+
+        // ====================================================
+        // BUSCAR REGISTRO LOCAL DO PAGAMENTO
+        // ====================================================
+
+        let registroPagamento = null;
+
+        const registro =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    pedido_id,
+                    dados
+                FROM pagamentos_asaas
+                WHERE
+                    pagamento_id = $1
+                    OR external_reference = $2
+                ORDER BY
+                    CASE
+                        WHEN pagamento_id = $1 THEN 0
+                        ELSE 1
+                    END,
+                    criado_em DESC
+                LIMIT 1
+                `,
+                [
+                    pagamentoId,
+                    externalReference,
+                ]
+            );
+
+        if (
+            registro.rows.length > 0
+        ) {
+
+            registroPagamento =
+                registro.rows[0];
+
+        }
+
+        let pedidoId =
+            registroPagamento?.pedido_id ||
+            null;
+
+        // ====================================================
+        // SE PAGAMENTO FOI APROVADO
+        // ====================================================
+        //
+        // O webhook normalmente já terá criado o pedido.
+        //
+        // Se o polling chegar primeiro, o webhook pode ainda
+        // não ter criado. Nesse caso, o webhook deve finalizar.
+        //
+        // Para não duplicar pedidos, aqui não criamos
+        // diretamente. Apenas aguardamos o processamento do
+        // webhook.
+        // ====================================================
 
         let pedido = null;
 
-        if (externalReference) {
+        if (pedidoId) {
 
-            try {
-
-                pedido =
-                    await Order.buscarPorId(
-                        externalReference
-                    );
-
-            } catch (erro) {
-
-                console.warn(
-                    "⚠️ Não foi possível consultar pedido:",
-                    erro?.message || erro
+            pedido =
+                await Order.buscarPorId(
+                    pedidoId
                 );
+
+        } else if (externalReference) {
+
+            // -----------------------------------------------
+            // Fluxo antigo: referência numérica
+            // -----------------------------------------------
+
+            if (
+                /^\d+$/.test(
+                    externalReference
+                )
+            ) {
+
+                try {
+
+                    pedido =
+                        await Order.buscarPorId(
+                            externalReference
+                        );
+
+                } catch {
+                    pedido = null;
+                }
+
             }
+
         }
 
-        // ----------------------------------------------------
+        // ====================================================
         // SEGURANÇA
-        // ----------------------------------------------------
+        // ====================================================
 
         if (
             pedido &&
@@ -1863,6 +1987,10 @@ async function consultar(req, res) {
             });
         }
 
+        // ====================================================
+        // RETORNO
+        // ====================================================
+
         return res.json({
 
             sucesso: true,
@@ -1872,12 +2000,11 @@ async function consultar(req, res) {
                 pagamentoId,
 
             orderId:
-                externalReference ||
-                pagamento?.id ||
-                pagamentoId,
+                pedido?.id ||
+                null,
 
             pedidoId:
-                externalReference ||
+                pedido?.id ||
                 null,
 
             paymentId:
@@ -1906,6 +2033,9 @@ async function consultar(req, res) {
                 pagamento?.invoiceUrl ||
                 "",
 
+            pedidoCriado:
+                !!pedido,
+
             pix: {
 
                 qrCode:
@@ -1929,18 +2059,6 @@ async function consultar(req, res) {
             "❌ ERRO CONSULTANDO PAGAMENTO:",
             erro?.message || erro
         );
-
-        if (erro?.response?.data) {
-
-            console.error(
-                "ASAAS:",
-                JSON.stringify(
-                    erro.response.data,
-                    null,
-                    2
-                )
-            );
-        }
 
         const status =
             erro?.response?.status >= 400 &&
@@ -1981,3 +2099,4 @@ module.exports = {
     consultar,
 
 };
+
