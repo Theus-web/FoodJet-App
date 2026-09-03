@@ -19,11 +19,6 @@ class PaymentScreen extends StatefulWidget {
   final double taxaEntrega;
   final double taxaServico;
   final String formaPagamento;
-
-  // PIX pode receber o pedido já criado.
-  //
-  // CREDITO NÃO precisa de pedidoId antes do pagamento.
-  // O backend cria o pedido somente após a aprovação do cartão.
   final String? pedidoId;
 
   const PaymentScreen({
@@ -43,212 +38,14 @@ class PaymentScreen extends StatefulWidget {
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  static const Color laranja = Color(0xFFF97316);
-  static const Color fundo = Color(0xFFF6F7F9);
-
-  late String formaPagamento;
-
-  @override
-  void initState() {
-    super.initState();
-
-    formaPagamento = widget.formaPagamento.trim().toUpperCase();
-  }
-
-  // ============================================================
-  // TOKEN
-  // ============================================================
-
-  Future<String> obterToken() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    final tokens = [
-      prefs.getString("token"),
-      prefs.getString("jwt"),
-      prefs.getString("access_token"),
-      prefs.getString("auth_token"),
-    ];
-
-    for (final token in tokens) {
-      if (token != null && token.trim().isNotEmpty) {
-        return token.trim();
-      }
-    }
-
-    return "";
-  }
-
-  // ============================================================
-  // VALORES
-  // ============================================================
-
-  double get totalPedido {
-    return widget.subtotal +
-        widget.taxaServico +
-        widget.taxaEntrega;
-  }
-
-  String dinheiro(double valor) {
-    return "R\$ ${valor.toStringAsFixed(2).replaceAll(".", ",")}";
-  }
-
-  // ============================================================
-  // ENDEREÇO DE ENTREGA
-  // ============================================================
-
-  String enderecoCompleto() {
-    return [
-      "${widget.endereco["rua"] ?? ""}, ${widget.endereco["numero"] ?? ""}",
-      widget.endereco["complemento"] ?? "",
-      widget.endereco["bairro"] ?? "",
-      "${widget.endereco["cidade"] ?? ""} - ${widget.endereco["estado"] ?? ""}",
-      widget.endereco["cep"] ?? "",
-    ]
-        .where(
-          (e) => e.trim().isNotEmpty,
-        )
-        .join("\n");
-  }
-
-  // ============================================================
-  // ITENS
-  // ============================================================
-
-  List<Map<String, dynamic>> prepararItens() {
-    return widget.itens.map((item) {
-      return {
-        "produtoId": item.nome,
-        "nome": item.nome,
-        "quantidade": item.quantidade,
-        "preco": item.preco,
-        "valor": item.preco * item.quantidade,
-      };
-    }).toList();
-  }
-
-  // ============================================================
-  // MENSAGEM
-  // ============================================================
-
-  void mostrarMensagem(
-    String mensagem, {
-    bool erro = false,
-  }) {
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensagem),
-        backgroundColor: erro ? Colors.red.shade700 : laranja,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
-  }
-
-  // ============================================================
-  // NAVEGAR PARA PEDIDO
-  // ============================================================
-
-  void abrirPedido(int pedidoId) {
-    if (!mounted) return;
-
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OrderTrackingScreen(
-          pedidoId: pedidoId,
-        ),
-      ),
-      (route) => route.isFirst,
-    );
-  }
-
-  // ============================================================
-  // EXTRAIR PEDIDO ID
-  // ============================================================
-
-  int? extrairPedidoId(
-    Map<String, dynamic> dados,
-  ) {
-    dynamic valor;
-
-    final pedido = dados["pedido"];
-
-    if (pedido is Map) {
-      valor =
-          pedido["id"] ??
-          pedido["_id"] ??
-          pedido["pedidoId"];
-    }
-
-    valor ??= dados["pedidoId"];
-    valor ??= dados["orderId"];
-
-    if (valor == null) {
-      return null;
-    }
-
-    if (valor is int) {
-      return valor;
-    }
-
-    return int.tryParse(
-      valor.toString().trim(),
-    );
-  }
-
-  // ============================================================
-  // EXIBIR ERRO DO BACKEND
-  // ============================================================
-
-  String extrairMensagemErro(
-    Map<String, dynamic> dados,
-  ) {
-    final erro =
-        dados["erro"] ??
-        dados["mensagem"] ??
-        dados["message"] ??
-        dados["error"];
-
-    if (erro != null && erro.toString().trim().isNotEmpty) {
-      return erro.toString();
-    }
-
-    return "Não foi possível processar o pagamento.";
-  }
-
-  // ============================================================
-  // CARD PRINCIPAL
-  // ============================================================
-
-  Widget cardPadrao(Widget child) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 12,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: child,
-    );
-  }
-
-  // ============================================================
-  // BUILD
-  // ============================================================
+  double get totalPedido =>
+      widget.subtotal + widget.taxaEntrega + widget.taxaServico;
 
   @override
   Widget build(BuildContext context) {
-    if (formaPagamento == "PIX") {
+    final forma = widget.formaPagamento.toUpperCase();
+
+    if (forma == "PIX") {
       return PixCheckoutPage(
         endereco: widget.endereco,
         itens: widget.itens,
@@ -260,7 +57,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
       );
     }
 
-    if (formaPagamento == "CREDITO") {
+    if (forma == "CREDITO") {
       return CardPaymentPage(
         endereco: widget.endereco,
         itens: widget.itens,
@@ -273,60 +70,21 @@ class _PaymentScreenState extends State<PaymentScreen> {
     }
 
     return Scaffold(
-      backgroundColor: fundo,
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-        title: const Text(
-          "Pagamento",
-          style: TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        title: const Text("Pagamento"),
+        backgroundColor: const Color(0xFFF97316),
+        foregroundColor: Colors.white,
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: cardPadrao(
-            Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(
-                  Icons.error_outline,
-                  color: Colors.red,
-                  size: 50,
-                ),
-                const SizedBox(height: 15),
-                const Text(
-                  "Forma de pagamento inválida.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "Volte e selecione outra forma de pagamento.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
+      body: const Center(
+        child: Text("Forma de pagamento não disponível."),
       ),
     );
   }
 }
 
-// ============================================================================
+// ============================================================
 // PIX
-// ============================================================================
+// ============================================================
 
 class PixCheckoutPage extends StatefulWidget {
   final Map<String, String> endereco;
@@ -349,66 +107,43 @@ class PixCheckoutPage extends StatefulWidget {
   });
 
   @override
-  State<PixCheckoutPage> createState() =>
-      _PixCheckoutPageState();
+  State<PixCheckoutPage> createState() => _PixCheckoutPageState();
 }
 
-class _PixCheckoutPageState
-    extends State<PixCheckoutPage> {
-  static const Color laranja = Color(0xFFF97316);
-  static const Color fundo = Color(0xFFF6F7F9);
-
+class _PixCheckoutPageState extends State<PixCheckoutPage> {
   bool carregando = true;
   bool erro = false;
 
-  String mensagemErro = "";
-
   String? pagamentoId;
   String? qrCodeBase64;
-  String? copiaECola;
-  String? vencimento;
+  String? copiaCola;
+  String? expiracao;
 
-  Timer? _timer;
+  Timer? timer;
+
+  double get totalPedido =>
+      widget.subtotal + widget.taxaEntrega + widget.taxaServico;
 
   @override
   void initState() {
     super.initState();
-
-    _gerarPix();
+    gerarPix();
   }
 
   @override
   void dispose() {
-    _timer?.cancel();
+    timer?.cancel();
     super.dispose();
   }
 
-  // ============================================================
-  // TOKEN
-  // ============================================================
-
-  Future<String> obterToken() async {
+  Future<String?> obterToken() async {
     final prefs = await SharedPreferences.getInstance();
 
-    final tokens = [
-      prefs.getString("token"),
-      prefs.getString("jwt"),
-      prefs.getString("access_token"),
-      prefs.getString("auth_token"),
-    ];
-
-    for (final token in tokens) {
-      if (token != null && token.trim().isNotEmpty) {
-        return token.trim();
-      }
-    }
-
-    return "";
+    return prefs.getString("token") ??
+        prefs.getString("jwt") ??
+        prefs.getString("access_token") ??
+        prefs.getString("auth_token");
   }
-
-  // ============================================================
-  // ITENS
-  // ============================================================
 
   List<Map<String, dynamic>> prepararItens() {
     return widget.itens.map((item) {
@@ -417,229 +152,131 @@ class _PixCheckoutPageState
         "nome": item.nome,
         "quantidade": item.quantidade,
         "preco": item.preco,
-        "valor": item.preco * item.quantidade,
       };
     }).toList();
   }
 
-  // ============================================================
-  // VALORES
-  // ============================================================
-
-  double get totalPedido {
-    return widget.subtotal +
-        widget.taxaServico +
-        widget.taxaEntrega;
-  }
-
-  // ============================================================
-  // GERAR PIX
-  // ============================================================
-
-  Future<void> _gerarPix() async {
-    final token = await obterToken();
-
-    if (token.isEmpty) {
-      if (!mounted) return;
-
-      setState(() {
-        carregando = false;
-        erro = true;
-        mensagemErro =
-            "Sessão expirada. Faça login novamente.";
-      });
-
-      return;
-    }
-
-    final url = Uri.parse(
-      "${Api.baseUrl}/pagamentos/pix",
-    );
-
-    final body = {
-      "valor": totalPedido,
-      "total": totalPedido,
-      "subtotal": widget.subtotal,
-      "taxaEntrega": widget.taxaEntrega,
-      "taxaServico": widget.taxaServico,
-      "restauranteId": widget.restauranteId,
-      "pedidoId": widget.pedidoId,
-      "endereco": widget.endereco,
-      "itens": prepararItens(),
-    };
-
-    debugPrint("");
-    debugPrint("========================================");
-    debugPrint("💠 FOODJET - GERAR PIX");
-    debugPrint("========================================");
-    debugPrint("POST: $url");
-    debugPrint("PEDIDO ID: ${widget.pedidoId}");
-    debugPrint("RESTAURANTE: ${widget.restauranteId}");
-    debugPrint("VALOR: $totalPedido");
-    debugPrint("========================================");
-
+  Future<void> gerarPix() async {
     try {
-      final response = await http
-          .post(
-            url,
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-              "Authorization": "Bearer $token",
-            },
-            body: jsonEncode(body),
-          )
-          .timeout(
-            const Duration(seconds: 30),
-          );
+      setState(() {
+        carregando = true;
+        erro = false;
+      });
 
-      debugPrint(
-        "PIX STATUS: ${response.statusCode}",
+      final token = await obterToken();
+
+      if (token == null || token.isEmpty) {
+        throw Exception("Token de autenticação não encontrado.");
+      }
+
+      final url = Uri.parse(
+        "${Api.baseUrl}/pagamentos/pix",
       );
 
-      Map<String, dynamic> dados = {};
+      final response = await http.post(
+        url,
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode({
+          "valor": totalPedido,
+          "total": totalPedido,
+          "subtotal": widget.subtotal,
+          "taxaEntrega": widget.taxaEntrega,
+          "taxaServico": widget.taxaServico,
+          "restauranteId": widget.restauranteId,
+          "pedidoId": widget.pedidoId,
+          "endereco": widget.endereco,
+          "itens": prepararItens(),
+        }),
+      );
 
-      try {
-        final decoded = jsonDecode(response.body);
-
-        if (decoded is Map) {
-          dados = Map<String, dynamic>.from(decoded);
-        }
-      } catch (_) {}
-
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300) {
-        if (!mounted) return;
-
-        setState(() {
-          carregando = false;
-          erro = true;
-          mensagemErro =
-              dados["erro"] ??
-              dados["mensagem"] ??
-              dados["message"] ??
-              "Não foi possível gerar o Pix.";
-        });
-
-        return;
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception(
+          "Erro ao gerar PIX: ${response.statusCode}",
+        );
       }
 
-      if (dados["sucesso"] != true &&
-          dados["pagamentoId"] == null &&
-          dados["paymentId"] == null) {
-        if (!mounted) return;
+      final dados = jsonDecode(response.body);
 
-        setState(() {
-          carregando = false;
-          erro = true;
-          mensagemErro =
-              dados["erro"] ??
-              dados["mensagem"] ??
-              dados["message"] ??
-              "Não foi possível gerar o Pix.";
-        });
-
-        return;
+      if (dados["sucesso"] != true) {
+        throw Exception(
+          dados["mensagem"] ??
+              "Não foi possível gerar o PIX.",
+        );
       }
 
-      final pix =
-          dados["pix"] is Map
-              ? Map<String, dynamic>.from(
-                  dados["pix"],
-                )
-              : <String, dynamic>{};
+      final pagamento = dados["pagamento"] ?? dados;
 
-      final id =
-          dados["pagamentoId"] ??
-          dados["paymentId"] ??
-          dados["id"];
+      pagamentoId =
+          pagamento["pagamentoId"]?.toString() ??
+          dados["pagamentoId"]?.toString();
 
-      final qr =
-          dados["qrCodeBase64"] ??
-          dados["qrCode"] ??
-          pix["qrCodeBase64"] ??
-          pix["encodedImage"] ??
-          pix["qrCode"];
+      qrCodeBase64 =
+          pagamento["qrCodeBase64"]?.toString() ??
+          pagamento["qrCode"]?.toString() ??
+          dados["qrCodeBase64"]?.toString();
 
-      final copia =
-          dados["copiaECola"] ??
-          dados["payload"] ??
-          dados["pixCopiaECola"] ??
-          pix["payload"] ??
-          pix["copiaECola"];
+      copiaCola =
+          pagamento["payload"]?.toString() ??
+          pagamento["copiaCola"]?.toString() ??
+          dados["payload"]?.toString();
 
-      final venc =
-          dados["dataExpiracao"] ??
-          dados["expirationDate"] ??
-          pix["expirationDate"];
+      expiracao =
+          pagamento["expirationDate"]?.toString() ??
+          pagamento["expiracao"]?.toString() ??
+          dados["expirationDate"]?.toString();
+
+      if (pagamentoId == null || pagamentoId!.isEmpty) {
+        throw Exception(
+          "O servidor não retornou o ID do pagamento.",
+        );
+      }
 
       if (!mounted) return;
 
       setState(() {
-        pagamentoId = id?.toString();
-        qrCodeBase64 = qr?.toString();
-        copiaECola = copia?.toString();
-        vencimento = venc?.toString();
         carregando = false;
       });
 
-      if (pagamentoId != null &&
-          pagamentoId!.trim().isNotEmpty) {
-        _iniciarConsultaPagamento();
-      }
+      iniciarConsultaPagamento();
     } catch (e) {
-      debugPrint(
-        "❌ ERRO AO GERAR PIX: $e",
-      );
+      debugPrint("ERRO AO GERAR PIX: $e");
 
       if (!mounted) return;
 
       setState(() {
         carregando = false;
         erro = true;
-        mensagemErro =
-            "Erro ao conectar com o servidor.";
       });
     }
   }
 
-  // ============================================================
-  // CONSULTAR PIX
-  // ============================================================
+  void iniciarConsultaPagamento() {
+    timer?.cancel();
 
-  void _iniciarConsultaPagamento() {
-    _timer?.cancel();
-
-    _timer = Timer.periodic(
-      const Duration(seconds: 2),
+    timer = Timer.periodic(
+      const Duration(seconds: 5),
       (_) {
-        _consultarPagamento();
+        consultarPagamento();
       },
     );
   }
 
-  Future<void> _consultarPagamento() async {
-    final id = pagamentoId;
-
-    if (id == null || id.trim().isEmpty) {
-      return;
-    }
-
-    final token = await obterToken();
-
-    if (token.isEmpty) {
-      return;
-    }
+  Future<void> consultarPagamento() async {
+    if (pagamentoId == null) return;
 
     try {
-      final url = Uri.parse(
-        "${Api.baseUrl}/pagamentos/$id",
-      );
+      final token = await obterToken();
+
+      if (token == null || token.isEmpty) return;
 
       final response = await http.get(
-        url,
+        Uri.parse(
+          "${Api.baseUrl}/pagamentos/$pagamentoId",
+        ),
         headers: {
-          "Accept": "application/json",
           "Authorization": "Bearer $token",
         },
       );
@@ -649,489 +286,224 @@ class _PixCheckoutPageState
         return;
       }
 
-      final decoded = jsonDecode(response.body);
+      final dados = jsonDecode(response.body);
 
-      if (decoded is! Map) {
-        return;
-      }
-
-      final dados =
-          Map<String, dynamic>.from(decoded);
+      final status =
+          dados["statusPagamento"]?.toString().toUpperCase() ??
+          dados["status"]?.toString().toUpperCase() ??
+          "";
 
       final aprovado =
           dados["pagamentoAprovado"] == true ||
-          dados["statusPagamento"]
-                  ?.toString()
-                  .toLowerCase() ==
-              "approved" ||
-          dados["status"]
-                  ?.toString()
-                  .toUpperCase() ==
-              "RECEIVED" ||
-          dados["status"]
-                  ?.toString()
-                  .toUpperCase() ==
-              "CONFIRMED";
+          status == "APPROVED" ||
+          status == "RECEIVED" ||
+          status == "CONFIRMED";
 
-      if (!aprovado) {
-        return;
-      }
+      if (!aprovado) return;
+
+      timer?.cancel();
 
       final pedidoId =
-          _extrairPedidoId(dados);
+          dados["pedidoId"]?.toString() ??
+          dados["pedido"]?["id"]?.toString();
 
-      if (pedidoId == null) {
+      if (pedidoId == null || pedidoId.isEmpty) {
         debugPrint(
-          "⚠️ PIX aprovado, mas pedidoId ainda não retornado.",
+          "PIX APROVADO, MAS PEDIDO NÃO FOI RETORNADO.",
         );
         return;
       }
 
-      _timer?.cancel();
-
       if (!mounted) return;
 
-      mostrarMensagem(
-        "Pagamento aprovado! Pedido confirmado.",
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OrderTrackingScreen(
+            pedidoId: int.tryParse(pedidoId) ?? 0,
+          ),
+        ),
       );
-
-      await Future.delayed(
-        const Duration(milliseconds: 600),
-      );
-
-      if (!mounted) return;
-
-      abrirPedido(pedidoId);
     } catch (e) {
       debugPrint(
-        "⚠️ Erro consultando PIX: $e",
+        "ERRO AO CONSULTAR PAGAMENTO PIX: $e",
       );
     }
   }
 
-  int? _extrairPedidoId(
-    Map<String, dynamic> dados,
-  ) {
-    dynamic valor;
-
-    final pedido = dados["pedido"];
-
-    if (pedido is Map) {
-      valor =
-          pedido["id"] ??
-          pedido["_id"] ??
-          pedido["pedidoId"];
-    }
-
-    valor ??= dados["pedidoId"];
-    valor ??= dados["orderId"];
-
-    if (valor == null) {
-      return null;
-    }
-
-    if (valor is int) {
-      return valor;
-    }
-
-    return int.tryParse(
-      valor.toString(),
-    );
-  }
-
-  // ============================================================
-  // COPIAR PIX
-  // ============================================================
-
-  Future<void> _copiarPix() async {
-    if (copiaECola == null ||
-        copiaECola!.trim().isEmpty) {
-      mostrarMensagem(
-        "Código Pix indisponível.",
-        erro: true,
-      );
-      return;
-    }
+  Future<void> copiarPix() async {
+    if (copiaCola == null || copiaCola!.isEmpty) return;
 
     await Clipboard.setData(
-      ClipboardData(
-        text: copiaECola!,
-      ),
+      ClipboardData(text: copiaCola!),
     );
 
-    mostrarMensagem(
-      "Código Pix copiado.",
-    );
-  }
-
-  // ============================================================
-  // MENSAGEM
-  // ============================================================
-
-  void mostrarMensagem(
-    String mensagem, {
-    bool erro = false,
-  }) {
     if (!mounted) return;
-
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensagem),
-        backgroundColor:
-            erro ? Colors.red.shade700 : laranja,
-        behavior: SnackBarBehavior.floating,
+      const SnackBar(
+        content: Text("Código PIX copiado."),
       ),
     );
   }
-
-  // ============================================================
-  // ABRIR PEDIDO
-  // ============================================================
-
-  void abrirPedido(int pedidoId) {
-    if (!mounted) return;
-
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OrderTrackingScreen(
-          pedidoId: pedidoId,
-        ),
-      ),
-      (route) => route.isFirst,
-    );
-  }
-
-  // ============================================================
-  // BUILD
-  // ============================================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: fundo,
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-        title: const Text(
-          "Pagamento Pix",
-          style: TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+        title: const Text("Pagamento PIX"),
+        backgroundColor: const Color(0xFFF97316),
+        foregroundColor: Colors.white,
       ),
-      body: SafeArea(
-        child: carregando
-            ? const Center(
-                child: CircularProgressIndicator(
-                  color: laranja,
-                ),
-              )
-            : erro
-                ? _telaErro()
-                : _telaPix(),
-      ),
-    );
-  }
-
-  Widget _telaErro() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(22),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius:
-                BorderRadius.circular(18),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(
-                Icons.error_outline,
-                color: Colors.red,
-                size: 55,
-              ),
-              const SizedBox(height: 15),
-              const Text(
-                "Não foi possível gerar o Pix",
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                mensagemErro,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.grey.shade600,
-                ),
-              ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: () {
-                    setState(() {
-                      carregando = true;
-                      erro = false;
-                      mensagemErro = "";
-                    });
-
-                    _gerarPix();
-                  },
-                  style:
-                      ElevatedButton.styleFrom(
-                    backgroundColor: laranja,
-                    foregroundColor: Colors.white,
-                    elevation: 0,
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(14),
-                    ),
-                  ),
-                  child: const Text(
-                    "Tentar novamente",
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _telaPix() {
-    return SingleChildScrollView(
-      physics:
-          const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(18),
-      child: Column(
-        children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: const Color(0xFFEFFBF7),
-              borderRadius:
-                  BorderRadius.circular(18),
-            ),
-            child: const Row(
-              children: [
-                Icon(
-                  Icons.verified_outlined,
-                  color: Colors.green,
-                ),
-                SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    "Aguardando confirmação do pagamento Pix.",
-                    style: TextStyle(
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 18),
-
-          if (qrCodeBase64 != null &&
-              qrCodeBase64!.trim().isNotEmpty)
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(18),
-              ),
-              child: Column(
-                children: [
-                  const Text(
-                    "Escaneie o QR Code",
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  Image.memory(
-                    base64Decode(
-                      qrCodeBase64!.replaceFirst(
-                        RegExp(
-                          r"^data:image\/[a-zA-Z]+;base64,",
+      body: carregando
+          ? const Center(
+              child: CircularProgressIndicator(),
+            )
+          : erro
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment:
+                          MainAxisAlignment.center,
+                      children: [
+                        const Icon(
+                          Icons.error_outline,
+                          size: 64,
+                          color: Colors.red,
                         ),
-                        "",
-                      ),
-                    ),
-                    width: 260,
-                    height: 260,
-                    fit: BoxFit.contain,
-                  ),
-                ],
-              ),
-            ),
-
-          const SizedBox(height: 18),
-
-          if (copiaECola != null &&
-              copiaECola!.trim().isNotEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(18),
-              ),
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    "Pix Copia e Cola",
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Container(
-                    width: double.infinity,
-                    padding:
-                        const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color:
-                          Colors.grey.shade100,
-                      borderRadius:
-                          BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      copiaECola!,
-                      maxLines: 4,
-                      overflow:
-                          TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color:
-                            Colors.grey.shade700,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: OutlinedButton.icon(
-                      onPressed: _copiarPix,
-                      icon: const Icon(
-                        Icons.copy,
-                      ),
-                      label: const Text(
-                        "COPIAR CÓDIGO PIX",
-                      ),
-                      style:
-                          OutlinedButton.styleFrom(
-                        foregroundColor: laranja,
-                        side:
-                            const BorderSide(
-                          color: laranja,
-                        ),
-                        shape:
-                            RoundedRectangleBorder(
-                          borderRadius:
-                              BorderRadius.circular(
-                            14,
+                        const SizedBox(height: 16),
+                        const Text(
+                          "Não foi possível gerar o PIX.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
+                        const SizedBox(height: 20),
+                        ElevatedButton(
+                          onPressed: gerarPix,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor:
+                                const Color(0xFFF97316),
+                            foregroundColor: Colors.white,
+                          ),
+                          child: const Text(
+                            "Tentar novamente",
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      const Icon(
+                        Icons.pix,
+                        size: 64,
+                        color: Color(0xFFF97316),
                       ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-          const SizedBox(height: 18),
-
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius:
-                  BorderRadius.circular(18),
-            ),
-            child: Column(
-              children: [
-                const Text(
-                  "Valor do pagamento",
-                  style: TextStyle(
-                    color: Colors.black54,
+                      const SizedBox(height: 12),
+                      const Text(
+                        "Pague com PIX",
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      const Text(
+                        "Escaneie o QR Code ou copie o código PIX.",
+                        textAlign: TextAlign.center,
+                      ),
+                      const SizedBox(height: 24),
+                      if (qrCodeBase64 != null &&
+                          qrCodeBase64!.isNotEmpty)
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius:
+                                BorderRadius.circular(16),
+                          ),
+                          child: Image.memory(
+                            base64Decode(
+                              qrCodeBase64!
+                                  .replaceFirst(
+                                    RegExp(
+                                      r'^data:image\/[a-zA-Z]+;base64,',
+                                    ),
+                                    '',
+                                  ),
+                            ),
+                            width: 250,
+                            height: 250,
+                          ),
+                        ),
+                      const SizedBox(height: 24),
+                      if (copiaCola != null &&
+                          copiaCola!.isNotEmpty)
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: copiarPix,
+                            icon: const Icon(
+                              Icons.copy,
+                            ),
+                            label: const Text(
+                              "Copiar código PIX",
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor:
+                                  const Color(0xFFF97316),
+                              foregroundColor: Colors.white,
+                              padding:
+                                  const EdgeInsets.symmetric(
+                                vertical: 15,
+                              ),
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 20),
+                      Text(
+                        "Total: R\$ ${totalPedido.toStringAsFixed(2).replaceAll('.', ',')}",
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      if (expiracao != null &&
+                          expiracao!.isNotEmpty) ...[
+                        const SizedBox(height: 10),
+                        Text(
+                          "Expiração: $expiracao",
+                          style: const TextStyle(
+                            color: Colors.grey,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 30),
+                      const Text(
+                        "Aguardando confirmação do pagamento...",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.grey,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 5),
-                Text(
-                  "R\$ ${totalPedido.toStringAsFixed(2).replaceAll(".", ",")}",
-                  style: const TextStyle(
-                    color: laranja,
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                if (vencimento != null &&
-                    vencimento!
-                        .trim()
-                        .isNotEmpty) ...[
-                  const SizedBox(height: 8),
-                  Text(
-                    "Vencimento: $vencimento",
-                    style: TextStyle(
-                      color:
-                          Colors.grey.shade600,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 18),
-
-          const Text(
-            "Depois que o pagamento for confirmado, "
-            "o pedido será criado automaticamente.",
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Colors.black54,
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
 
-// ============================================================================
+// ============================================================
 // CARTÃO DE CRÉDITO
-// ============================================================================
+// ============================================================
 
 class CardPaymentPage extends StatefulWidget {
   final Map<String, String> endereco;
@@ -1140,11 +512,6 @@ class CardPaymentPage extends StatefulWidget {
   final String restauranteId;
   final double taxaEntrega;
   final double taxaServico;
-
-  // Mantido opcional por compatibilidade.
-  //
-  // NÃO é utilizado para iniciar o pagamento.
-  // O pedido só deve nascer após a aprovação do cartão.
   final String? pedidoId;
 
   const CardPaymentPage({
@@ -1165,65 +532,37 @@ class CardPaymentPage extends StatefulWidget {
 
 class _CardPaymentPageState
     extends State<CardPaymentPage> {
-  static const Color laranja = Color(0xFFF97316);
-  static const Color fundo = Color(0xFFF6F7F9);
-
   final formKey = GlobalKey<FormState>();
 
-  final numeroController =
-      TextEditingController();
-
-  final validadeController =
-      TextEditingController();
-
-  final cvvController =
-      TextEditingController();
+  final nomeController = TextEditingController();
+  final numeroController = TextEditingController();
+  final validadeController = TextEditingController();
+  final cvvController = TextEditingController();
 
   bool processando = false;
 
-  String? pagamentoId;
-
-  Timer? _timer;
+  double get totalPedido =>
+      widget.subtotal +
+      widget.taxaEntrega +
+      widget.taxaServico;
 
   @override
   void dispose() {
-    _timer?.cancel();
-
+    nomeController.dispose();
     numeroController.dispose();
     validadeController.dispose();
     cvvController.dispose();
-
     super.dispose();
   }
 
-  // ============================================================
-  // TOKEN
-  // ============================================================
+  Future<String?> obterToken() async {
+    final prefs = await SharedPreferences.getInstance();
 
-  Future<String> obterToken() async {
-    final prefs =
-        await SharedPreferences.getInstance();
-
-    final tokens = [
-      prefs.getString("token"),
-      prefs.getString("jwt"),
-      prefs.getString("access_token"),
-      prefs.getString("auth_token"),
-    ];
-
-    for (final token in tokens) {
-      if (token != null &&
-          token.trim().isNotEmpty) {
-        return token.trim();
-      }
-    }
-
-    return "";
+    return prefs.getString("token") ??
+        prefs.getString("jwt") ??
+        prefs.getString("access_token") ??
+        prefs.getString("auth_token");
   }
-
-  // ============================================================
-  // ITENS
-  // ============================================================
 
   List<Map<String, dynamic>> prepararItens() {
     return widget.itens.map((item) {
@@ -1232,39 +571,9 @@ class _CardPaymentPageState
         "nome": item.nome,
         "quantidade": item.quantidade,
         "preco": item.preco,
-        "valor": item.preco * item.quantidade,
       };
     }).toList();
   }
-
-  // ============================================================
-  // TOTAL
-  // ============================================================
-
-  double get totalPedido {
-    return widget.subtotal +
-        widget.taxaServico +
-        widget.taxaEntrega;
-  }
-
-  String dinheiro(double valor) {
-    return "R\$ ${valor.toStringAsFixed(2).replaceAll(".", ",")}";
-  }
-
-  // ============================================================
-  // LIMPAR NÚMERO
-  // ============================================================
-
-  String somenteNumeros(String valor) {
-    return valor.replaceAll(
-      RegExp(r"[^0-9]"),
-      "",
-    );
-  }
-
-  // ============================================================
-  // VALIDAR
-  // ============================================================
 
   bool validarCampos() {
     if (!formKey.currentState!.validate()) {
@@ -1272,42 +581,55 @@ class _CardPaymentPageState
     }
 
     final numero =
-        somenteNumeros(
-      numeroController.text,
-    );
+        numeroController.text.replaceAll(RegExp(r'\D'), '');
+
+    if (numero.length < 13 || numero.length > 19) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Informe um número de cartão válido.",
+          ),
+        ),
+      );
+      return false;
+    }
 
     final cvv =
-        somenteNumeros(
-      cvvController.text,
-    );
+        cvvController.text.replaceAll(RegExp(r'\D'), '');
 
-    final validade =
-        validadeController.text.trim();
-
-    if (numero.length < 13 ||
-        numero.length > 19) {
-      mostrarMensagem(
-        "Informe um número de cartão válido.",
-        erro: true,
+    if (cvv.length < 3 || cvv.length > 4) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Informe um CVV válido."),
+        ),
       );
       return false;
     }
 
-    if (cvv.length < 3 ||
-        cvv.length > 4) {
-      mostrarMensagem(
-        "Informe um CVV válido.",
-        erro: true,
+    final validade = validadeController.text.trim();
+
+    final match = RegExp(
+      r'^(\d{2})\/(\d{2}|\d{4})$',
+    ).firstMatch(validade);
+
+    if (match == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Informe a validade no formato MM/AA.",
+          ),
+        ),
       );
       return false;
     }
 
-    if (!RegExp(
-      r"^\d{2}\/\d{2,4}$",
-    ).hasMatch(validade)) {
-      mostrarMensagem(
-        "Informe a validade no formato MM/AA.",
-        erro: true,
+    final mes = int.tryParse(match.group(1)!);
+
+    if (mes == null || mes < 1 || mes > 12) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Mês de validade inválido."),
+        ),
       );
       return false;
     }
@@ -1315,257 +637,126 @@ class _CardPaymentPageState
     return true;
   }
 
-  // ============================================================
-  // PAGAR
-  // ============================================================
-
-  Future<void> _pagar() async {
-    if (processando) {
-      return;
-    }
-
-    if (!validarCampos()) {
-      return;
-    }
-
-    final token = await obterToken();
-
-    if (token.isEmpty) {
-      mostrarMensagem(
-        "Sessão expirada. Faça login novamente.",
-        erro: true,
-      );
-      return;
-    }
+  Future<void> pagar() async {
+    if (!validarCampos()) return;
 
     setState(() {
       processando = true;
     });
 
-    final numero =
-        somenteNumeros(
-      numeroController.text,
-    );
-
-    final cvv =
-        somenteNumeros(
-      cvvController.text,
-    );
-
-    final validade =
-        validadeController.text.trim();
-
-    final partes =
-        validade.split("/");
-
-    String mes = "";
-    String ano = "";
-
-    if (partes.length == 2) {
-      mes = partes[0].trim();
-      ano = partes[1].trim();
-
-      if (ano.length == 2) {
-        ano = "20$ano";
-      }
-    }
-
-    // ==========================================================
-    // IMPORTANTE
-    //
-    // NÃO enviamos:
-    //
-    // - nome do titular
-    // - CPF
-    // - telefone do titular
-    // - CEP de cobrança
-    // - endereço de cobrança
-    //
-    // O backend deverá obter os dados do usuário autenticado
-    // a partir do cadastro dele.
-    //
-    // Também NÃO enviamos pedidoId.
-    //
-    // O pedido só deve nascer após a aprovação do cartão.
-    // ==========================================================
-
-    final body = {
-      "valor": totalPedido,
-      "total": totalPedido,
-      "subtotal": widget.subtotal,
-      "taxaEntrega": widget.taxaEntrega,
-      "taxaServico": widget.taxaServico,
-
-      // Endereço de ENTREGA.
-      "restauranteId":
-          widget.restauranteId,
-
-      "endereco":
-          widget.endereco,
-
-      "itens":
-          prepararItens(),
-
-      "formaPagamento":
-          "CREDITO",
-
-      "pagamento":
-          "CREDITO",
-
-      // Somente os dados necessários do cartão.
-      //
-      // NÃO enviar dados do titular aqui.
-      "cartao": {
-        "numero": numero,
-        "mes": mes,
-        "ano": ano,
-        "cvv": cvv,
-      },
-    };
-
-    final url = Uri.parse(
-      "${Api.baseUrl}/pagamentos/cartao",
-    );
-
-    debugPrint("");
-    debugPrint("========================================");
-    debugPrint("💳 FOODJET - PAGAMENTO CARTÃO");
-    debugPrint("========================================");
-    debugPrint("POST: $url");
-    debugPrint(
-      "RESTAURANTE: ${widget.restauranteId}",
-    );
-    debugPrint(
-      "VALOR: $totalPedido",
-    );
-    debugPrint(
-      "DADOS DO TITULAR: NÃO ENVIADOS PELO APP",
-    );
-    debugPrint(
-      "ENDEREÇO DE COBRANÇA: NÃO ENVIADO",
-    );
-    debugPrint(
-      "FLUXO: CARTÃO → ASAAS → APROVAÇÃO → PEDIDO",
-    );
-    debugPrint(
-      "PEDIDO ID PRÉVIO: NÃO UTILIZADO",
-    );
-    debugPrint("========================================");
-
     try {
-      final response = await http
-          .post(
-            url,
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-              "Authorization":
-                  "Bearer $token",
-            },
-            body: jsonEncode(body),
-          )
-          .timeout(
-            const Duration(seconds: 45),
-          );
+      final token = await obterToken();
 
-      debugPrint("");
-      debugPrint("========================================");
-      debugPrint("📥 RESPOSTA CARTÃO");
-      debugPrint("========================================");
-      debugPrint(
-        "STATUS: ${response.statusCode}",
-      );
-      debugPrint(
-        "RESPOSTA RECEBIDA DO BACKEND.",
-      );
-      debugPrint("========================================");
-
-      Map<String, dynamic> dados = {};
-
-      try {
-        final decoded =
-            jsonDecode(response.body);
-
-        if (decoded is Map) {
-          dados =
-              Map<String, dynamic>.from(decoded);
-        }
-      } catch (e) {
-        debugPrint(
-          "⚠️ Resposta não é JSON: $e",
+      if (token == null || token.isEmpty) {
+        throw Exception(
+          "Token de autenticação não encontrado.",
         );
       }
+
+      final numero =
+          numeroController.text.replaceAll(RegExp(r'\D'), '');
+
+      final cvv =
+          cvvController.text.replaceAll(RegExp(r'\D'), '');
+
+      final validade = validadeController.text.trim();
+
+      final partes = validade.split('/');
+
+      final mes = int.parse(partes[0]);
+
+      int ano = int.parse(partes[1]);
+
+      if (partes[1].length == 2) {
+        ano += 2000;
+      }
+
+      final body = {
+        "valor": totalPedido,
+        "total": totalPedido,
+        "subtotal": widget.subtotal,
+        "taxaEntrega": widget.taxaEntrega,
+        "taxaServico": widget.taxaServico,
+        "restauranteId": widget.restauranteId,
+
+        // Endereço de ENTREGA.
+        "endereco": widget.endereco,
+
+        "itens": prepararItens(),
+
+        "formaPagamento": "CREDITO",
+        "pagamento": "CREDITO",
+
+        "cartao": {
+          "numero": numero,
+          "nome": nomeController.text.trim(),
+          "mes": mes,
+          "ano": ano,
+          "cvv": cvv,
+        },
+      };
+
+      debugPrint(
+        "PAGAMENTO CARTAO: ENVIANDO PARA O BACKEND",
+      );
+      debugPrint(
+        "NOME DO TITULAR: ENVIADO",
+      );
+      debugPrint(
+        "CPF/TELEFONE: NAO ENVIADOS",
+      );
+      debugPrint(
+        "ENDERECO DE COBRANCA: NAO ENVIADO",
+      );
+
+      final response = await http.post(
+        Uri.parse(
+          "${Api.baseUrl}/pagamentos/cartao",
+        ),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode(body),
+      );
+
+      debugPrint(
+        "STATUS PAGAMENTO CARTAO: ${response.statusCode}",
+      );
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300) {
-        mostrarMensagem(
-          _extrairMensagemErro(dados),
-          erro: true,
-        );
+        String mensagem =
+            "Não foi possível processar o pagamento.";
 
-        if (mounted) {
-          setState(() {
-            processando = false;
-          });
-        }
+        try {
+          final erro = jsonDecode(response.body);
 
-        return;
+          mensagem =
+              erro["mensagem"]?.toString() ??
+              erro["erro"]?.toString() ??
+              mensagem;
+        } catch (_) {}
+
+        throw Exception(mensagem);
       }
 
-      final sucesso =
-          dados["sucesso"] == true ||
-          dados["pagamentoId"] != null ||
-          dados["paymentId"] != null;
+      final dados = jsonDecode(response.body);
 
-      if (!sucesso) {
-        mostrarMensagem(
-          _extrairMensagemErro(dados),
-          erro: true,
+      if (dados["sucesso"] != true) {
+        throw Exception(
+          dados["mensagem"] ??
+              dados["erro"] ??
+              "Pagamento não aprovado.",
         );
-
-        if (mounted) {
-          setState(() {
-            processando = false;
-          });
-        }
-
-        return;
       }
 
-      final id =
-          dados["pagamentoId"] ??
-          dados["paymentId"] ??
-          dados["id"];
-
-      if (id == null ||
-          id.toString().trim().isEmpty) {
-        mostrarMensagem(
-          "O pagamento foi iniciado, mas o identificador não foi retornado.",
-          erro: true,
-        );
-
-        if (mounted) {
-          setState(() {
-            processando = false;
-          });
-        }
-
-        return;
-      }
-
-      pagamentoId =
-          id.toString().trim();
-
-      // ==========================================================
-      // VERIFICAR SE JÁ FOI APROVADO
-      // ==========================================================
-
-      final aprovadoNaResposta =
+      final pagamentoAprovado =
           dados["pagamentoAprovado"] == true ||
           dados["statusPagamento"]
                   ?.toString()
-                  .toLowerCase() ==
-              "approved" ||
+                  .toUpperCase() ==
+              "APPROVED" ||
           dados["status"]
                   ?.toString()
                   .toUpperCase() ==
@@ -1575,306 +766,494 @@ class _CardPaymentPageState
                   .toUpperCase() ==
               "CONFIRMED";
 
-      if (aprovadoNaResposta) {
-        final pedidoId =
-            extrairPedidoId(dados);
+      if (!pagamentoAprovado) {
+        final pagamentoId =
+            dados["pagamentoId"]?.toString();
 
-        if (pedidoId != null) {
-          await pagamentoAprovado(
-            pedidoId,
+        if (pagamentoId != null &&
+            pagamentoId.isNotEmpty) {
+          await aguardarPagamento(
+            pagamentoId,
+            token,
           );
-          return;
+        } else {
+          throw Exception(
+            "Pagamento ainda não confirmado.",
+          );
         }
-      }
 
-      // ==========================================================
-      // PAGAMENTO AINDA SENDO PROCESSADO
-      // ==========================================================
-
-      if (!mounted) return;
-
-      mostrarMensagem(
-        "Pagamento enviado. Aguardando confirmação...",
-      );
-
-      _iniciarConsultaPagamento();
-    } catch (e) {
-      debugPrint(
-        "❌ ERRO PAGAMENTO CARTÃO: $e",
-      );
-
-      if (!mounted) return;
-
-      setState(() {
-        processando = false;
-      });
-
-      mostrarMensagem(
-        "Erro ao conectar com o servidor. Tente novamente.",
-        erro: true,
-      );
-    }
-  }
-
-  // ============================================================
-  // CONSULTAR PAGAMENTO
-  // ============================================================
-
-  void _iniciarConsultaPagamento() {
-    _timer?.cancel();
-
-    _timer = Timer.periodic(
-      const Duration(seconds: 2),
-      (_) {
-        _consultarPagamento();
-      },
-    );
-  }
-
-  Future<void> _consultarPagamento() async {
-    final id = pagamentoId;
-
-    if (id == null ||
-        id.trim().isEmpty) {
-      return;
-    }
-
-    final token = await obterToken();
-
-    if (token.isEmpty) {
-      return;
-    }
-
-    try {
-      final url = Uri.parse(
-        "${Api.baseUrl}/pagamentos/$id",
-      );
-
-      final response = await http
-          .get(
-            url,
-            headers: {
-              "Accept":
-                  "application/json",
-              "Authorization":
-                  "Bearer $token",
-            },
-          )
-          .timeout(
-            const Duration(seconds: 15),
-          );
-
-      if (response.statusCode < 200 ||
-          response.statusCode >= 300) {
         return;
       }
-
-      final decoded =
-          jsonDecode(response.body);
-
-      if (decoded is! Map) {
-        return;
-      }
-
-      final dados =
-          Map<String, dynamic>.from(decoded);
-
-      debugPrint(
-        "💳 STATUS PAGAMENTO: "
-        "${dados["status"] ?? dados["statusPagamento"]}",
-      );
 
       final pedidoId =
           extrairPedidoId(dados);
 
-      final aprovado =
-          dados["pagamentoAprovado"] == true ||
-          dados["statusPagamento"]
-                  ?.toString()
-                  .toLowerCase() ==
-              "approved" ||
-          dados["status"]
-                  ?.toString()
-                  .toUpperCase() ==
-              "RECEIVED" ||
-          dados["status"]
-                  ?.toString()
-                  .toUpperCase() ==
-              "CONFIRMED";
-
-      if (aprovado &&
-          pedidoId != null) {
-        await pagamentoAprovado(
-          pedidoId,
+      if (pedidoId == null) {
+        throw Exception(
+          "Pagamento aprovado, mas o pedido ainda não foi localizado.",
         );
-
-        return;
       }
 
-      // ==========================================================
-      // PAGAMENTO RECUSADO
-      // ==========================================================
+      if (!mounted) return;
 
-      final status =
-          (dados["status"] ??
-                  dados["statusPagamento"] ??
-                  "")
-              .toString()
-              .toUpperCase();
+      Navigator.pushReplacement(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OrderTrackingScreen(
+            pedidoId: pedidoId,
+          ),
+        ),
+      );
+    } catch (e) {
+      debugPrint(
+        "ERRO PAGAMENTO CARTAO: $e",
+      );
 
-      if (status == "REFUSED" ||
-          status == "DENIED" ||
-          status == "CANCELLED" ||
-          status == "CANCELED" ||
-          status == "OVERDUE" ||
-          status == "FAILED") {
-        _timer?.cancel();
+      if (!mounted) return;
 
-        if (!mounted) return;
-
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().replaceFirst(
+                  "Exception: ",
+                  "",
+                ),
+          ),
+          duration: const Duration(seconds: 5),
+        ),
+      );
+    } finally {
+      if (mounted) {
         setState(() {
           processando = false;
         });
-
-        mostrarMensagem(
-          dados["mensagem"] ??
-              dados["erro"] ??
-              "O pagamento foi recusado.",
-          erro: true,
-        );
       }
-    } catch (e) {
-      debugPrint(
-        "⚠️ Erro consultando pagamento: $e",
-      );
     }
   }
-
-  // ============================================================
-  // PAGAMENTO APROVADO
-  // ============================================================
-
-  Future<void> pagamentoAprovado(
-    int pedidoId,
-  ) async {
-    _timer?.cancel();
-
-    if (!mounted) return;
-
-    setState(() {
-      processando = false;
-    });
-
-    mostrarMensagem(
-      "Pagamento aprovado! Pedido confirmado.",
-    );
-
-    await Future.delayed(
-      const Duration(milliseconds: 700),
-    );
-
-    if (!mounted) return;
-
-    Navigator.pushAndRemoveUntil(
-      context,
-      MaterialPageRoute(
-        builder: (_) => OrderTrackingScreen(
-          pedidoId: pedidoId,
-        ),
-      ),
-      (route) => route.isFirst,
-    );
-  }
-
-  // ============================================================
-  // EXTRAIR PEDIDO ID
-  // ============================================================
 
   int? extrairPedidoId(
     Map<String, dynamic> dados,
   ) {
-    dynamic valor;
-
-    final pedido = dados["pedido"];
-
-    if (pedido is Map) {
-      valor =
-          pedido["id"] ??
-          pedido["_id"] ??
-          pedido["pedidoId"];
-    }
-
-    valor ??= dados["pedidoId"];
-    valor ??= dados["orderId"];
-
-    // NÃO utilizar externalReference como pedidoId.
-    //
-    // No novo fluxo de cartão, externalReference pode ser:
-    //
-    // FOODJET-CHK-123-175...
-    //
-    // portanto não é o ID numérico do pedido.
+    final valor =
+        dados["pedidoId"] ??
+        dados["pedido"]?["id"];
 
     if (valor == null) {
       return null;
     }
 
-    if (valor is int) {
-      return valor;
-    }
-
     return int.tryParse(
-      valor.toString().trim(),
+      valor.toString(),
     );
   }
 
-  // ============================================================
-  // ERRO
-  // ============================================================
+  Future<void> aguardarPagamento(
+    String pagamentoId,
+    String token,
+  ) async {
+    for (int tentativa = 0;
+        tentativa < 24;
+        tentativa++) {
+      await Future.delayed(
+        const Duration(seconds: 5),
+      );
 
-  String _extrairMensagemErro(
-    Map<String, dynamic> dados,
-  ) {
-    final erro =
-        dados["erro"] ??
-        dados["mensagem"] ??
-        dados["message"] ??
-        dados["error"];
+      if (!mounted) return;
 
-    if (erro != null &&
-        erro.toString().trim().isNotEmpty) {
-      return erro.toString();
+      try {
+        final response = await http.get(
+          Uri.parse(
+            "${Api.baseUrl}/pagamentos/$pagamentoId",
+          ),
+          headers: {
+            "Authorization": "Bearer $token",
+          },
+        );
+
+        if (response.statusCode < 200 ||
+            response.statusCode >= 300) {
+          continue;
+        }
+
+        final dados = jsonDecode(response.body);
+
+        final status =
+            dados["statusPagamento"]
+                    ?.toString()
+                    .toUpperCase() ??
+                dados["status"]
+                    ?.toString()
+                    .toUpperCase() ??
+                "";
+
+        final aprovado =
+            dados["pagamentoAprovado"] == true ||
+            status == "APPROVED" ||
+            status == "RECEIVED" ||
+            status == "CONFIRMED";
+
+        if (aprovado) {
+          final pedidoId =
+              extrairPedidoId(dados);
+
+          if (pedidoId == null) {
+            continue;
+          }
+
+          if (!mounted) return;
+
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(
+              builder: (_) => OrderTrackingScreen(
+                pedidoId: pedidoId,
+              ),
+            ),
+          );
+
+          return;
+        }
+
+        if (status == "REFUSED" ||
+            status == "FAILED" ||
+            status == "CANCELED" ||
+            status == "CANCELLED") {
+          throw Exception(
+            "O pagamento foi recusado.",
+          );
+        }
+      } catch (e) {
+        if (e.toString().contains(
+              "pagamento foi recusado",
+            )) {
+          rethrow;
+        }
+      }
     }
 
-    return "Não foi possível processar o pagamento.";
+    throw Exception(
+      "O pagamento ainda não foi confirmado. Tente novamente em alguns instantes.",
+    );
   }
 
-  // ============================================================
-  // MENSAGEM
-  // ============================================================
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
+      appBar: AppBar(
+        title: const Text("Cartão de crédito"),
+        backgroundColor: const Color(0xFFF97316),
+        foregroundColor: Colors.white,
+      ),
+      body: Form(
+        key: formKey,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius:
+                      BorderRadius.circular(14),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.lock_outline,
+                      color: Colors.green,
+                    ),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        "Pagamento seguro",
+                        style: TextStyle(
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
-  void mostrarMensagem(
-    String mensagem, {
-    bool erro = false,
-  }) {
-    if (!mounted) return;
+              const SizedBox(height: 24),
 
-    ScaffoldMessenger.of(context)
-        .hideCurrentSnackBar();
+              const Text(
+                "Dados do cartão",
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(mensagem),
-        backgroundColor:
-            erro ? Colors.red.shade700 : laranja,
-        behavior: SnackBarBehavior.floating,
+              const SizedBox(height: 16),
+
+              // ==================================================
+              // NOME DO TITULAR
+              // ==================================================
+
+              campo(
+                controller: nomeController,
+                label: "Nome no cartão",
+                hintText:
+                    "Nome como aparece no cartão",
+                icon: Icons.person_outline,
+                textCapitalization:
+                    TextCapitalization.words,
+                validator: (value) {
+                  if (value == null ||
+                      value.trim().isEmpty) {
+                    return "Informe o nome do titular";
+                  }
+
+                  if (value.trim().length < 3) {
+                    return "Informe o nome completo";
+                  }
+
+                  return null;
+                },
+              ),
+
+              // ==================================================
+              // NUMERO
+              // ==================================================
+
+              campo(
+                controller: numeroController,
+                label: "Número do cartão",
+                hintText: "0000 0000 0000 0000",
+                icon: Icons.credit_card,
+                keyboardType:
+                    TextInputType.number,
+                inputFormatters: [
+                  FilteringTextInputFormatter
+                      .digitsOnly,
+                  LengthLimitingTextInputFormatter(
+                    19,
+                  ),
+                  CardNumberInputFormatter(),
+                ],
+                validator: (value) {
+                  final numero =
+                      value?.replaceAll(
+                            RegExp(r'\D'),
+                            '',
+                          ) ??
+                          '';
+
+                  if (numero.isEmpty) {
+                    return "Informe o número do cartão";
+                  }
+
+                  if (numero.length < 13 ||
+                      numero.length > 19) {
+                    return "Número de cartão inválido";
+                  }
+
+                  return null;
+                },
+              ),
+
+              Row(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: campo(
+                      controller:
+                          validadeController,
+                      label: "Validade",
+                      hintText: "MM/AA",
+                      icon:
+                          Icons.calendar_month,
+                      keyboardType:
+                          TextInputType.number,
+                      inputFormatters: [
+                        FilteringTextInputFormatter
+                            .digitsOnly,
+                        LengthLimitingTextInputFormatter(
+                          6,
+                        ),
+                        ValidityInputFormatter(),
+                      ],
+                      validator: (value) {
+                        if (value == null ||
+                            value.isEmpty) {
+                          return "Informe a validade";
+                        }
+
+                        final match =
+                            RegExp(
+                          r'^(\d{2})\/(\d{2}|\d{4})$',
+                        ).firstMatch(
+                          value.trim(),
+                        );
+
+                        if (match == null) {
+                          return "MM/AA";
+                        }
+
+                        final mes =
+                            int.tryParse(
+                          match.group(1)!,
+                        );
+
+                        if (mes == null ||
+                            mes < 1 ||
+                            mes > 12) {
+                          return "Mês inválido";
+                        }
+
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: campo(
+                      controller: cvvController,
+                      label: "CVV",
+                      hintText: "123",
+                      icon: Icons.lock_outline,
+                      keyboardType:
+                          TextInputType.number,
+                      obscureText: true,
+                      inputFormatters: [
+                        FilteringTextInputFormatter
+                            .digitsOnly,
+                        LengthLimitingTextInputFormatter(
+                          4,
+                        ),
+                      ],
+                      validator: (value) {
+                        final cvv =
+                            value?.replaceAll(
+                                  RegExp(r'\D'),
+                                  '',
+                                ) ??
+                                '';
+
+                        if (cvv.isEmpty) {
+                          return "Informe o CVV";
+                        }
+
+                        if (cvv.length < 3 ||
+                            cvv.length > 4) {
+                          return "CVV inválido";
+                        }
+
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 4),
+
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius:
+                      BorderRadius.circular(12),
+                ),
+                child: const Text(
+                  "Informe apenas o nome do titular exatamente como aparece no cartão. CPF, telefone e endereço de cobrança não são necessários nesta etapa.",
+                  style: TextStyle(
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius:
+                      BorderRadius.circular(14),
+                ),
+                child: Row(
+                  mainAxisAlignment:
+                      MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text(
+                      "Total",
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      "R\$ ${totalPedido.toStringAsFixed(2).replaceAll('.', ',')}",
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight:
+                            FontWeight.bold,
+                        color:
+                            Color(0xFFF97316),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              SizedBox(
+                width: double.infinity,
+                height: 54,
+                child: ElevatedButton(
+                  onPressed:
+                      processando ? null : pagar,
+                  style:
+                      ElevatedButton.styleFrom(
+                    backgroundColor:
+                        const Color(0xFFF97316),
+                    foregroundColor:
+                        Colors.white,
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: processando
+                      ? const SizedBox(
+                          width: 24,
+                          height: 24,
+                          child:
+                              CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : const Text(
+                          "Pagar com cartão",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
-
-  // ============================================================
-  // CAMPO
-  // ============================================================
 
   Widget campo({
     required TextEditingController controller,
@@ -1882,7 +1261,8 @@ class _CardPaymentPageState
     required IconData icon,
     TextInputType? keyboardType,
     bool obscureText = false,
-    List<TextInputFormatter>? inputFormatters,
+    List<TextInputFormatter>?
+        inputFormatters,
     String? Function(String?)? validator,
     String? hintText,
     TextCapitalization textCapitalization =
@@ -1903,32 +1283,46 @@ class _CardPaymentPageState
         decoration: InputDecoration(
           labelText: label,
           hintText: hintText,
-          prefixIcon: Icon(
-            icon,
-            color: laranja,
-          ),
+          prefixIcon: Icon(icon),
           filled: true,
           fillColor: Colors.white,
           border: OutlineInputBorder(
             borderRadius:
-                BorderRadius.circular(13),
+                BorderRadius.circular(12),
+            borderSide: BorderSide.none,
           ),
           enabledBorder:
               OutlineInputBorder(
             borderRadius:
-                BorderRadius.circular(13),
+                BorderRadius.circular(12),
             borderSide:
-                const BorderSide(
-              color: Colors.black12,
-            ),
+                BorderSide(color: Colors.grey.shade300),
           ),
           focusedBorder:
               OutlineInputBorder(
             borderRadius:
-                BorderRadius.circular(13),
+                BorderRadius.circular(12),
+            borderSide: const BorderSide(
+              color: Color(0xFFF97316),
+              width: 2,
+            ),
+          ),
+          errorBorder:
+              OutlineInputBorder(
+            borderRadius:
+                BorderRadius.circular(12),
             borderSide:
                 const BorderSide(
-              color: laranja,
+              color: Colors.red,
+            ),
+          ),
+          focusedErrorBorder:
+              OutlineInputBorder(
+            borderRadius:
+                BorderRadius.circular(12),
+            borderSide:
+                const BorderSide(
+              color: Colors.red,
               width: 2,
             ),
           ),
@@ -1936,411 +1330,81 @@ class _CardPaymentPageState
       ),
     );
   }
+}
 
-  // ============================================================
-  // BUILD
-  // ============================================================
+// ============================================================
+// FORMATADOR DO NUMERO DO CARTAO
+// ============================================================
 
+class CardNumberInputFormatter
+    extends TextInputFormatter {
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: fundo,
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        foregroundColor: Colors.black87,
-        elevation: 0,
-        title: const Text(
-          "Cartão de Crédito",
-          style: TextStyle(
-            fontSize: 19,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits =
+        newValue.text.replaceAll(
+      RegExp(r'\D'),
+      '',
+    );
+
+    final buffer = StringBuffer();
+
+    for (int i = 0;
+        i < digits.length && i < 19;
+        i++) {
+      if (i > 0 && i % 4 == 0) {
+        buffer.write(' ');
+      }
+
+      buffer.write(digits[i]);
+    }
+
+    final result = buffer.toString();
+
+    return TextEditingValue(
+      text: result,
+      selection: TextSelection.collapsed(
+        offset: result.length,
       ),
-      body: SafeArea(
-        child: Form(
-          key: formKey,
-          child: SingleChildScrollView(
-            physics:
-                const BouncingScrollPhysics(),
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                // ==================================================
-                // SEGURANÇA
-                // ==================================================
+    );
+  }
+}
 
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color:
-                        const Color(0xFFF0FBF5),
-                    borderRadius:
-                        BorderRadius.circular(16),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(
-                        Icons.lock_outline,
-                        color: Colors.green,
-                      ),
-                      SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          "Pagamento seguro processado pelo Asaas.",
-                          style: TextStyle(
-                            fontWeight:
-                                FontWeight.w600,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+// ============================================================
+// FORMATADOR DE VALIDADE
+// ============================================================
 
-                const SizedBox(height: 20),
+class ValidityInputFormatter
+    extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits =
+        newValue.text.replaceAll(
+      RegExp(r'\D'),
+      '',
+    );
 
-                // ==================================================
-                // DADOS DO CARTÃO
-                // ==================================================
-
-                const Text(
-                  "Dados do cartão",
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight:
-                        FontWeight.w800,
-                  ),
-                ),
-
-                const SizedBox(height: 12),
-
-                campo(
-                  controller:
-                      numeroController,
-                  label: "Número do cartão",
-                  hintText:
-                      "0000 0000 0000 0000",
-                  icon:
-                      Icons.credit_card,
-                  keyboardType:
-                      TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter
-                        .digitsOnly,
-                    LengthLimitingTextInputFormatter(
-                      19,
-                    ),
-                  ],
-                  validator: (value) {
-                    final numero =
-                        somenteNumeros(
-                      value ?? "",
-                    );
-
-                    if (numero.isEmpty) {
-                      return "Informe o número do cartão";
-                    }
-
-                    if (numero.length <
-                            13 ||
-                        numero.length >
-                            19) {
-                      return "Número inválido";
-                    }
-
-                    return null;
-                  },
-                ),
-
-                Row(
-                  children: [
-                    Expanded(
-                      child: campo(
-                        controller:
-                            validadeController,
-                        label:
-                            "Validade",
-                        hintText:
-                            "MM/AA",
-                        icon:
-                            Icons.date_range_outlined,
-                        keyboardType:
-                            TextInputType.number,
-                        inputFormatters: [
-                          FilteringTextInputFormatter
-                              .allow(
-                            RegExp(
-                              r"[0-9/]",
-                            ),
-                          ),
-                          LengthLimitingTextInputFormatter(
-                            7,
-                          ),
-                        ],
-                        validator:
-                            (value) {
-                          final texto =
-                              value
-                                  ?.trim() ??
-                              "";
-
-                          if (!RegExp(
-                            r"^\d{2}\/\d{2,4}$",
-                          ).hasMatch(
-                            texto,
-                          )) {
-                            return "MM/AA";
-                          }
-
-                          return null;
-                        },
-                      ),
-                    ),
-
-                    const SizedBox(
-                      width: 12,
-                    ),
-
-                    Expanded(
-                      child: campo(
-                        controller:
-                            cvvController,
-                        label: "CVV",
-                        icon:
-                            Icons.lock_outline,
-                        keyboardType:
-                            TextInputType.number,
-                        obscureText: true,
-                        inputFormatters: [
-                          FilteringTextInputFormatter
-                              .digitsOnly,
-                          LengthLimitingTextInputFormatter(
-                            4,
-                          ),
-                        ],
-                        validator:
-                            (value) {
-                          final cvv =
-                              somenteNumeros(
-                            value ?? "",
-                          );
-
-                          if (cvv.length <
-                                  3 ||
-                              cvv.length >
-                                  4) {
-                            return "Inválido";
-                          }
-
-                          return null;
-                        },
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // ==================================================
-                // INFORMAÇÃO
-                // ==================================================
-
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.all(15),
-                  decoration: BoxDecoration(
-                    color:
-                        Colors.grey.shade100,
-                    borderRadius:
-                        BorderRadius.circular(14),
-                  ),
-                  child: Row(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.start,
-                    children: [
-                      Icon(
-                        Icons.info_outline,
-                        color:
-                            Colors.grey.shade700,
-                      ),
-                      const SizedBox(
-                        width: 10,
-                      ),
-                      Expanded(
-                        child: Text(
-                          "Os dados do titular são obtidos automaticamente "
-                          "do cadastro da sua conta. Não é necessário "
-                          "preencher essas informações aqui.",
-                          style: TextStyle(
-                            color:
-                                Colors.grey.shade700,
-                            fontSize: 13,
-                            height: 1.4,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // ==================================================
-                // TOTAL
-                // ==================================================
-
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius:
-                        BorderRadius.circular(
-                      18,
-                    ),
-                  ),
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment:
-                            MainAxisAlignment
-                                .spaceBetween,
-                        children: [
-                          const Text(
-                            "Total",
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight:
-                                  FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            dinheiro(
-                              totalPedido,
-                            ),
-                            style:
-                                const TextStyle(
-                              color:
-                                  laranja,
-                              fontSize: 22,
-                              fontWeight:
-                                  FontWeight.w900,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(height: 18),
-
-                // ==================================================
-                // BOTÃO
-                // ==================================================
-
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed:
-                        processando
-                            ? null
-                            : _pagar,
-                    style:
-                        ElevatedButton.styleFrom(
-                      backgroundColor:
-                          laranja,
-                      disabledBackgroundColor:
-                          Colors.grey.shade400,
-                      foregroundColor:
-                          Colors.white,
-                      elevation: 0,
-                      shape:
-                          RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(
-                          16,
-                        ),
-                      ),
-                    ),
-                    child: processando
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child:
-                                CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              color:
-                                  Colors.white,
-                            ),
-                          )
-                        : const Row(
-                            mainAxisAlignment:
-                                MainAxisAlignment
-                                    .center,
-                            children: [
-                              Icon(
-                                Icons
-                                    .lock_outline,
-                                size: 20,
-                              ),
-                              SizedBox(
-                                width: 9,
-                              ),
-                              Text(
-                                "PAGAR COM CARTÃO",
-                                style:
-                                    TextStyle(
-                                  fontSize:
-                                      16,
-                                  fontWeight:
-                                      FontWeight
-                                          .w800,
-                                ),
-                              ),
-                            ],
-                          ),
-                  ),
-                ),
-
-                const SizedBox(height: 14),
-
-                Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons
-                          .verified_user_outlined,
-                      size: 14,
-                      color:
-                          Colors.green.shade600,
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      "Pagamento protegido",
-                      style: TextStyle(
-                        color:
-                            Colors.grey.shade600,
-                        fontSize: 11,
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 20),
-              ],
-            ),
-          ),
+    if (digits.length <= 2) {
+      return TextEditingValue(
+        text: digits,
+        selection: TextSelection.collapsed(
+          offset: digits.length,
         ),
+      );
+    }
+
+    final result =
+        "${digits.substring(0, 2)}/${digits.substring(2)}";
+
+    return TextEditingValue(
+      text: result,
+      selection: TextSelection.collapsed(
+        offset: result.length,
       ),
     );
   }
