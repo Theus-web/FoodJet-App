@@ -28,7 +28,7 @@ class PaymentScreen extends StatefulWidget {
     required this.subtotal,
     required this.restauranteId,
     required this.taxaEntrega,
-    required this.taxaServico,
+    this.taxaServico = 0.0,
     required this.formaPagamento,
     this.pedidoId,
   });
@@ -38,46 +38,65 @@ class PaymentScreen extends StatefulWidget {
 }
 
 class _PaymentScreenState extends State<PaymentScreen> {
-  double get totalPedido =>
-      widget.subtotal + widget.taxaEntrega + widget.taxaServico;
+  late String formaPagamento;
+
+  @override
+  void initState() {
+    super.initState();
+
+    formaPagamento =
+        widget.formaPagamento.trim().toUpperCase();
+  }
+
+  double get totalPedido {
+    return widget.subtotal +
+        widget.taxaEntrega +
+        widget.taxaServico;
+  }
 
   @override
   Widget build(BuildContext context) {
-    final forma = widget.formaPagamento.toUpperCase();
-
-    if (forma == "PIX") {
-      return PixCheckoutPage(
-        endereco: widget.endereco,
-        itens: widget.itens,
-        subtotal: widget.subtotal,
-        restauranteId: widget.restauranteId,
-        taxaEntrega: widget.taxaEntrega,
-        taxaServico: widget.taxaServico,
-        pedidoId: widget.pedidoId,
-      );
-    }
-
-    if (forma == "CREDITO") {
-      return CardPaymentPage(
-        endereco: widget.endereco,
-        itens: widget.itens,
-        subtotal: widget.subtotal,
-        restauranteId: widget.restauranteId,
-        taxaEntrega: widget.taxaEntrega,
-        taxaServico: widget.taxaServico,
-        pedidoId: widget.pedidoId,
-      );
-    }
-
     return Scaffold(
+      backgroundColor: const Color(0xFFF5F5F5),
       appBar: AppBar(
-        title: const Text("Pagamento"),
+        title: const Text(
+          "Pagamento",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: const Color(0xFFF97316),
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
-      body: const Center(
-        child: Text("Forma de pagamento não disponível."),
-      ),
+      body: formaPagamento == "PIX"
+          ? PixCheckoutPage(
+              endereco: widget.endereco,
+              itens: widget.itens,
+              subtotal: widget.subtotal,
+              restauranteId: widget.restauranteId,
+              taxaEntrega: widget.taxaEntrega,
+              taxaServico: widget.taxaServico,
+              pedidoId: widget.pedidoId,
+            )
+          : formaPagamento == "CREDITO"
+              ? CardPaymentPage(
+                  endereco: widget.endereco,
+                  itens: widget.itens,
+                  subtotal: widget.subtotal,
+                  restauranteId: widget.restauranteId,
+                  taxaEntrega: widget.taxaEntrega,
+                  taxaServico: widget.taxaServico,
+                )
+              : Center(
+                  child: Text(
+                    "Forma de pagamento não suportada.",
+                    style: TextStyle(
+                      color: Colors.grey.shade700,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
     );
   }
 }
@@ -103,46 +122,37 @@ class PixCheckoutPage extends StatefulWidget {
     required this.restauranteId,
     required this.taxaEntrega,
     required this.taxaServico,
-    this.pedidoId,
+    required this.pedidoId,
   });
 
   @override
-  State<PixCheckoutPage> createState() => _PixCheckoutPageState();
+  State<PixCheckoutPage> createState() =>
+      _PixCheckoutPageState();
 }
 
-class _PixCheckoutPageState extends State<PixCheckoutPage> {
-  bool carregando = true;
-  bool erro = false;
+class _PixCheckoutPageState
+    extends State<PixCheckoutPage> {
+  bool carregando = false;
+  bool pagamentoGerado = false;
 
   String? pagamentoId;
   String? qrCodeBase64;
-  String? copiaCola;
-  String? expiracao;
+  String? pixCopiaCola;
+  String? mensagem;
+  DateTime? expiracao;
 
   Timer? timer;
 
-  double get totalPedido =>
-      widget.subtotal + widget.taxaEntrega + widget.taxaServico;
-
-  @override
-  void initState() {
-    super.initState();
-    gerarPix();
+  double get totalPedido {
+    return widget.subtotal +
+        widget.taxaEntrega +
+        widget.taxaServico;
   }
 
   @override
   void dispose() {
     timer?.cancel();
     super.dispose();
-  }
-
-  Future<String?> obterToken() async {
-    final prefs = await SharedPreferences.getInstance();
-
-    return prefs.getString("token") ??
-        prefs.getString("jwt") ??
-        prefs.getString("access_token") ??
-        prefs.getString("auth_token");
   }
 
   List<Map<String, dynamic>> prepararItens() {
@@ -156,22 +166,48 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
     }).toList();
   }
 
-  Future<void> gerarPix() async {
-    try {
-      setState(() {
-        carregando = true;
-        erro = false;
-      });
+  Future<String?> obterToken() async {
+    final prefs =
+        await SharedPreferences.getInstance();
 
+    return prefs.getString("token") ??
+        prefs.getString("jwt") ??
+        prefs.getString("access_token") ??
+        prefs.getString("auth_token");
+  }
+
+  Future<void> gerarPix() async {
+    if (carregando) return;
+
+    setState(() {
+      carregando = true;
+      mensagem = null;
+    });
+
+    try {
       final token = await obterToken();
 
       if (token == null || token.isEmpty) {
-        throw Exception("Token de autenticação não encontrado.");
+        throw Exception(
+          "Sessão expirada. Faça login novamente.",
+        );
       }
 
       final url = Uri.parse(
         "${Api.baseUrl}/pagamentos/pix",
       );
+
+      final body = {
+        "valor": totalPedido,
+        "total": totalPedido,
+        "subtotal": widget.subtotal,
+        "taxaEntrega": widget.taxaEntrega,
+        "taxaServico": widget.taxaServico,
+        "restauranteId": widget.restauranteId,
+        "pedidoId": widget.pedidoId,
+        "endereco": widget.endereco,
+        "itens": prepararItens(),
+      };
 
       final response = await http.post(
         url,
@@ -179,77 +215,65 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-        body: jsonEncode({
-          "valor": totalPedido,
-          "total": totalPedido,
-          "subtotal": widget.subtotal,
-          "taxaEntrega": widget.taxaEntrega,
-          "taxaServico": widget.taxaServico,
-          "restauranteId": widget.restauranteId,
-          "pedidoId": widget.pedidoId,
-          "endereco": widget.endereco,
-          "itens": prepararItens(),
-        }),
+        body: jsonEncode(body),
       );
 
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception(
-          "Erro ao gerar PIX: ${response.statusCode}",
-        );
-      }
+      final dados =
+          jsonDecode(response.body);
 
-      final dados = jsonDecode(response.body);
-
-      if (dados["sucesso"] != true) {
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300 ||
+          dados["sucesso"] != true) {
         throw Exception(
-          dados["mensagem"] ??
+          dados["erro"] ??
+              dados["mensagem"] ??
               "Não foi possível gerar o PIX.",
         );
       }
 
-      final pagamento = dados["pagamento"] ?? dados;
+      final pagamento =
+          dados["pagamento"] ?? {};
 
-      pagamentoId =
-          pagamento["pagamentoId"]?.toString() ??
-          dados["pagamentoId"]?.toString();
+      setState(() {
+        pagamentoId =
+            dados["pagamentoId"]?.toString() ??
+                pagamento["id"]?.toString();
 
-      qrCodeBase64 =
-          pagamento["qrCodeBase64"]?.toString() ??
-          pagamento["qrCode"]?.toString() ??
-          dados["qrCodeBase64"]?.toString();
+        qrCodeBase64 =
+            dados["qrCodeBase64"]?.toString() ??
+                pagamento["qrCodeBase64"]?.toString();
 
-      copiaCola =
-          pagamento["payload"]?.toString() ??
-          pagamento["copiaCola"]?.toString() ??
-          dados["payload"]?.toString();
+        pixCopiaCola =
+            dados["pixCopiaCola"]?.toString() ??
+                dados["payload"]?.toString() ??
+                pagamento["payload"]?.toString();
 
-      expiracao =
-          pagamento["expirationDate"]?.toString() ??
-          pagamento["expiracao"]?.toString() ??
-          dados["expirationDate"]?.toString();
+        pagamentoGerado = true;
 
-      if (pagamentoId == null || pagamentoId!.isEmpty) {
-        throw Exception(
-          "O servidor não retornou o ID do pagamento.",
-        );
+        if (dados["dataExpiracao"] != null) {
+          expiracao = DateTime.tryParse(
+            dados["dataExpiracao"].toString(),
+          );
+        }
+      });
+
+      if (pagamentoId != null) {
+        iniciarConsultaPagamento();
       }
-
-      if (!mounted) return;
-
-      setState(() {
-        carregando = false;
-      });
-
-      iniciarConsultaPagamento();
     } catch (e) {
-      debugPrint("ERRO AO GERAR PIX: $e");
-
-      if (!mounted) return;
-
       setState(() {
-        carregando = false;
-        erro = true;
+        mensagem =
+            e.toString().replaceFirst(
+                  "Exception: ",
+                  "",
+                );
       });
+    } finally {
+      if (mounted) {
+        setState(() {
+          carregando = false;
+        });
+      }
     }
   }
 
@@ -258,8 +282,8 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
 
     timer = Timer.periodic(
       const Duration(seconds: 5),
-      (_) {
-        consultarPagamento();
+      (_) async {
+        await consultarPagamento();
       },
     );
   }
@@ -286,12 +310,13 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
         return;
       }
 
-      final dados = jsonDecode(response.body);
+      final dados =
+          jsonDecode(response.body);
 
       final status =
-          dados["statusPagamento"]?.toString().toUpperCase() ??
-          dados["status"]?.toString().toUpperCase() ??
-          "";
+          dados["statusPagamento"]
+              ?.toString()
+              .toUpperCase();
 
       final aprovado =
           dados["pagamentoAprovado"] == true ||
@@ -301,202 +326,206 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
 
       if (!aprovado) return;
 
-      timer?.cancel();
-
       final pedidoId =
-          dados["pedidoId"]?.toString() ??
-          dados["pedido"]?["id"]?.toString();
+          dados["pedidoId"] ??
+              dados["orderId"];
 
-      if (pedidoId == null || pedidoId.isEmpty) {
-        debugPrint(
-          "PIX APROVADO, MAS PEDIDO NÃO FOI RETORNADO.",
-        );
-        return;
-      }
+      if (pedidoId == null) return;
+
+      timer?.cancel();
 
       if (!mounted) return;
 
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => OrderTrackingScreen(
-            pedidoId: int.tryParse(pedidoId) ?? 0,
+          builder: (_) =>
+              OrderTrackingScreen(
+            pedidoId: pedidoId.toString(),
           ),
         ),
       );
-    } catch (e) {
-      debugPrint(
-        "ERRO AO CONSULTAR PAGAMENTO PIX: $e",
-      );
+    } catch (_) {
+      // Continua consultando até o pagamento ser aprovado.
     }
   }
 
-  Future<void> copiarPix() async {
-    if (copiaCola == null || copiaCola!.isEmpty) return;
+  void copiarPix() {
+    if (pixCopiaCola == null ||
+        pixCopiaCola!.isEmpty) {
+      return;
+    }
 
-    await Clipboard.setData(
-      ClipboardData(text: copiaCola!),
+    Clipboard.setData(
+      ClipboardData(
+        text: pixCopiaCola!,
+      ),
     );
 
-    if (!mounted) return;
-
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
       const SnackBar(
-        content: Text("Código PIX copiado."),
+        content: Text(
+          "Código PIX copiado!",
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        title: const Text("Pagamento PIX"),
-        backgroundColor: const Color(0xFFF97316),
-        foregroundColor: Colors.white,
-      ),
-      body: carregando
-          ? const Center(
-              child: CircularProgressIndicator(),
-            )
-          : erro
-              ? Center(
-                  child: Padding(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      mainAxisAlignment:
-                          MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.error_outline,
-                          size: 64,
-                          color: Colors.red,
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          "Não foi possível gerar o PIX.",
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        const SizedBox(height: 20),
-                        ElevatedButton(
-                          onPressed: gerarPix,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor:
-                                const Color(0xFFF97316),
-                            foregroundColor: Colors.white,
-                          ),
-                          child: const Text(
-                            "Tentar novamente",
-                          ),
-                        ),
-                      ],
-                    ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
+      child: Column(
+        children: [
+          const SizedBox(height: 10),
+
+          const Icon(
+            Icons.pix,
+            size: 70,
+            color: Color(0xFF16A34A),
+          ),
+
+          const SizedBox(height: 15),
+
+          const Text(
+            "Pagamento via PIX",
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 8),
+
+          Text(
+            "Total: R\$ ${totalPedido.toStringAsFixed(2).replaceAll('.', ',')}",
+            style: const TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+
+          const SizedBox(height: 25),
+
+          if (mensagem != null)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius:
+                    BorderRadius.circular(12),
+              ),
+              child: Text(
+                mensagem!,
+                style: TextStyle(
+                  color: Colors.red.shade700,
+                ),
+              ),
+            ),
+
+          if (!pagamentoGerado)
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed:
+                    carregando ? null : gerarPix,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      const Color(0xFFF97316),
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(
+                    vertical: 16,
                   ),
-                )
-              : SingleChildScrollView(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      const Icon(
-                        Icons.pix,
-                        size: 64,
-                        color: Color(0xFFF97316),
-                      ),
-                      const SizedBox(height: 12),
-                      const Text(
-                        "Pague com PIX",
-                        style: TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      const Text(
-                        "Escaneie o QR Code ou copie o código PIX.",
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 24),
-                      if (qrCodeBase64 != null &&
-                          qrCodeBase64!.isNotEmpty)
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius:
-                                BorderRadius.circular(16),
-                          ),
-                          child: Image.memory(
-                            base64Decode(
-                              qrCodeBase64!
-                                  .replaceFirst(
-                                    RegExp(
-                                      r'^data:image\/[a-zA-Z]+;base64,',
-                                    ),
-                                    '',
-                                  ),
-                            ),
-                            width: 250,
-                            height: 250,
-                          ),
-                        ),
-                      const SizedBox(height: 24),
-                      if (copiaCola != null &&
-                          copiaCola!.isNotEmpty)
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: copiarPix,
-                            icon: const Icon(
-                              Icons.copy,
-                            ),
-                            label: const Text(
-                              "Copiar código PIX",
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor:
-                                  const Color(0xFFF97316),
-                              foregroundColor: Colors.white,
-                              padding:
-                                  const EdgeInsets.symmetric(
-                                vertical: 15,
-                              ),
-                            ),
-                          ),
-                        ),
-                      const SizedBox(height: 20),
-                      Text(
-                        "Total: R\$ ${totalPedido.toStringAsFixed(2).replaceAll('.', ',')}",
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      if (expiracao != null &&
-                          expiracao!.isNotEmpty) ...[
-                        const SizedBox(height: 10),
-                        Text(
-                          "Expiração: $expiracao",
-                          style: const TextStyle(
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                      const SizedBox(height: 30),
-                      const Text(
-                        "Aguardando confirmação do pagamento...",
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Colors.grey,
-                        ),
-                      ),
-                    ],
+                  shape:
+                      RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(12),
                   ),
                 ),
+                child: carregando
+                    ? const SizedBox(
+                        height: 22,
+                        width: 22,
+                        child:
+                            CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        "Gerar PIX",
+                        style: TextStyle(
+                          fontSize: 17,
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
+              ),
+            ),
+
+          if (pagamentoGerado) ...[
+            if (qrCodeBase64 != null &&
+                qrCodeBase64!.isNotEmpty) ...[
+              const SizedBox(height: 20),
+
+              Container(
+                padding:
+                    const EdgeInsets.all(15),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius:
+                      BorderRadius.circular(15),
+                ),
+                child: Image.memory(
+                  base64Decode(
+                    qrCodeBase64!
+                        .replaceFirst(
+                      RegExp(
+                        r'^data:image\/\w+;base64,',
+                      ),
+                      '',
+                    ),
+                  ),
+                  width: 260,
+                  height: 260,
+                  fit: BoxFit.contain,
+                ),
+              ),
+            ],
+
+            const SizedBox(height: 20),
+
+            if (pixCopiaCola != null &&
+                pixCopiaCola!.isNotEmpty)
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: copiarPix,
+                  icon: const Icon(
+                    Icons.copy,
+                  ),
+                  label: const Text(
+                    "Copiar código PIX",
+                  ),
+                ),
+              ),
+
+            const SizedBox(height: 20),
+
+            const Text(
+              "Aguardando confirmação do pagamento...",
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
     );
   }
 }
@@ -512,7 +541,6 @@ class CardPaymentPage extends StatefulWidget {
   final String restauranteId;
   final double taxaEntrega;
   final double taxaServico;
-  final String? pedidoId;
 
   const CardPaymentPage({
     super.key,
@@ -522,7 +550,6 @@ class CardPaymentPage extends StatefulWidget {
     required this.restauranteId,
     required this.taxaEntrega,
     required this.taxaServico,
-    this.pedidoId,
   });
 
   @override
@@ -534,17 +561,25 @@ class _CardPaymentPageState
     extends State<CardPaymentPage> {
   final formKey = GlobalKey<FormState>();
 
-  final nomeController = TextEditingController();
-  final numeroController = TextEditingController();
-  final validadeController = TextEditingController();
-  final cvvController = TextEditingController();
+  final nomeController =
+      TextEditingController();
 
-  bool processando = false;
+  final numeroController =
+      TextEditingController();
 
-  double get totalPedido =>
-      widget.subtotal +
-      widget.taxaEntrega +
-      widget.taxaServico;
+  final validadeController =
+      TextEditingController();
+
+  final cvvController =
+      TextEditingController();
+
+  bool carregando = false;
+
+  double get totalPedido {
+    return widget.subtotal +
+        widget.taxaEntrega +
+        widget.taxaServico;
+  }
 
   @override
   void dispose() {
@@ -556,7 +591,8 @@ class _CardPaymentPageState
   }
 
   Future<String?> obterToken() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs =
+        await SharedPreferences.getInstance();
 
     return prefs.getString("token") ??
         prefs.getString("jwt") ??
@@ -564,84 +600,99 @@ class _CardPaymentPageState
         prefs.getString("auth_token");
   }
 
-  List<Map<String, dynamic>> prepararItens() {
-    return widget.itens.map((item) {
-      return {
-        "produtoId": item.nome,
-        "nome": item.nome,
-        "quantidade": item.quantidade,
-        "preco": item.preco,
-      };
-    }).toList();
+  bool validadeExpirada(String validade) {
+    final partes = validade.split("/");
+
+    if (partes.length != 2) {
+      return true;
+    }
+
+    final mes = int.tryParse(partes[0]);
+    final anoDoisDigitos =
+        int.tryParse(partes[1]);
+
+    if (mes == null ||
+        anoDoisDigitos == null ||
+        mes < 1 ||
+        mes > 12) {
+      return true;
+    }
+
+    final ano = 2000 + anoDoisDigitos;
+
+    final agora = DateTime.now();
+
+    final anoAtual = agora.year;
+    final mesAtual = agora.month;
+
+    if (ano < anoAtual) {
+      return true;
+    }
+
+    if (ano == anoAtual &&
+        mes < mesAtual) {
+      return true;
+    }
+
+    return false;
   }
 
-  bool validarCampos() {
+  Future<void> pagar() async {
+    if (carregando) return;
+
     if (!formKey.currentState!.validate()) {
-      return false;
+      return;
     }
 
     final numero =
-        numeroController.text.replaceAll(RegExp(r'\D'), '');
-
-    if (numero.length < 13 || numero.length > 19) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            "Informe um número de cartão válido.",
-          ),
-        ),
-      );
-      return false;
-    }
+        numeroController.text
+            .replaceAll(RegExp(r'\D'), '');
 
     final cvv =
-        cvvController.text.replaceAll(RegExp(r'\D'), '');
+        cvvController.text
+            .replaceAll(RegExp(r'\D'), '');
 
-    if (cvv.length < 3 || cvv.length > 4) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Informe um CVV válido."),
-        ),
-      );
-      return false;
+    final validade =
+        validadeController.text.trim();
+
+    if (numero.length < 13 ||
+        numero.length > 19) {
+      return;
     }
 
-    final validade = validadeController.text.trim();
-
-    final match = RegExp(
-      r'^(\d{2})\/(\d{2}|\d{4})$',
-    ).firstMatch(validade);
-
-    if (match == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    if (!RegExp(
+      r'^\d{2}\/\d{2}$',
+    ).hasMatch(validade)) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         const SnackBar(
           content: Text(
             "Informe a validade no formato MM/AA.",
           ),
         ),
       );
-      return false;
+      return;
     }
 
-    final mes = int.tryParse(match.group(1)!);
-
-    if (mes == null || mes < 1 || mes > 12) {
-      ScaffoldMessenger.of(context).showSnackBar(
+    if (validadeExpirada(validade)) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         const SnackBar(
-          content: Text("Mês de validade inválido."),
+          content: Text(
+            "O cartão está vencido.",
+          ),
         ),
       );
-      return false;
+      return;
     }
 
-    return true;
-  }
-
-  Future<void> pagar() async {
-    if (!validarCampos()) return;
+    if (cvv.length < 3 ||
+        cvv.length > 4) {
+      return;
+    }
 
     setState(() {
-      processando = true;
+      carregando = true;
     });
 
     try {
@@ -649,28 +700,16 @@ class _CardPaymentPageState
 
       if (token == null || token.isEmpty) {
         throw Exception(
-          "Token de autenticação não encontrado.",
+          "Sessão expirada. Faça login novamente.",
         );
       }
 
-      final numero =
-          numeroController.text.replaceAll(RegExp(r'\D'), '');
-
-      final cvv =
-          cvvController.text.replaceAll(RegExp(r'\D'), '');
-
-      final validade = validadeController.text.trim();
-
-      final partes = validade.split('/');
-
-      final mes = int.parse(partes[0]);
-
-      int ano = int.parse(partes[1]);
-
-      if (partes[1].length == 2) {
-        ano += 2000;
-      }
-
+      // IMPORTANTE:
+      // O backend espera:
+      //
+      // cartao.validade = "MM/AA"
+      //
+      // Não enviar mes/ano separados.
       final body = {
         "valor": totalPedido,
         "total": totalPedido,
@@ -678,35 +717,33 @@ class _CardPaymentPageState
         "taxaEntrega": widget.taxaEntrega,
         "taxaServico": widget.taxaServico,
         "restauranteId": widget.restauranteId,
-
-        // Endereço de ENTREGA.
         "endereco": widget.endereco,
-
         "itens": prepararItens(),
-
         "formaPagamento": "CREDITO",
         "pagamento": "CREDITO",
 
         "cartao": {
           "numero": numero,
           "nome": nomeController.text.trim(),
-          "mes": mes,
-          "ano": ano,
+          "validade": validade,
           "cvv": cvv,
         },
       };
 
       debugPrint(
-        "PAGAMENTO CARTAO: ENVIANDO PARA O BACKEND",
+        "💳 PAGAMENTO CARTAO: ENVIANDO PARA O BACKEND",
       );
+
       debugPrint(
-        "NOME DO TITULAR: ENVIADO",
+        "💳 NOME DO TITULAR: ENVIADO",
       );
+
       debugPrint(
-        "CPF/TELEFONE: NAO ENVIADOS",
+        "💳 CPF/TELEFONE: NAO ENVIADOS",
       );
+
       debugPrint(
-        "ENDERECO DE COBRANCA: NAO ENVIADO",
+        "💳 ENDERECO DE COBRANCA: NAO ENVIADO",
       );
 
       final response = await http.post(
@@ -720,98 +757,47 @@ class _CardPaymentPageState
         body: jsonEncode(body),
       );
 
-      debugPrint(
-        "STATUS PAGAMENTO CARTAO: ${response.statusCode}",
-      );
+      final dados =
+          jsonDecode(response.body);
 
       if (response.statusCode < 200 ||
-          response.statusCode >= 300) {
-        String mensagem =
-            "Não foi possível processar o pagamento.";
-
-        try {
-          final erro = jsonDecode(response.body);
-
-          mensagem =
-              erro["mensagem"]?.toString() ??
-              erro["erro"]?.toString() ??
-              mensagem;
-        } catch (_) {}
-
-        throw Exception(mensagem);
-      }
-
-      final dados = jsonDecode(response.body);
-
-      if (dados["sucesso"] != true) {
+          response.statusCode >= 300 ||
+          dados["sucesso"] != true) {
         throw Exception(
-          dados["mensagem"] ??
-              dados["erro"] ??
-              "Pagamento não aprovado.",
-        );
-      }
-
-      final pagamentoAprovado =
-          dados["pagamentoAprovado"] == true ||
-          dados["statusPagamento"]
-                  ?.toString()
-                  .toUpperCase() ==
-              "APPROVED" ||
-          dados["status"]
-                  ?.toString()
-                  .toUpperCase() ==
-              "RECEIVED" ||
-          dados["status"]
-                  ?.toString()
-                  .toUpperCase() ==
-              "CONFIRMED";
-
-      if (!pagamentoAprovado) {
-        final pagamentoId =
-            dados["pagamentoId"]?.toString();
-
-        if (pagamentoId != null &&
-            pagamentoId.isNotEmpty) {
-          await aguardarPagamento(
-            pagamentoId,
-            token,
-          );
-        } else {
-          throw Exception(
-            "Pagamento ainda não confirmado.",
-          );
-        }
-
-        return;
-      }
-
-      final pedidoId =
-          extrairPedidoId(dados);
-
-      if (pedidoId == null) {
-        throw Exception(
-          "Pagamento aprovado, mas o pedido ainda não foi localizado.",
+          dados["erro"] ??
+              dados["mensagem"] ??
+              "Não foi possível processar o pagamento.",
         );
       }
 
       if (!mounted) return;
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) => OrderTrackingScreen(
-            pedidoId: pedidoId,
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Pagamento enviado! Aguardando confirmação.",
           ),
         ),
       );
-    } catch (e) {
-      debugPrint(
-        "ERRO PAGAMENTO CARTAO: $e",
-      );
 
+      final pagamentoId =
+          dados["pagamentoId"]?.toString();
+
+      if (pagamentoId == null ||
+          pagamentoId.isEmpty) {
+        return;
+      }
+
+      await aguardarPagamento(
+        pagamentoId,
+        token,
+      );
+    } catch (e) {
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         SnackBar(
           content: Text(
             e.toString().replaceFirst(
@@ -819,43 +805,24 @@ class _CardPaymentPageState
                   "",
                 ),
           ),
-          duration: const Duration(seconds: 5),
         ),
       );
     } finally {
       if (mounted) {
         setState(() {
-          processando = false;
+          carregando = false;
         });
       }
     }
-  }
-
-  int? extrairPedidoId(
-    Map<String, dynamic> dados,
-  ) {
-    final valor =
-        dados["pedidoId"] ??
-        dados["pedido"]?["id"];
-
-    if (valor == null) {
-      return null;
-    }
-
-    return int.tryParse(
-      valor.toString(),
-    );
   }
 
   Future<void> aguardarPagamento(
     String pagamentoId,
     String token,
   ) async {
-    for (int tentativa = 0;
-        tentativa < 24;
-        tentativa++) {
+    for (int i = 0; i < 60; i++) {
       await Future.delayed(
-        const Duration(seconds: 5),
+        const Duration(seconds: 3),
       );
 
       if (!mounted) return;
@@ -866,7 +833,8 @@ class _CardPaymentPageState
             "${Api.baseUrl}/pagamentos/$pagamentoId",
           ),
           headers: {
-            "Authorization": "Bearer $token",
+            "Authorization":
+                "Bearer $token",
           },
         );
 
@@ -875,381 +843,358 @@ class _CardPaymentPageState
           continue;
         }
 
-        final dados = jsonDecode(response.body);
+        final dados =
+            jsonDecode(response.body);
 
         final status =
             dados["statusPagamento"]
-                    ?.toString()
-                    .toUpperCase() ??
-                dados["status"]
-                    ?.toString()
-                    .toUpperCase() ??
-                "";
+                ?.toString()
+                .toUpperCase();
 
         final aprovado =
-            dados["pagamentoAprovado"] == true ||
+            dados["pagamentoAprovado"] ==
+                true ||
             status == "APPROVED" ||
             status == "RECEIVED" ||
             status == "CONFIRMED";
 
-        if (aprovado) {
-          final pedidoId =
-              extrairPedidoId(dados);
+        if (!aprovado) {
+          continue;
+        }
 
-          if (pedidoId == null) {
-            continue;
-          }
+        final pedidoId =
+            dados["pedidoId"] ??
+                dados["orderId"];
 
-          if (!mounted) return;
+        if (pedidoId == null) {
+          continue;
+        }
 
-          Navigator.pushReplacement(
-            context,
-            MaterialPageRoute(
-              builder: (_) => OrderTrackingScreen(
-                pedidoId: pedidoId,
-              ),
+        if (!mounted) return;
+
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                OrderTrackingScreen(
+              pedidoId:
+                  pedidoId.toString(),
             ),
-          );
+          ),
+        );
 
-          return;
-        }
-
-        if (status == "REFUSED" ||
-            status == "FAILED" ||
-            status == "CANCELED" ||
-            status == "CANCELLED") {
-          throw Exception(
-            "O pagamento foi recusado.",
-          );
-        }
-      } catch (e) {
-        if (e.toString().contains(
-              "pagamento foi recusado",
-            )) {
-          rethrow;
-        }
+        return;
+      } catch (_) {
+        // Continua tentando.
       }
     }
 
-    throw Exception(
-      "O pagamento ainda não foi confirmado. Tente novamente em alguns instantes.",
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      const SnackBar(
+        content: Text(
+          "O pagamento ainda está sendo processado. Verifique o pedido em alguns instantes.",
+        ),
+      ),
     );
+  }
+
+  List<Map<String, dynamic>> prepararItens() {
+    return widget.itens.map((item) {
+      return {
+        "produtoId": item.nome,
+        "nome": item.nome,
+        "quantidade": item.quantidade,
+        "preco": item.preco,
+      };
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        title: const Text("Cartão de crédito"),
-        backgroundColor: const Color(0xFFF97316),
-        foregroundColor: Colors.white,
-      ),
-      body: Form(
-        key: formKey,
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius:
-                      BorderRadius.circular(14),
+    return Form(
+      key: formKey,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            const Text(
+              "Cartão de crédito",
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              "Total: R\$ ${totalPedido.toStringAsFixed(2).replaceAll('.', ',')}",
+              style: const TextStyle(
+                fontSize: 19,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 25),
+
+            // ==================================================
+            // NOME DO TITULAR
+            // ==================================================
+
+            campo(
+              controller: nomeController,
+              label: "Nome no cartão",
+              hintText:
+                  "Nome como aparece no cartão",
+              icon: Icons.person_outline,
+              textCapitalization:
+                  TextCapitalization.words,
+              validator: (value) {
+                if (value == null ||
+                    value.trim().isEmpty) {
+                  return "Informe o nome do titular";
+                }
+
+                if (value.trim().length < 3) {
+                  return "Informe o nome completo";
+                }
+
+                return null;
+              },
+            ),
+
+            const SizedBox(height: 15),
+
+            // ==================================================
+            // NÚMERO
+            // ==================================================
+
+            campo(
+              controller: numeroController,
+              label: "Número do cartão",
+              hintText:
+                  "Digite o número do cartão",
+              icon: Icons.credit_card,
+              keyboardType:
+                  TextInputType.number,
+              inputFormatters: [
+                FilteringTextInputFormatter
+                    .digitsOnly,
+                LengthLimitingTextInputFormatter(
+                  19,
                 ),
-                child: const Row(
-                  children: [
-                    Icon(
-                      Icons.lock_outline,
-                      color: Colors.green,
+                CardNumberInputFormatter(),
+              ],
+              validator: (value) {
+                final numero =
+                    value?.replaceAll(
+                          RegExp(r'\D'),
+                          '',
+                        ) ??
+                        '';
+
+                if (numero.isEmpty) {
+                  return "Informe o número do cartão";
+                }
+
+                if (numero.length < 13 ||
+                    numero.length > 19) {
+                  return "Número do cartão inválido";
+                }
+
+                return null;
+              },
+            ),
+
+            const SizedBox(height: 15),
+
+            // ==================================================
+            // VALIDADE + CVV
+            // ==================================================
+
+            Row(
+              children: [
+                Expanded(
+                  child: campo(
+                    controller:
+                        validadeController,
+                    label: "Validade",
+                    hintText: "MM/AA",
+                    icon: Icons.calendar_month,
+                    keyboardType:
+                        TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter
+                          .digitsOnly,
+                      LengthLimitingTextInputFormatter(
+                        4,
+                      ),
+                      ValidityInputFormatter(),
+                    ],
+                    validator: (value) {
+                      final texto =
+                          value?.trim() ?? '';
+
+                      if (!RegExp(
+                        r'^\d{2}\/\d{2}$',
+                      ).hasMatch(texto)) {
+                        return "Use MM/AA";
+                      }
+
+                      final partes =
+                          texto.split("/");
+
+                      final mes =
+                          int.tryParse(
+                        partes[0],
+                      );
+
+                      if (mes == null ||
+                          mes < 1 ||
+                          mes > 12) {
+                        return "Mês inválido";
+                      }
+
+                      if (validadeExpirada(
+                        texto,
+                      )) {
+                        return "Cartão vencido";
+                      }
+
+                      return null;
+                    },
+                  ),
+                ),
+
+                const SizedBox(width: 12),
+
+                Expanded(
+                  child: campo(
+                    controller: cvvController,
+                    label: "CVV",
+                    hintText: "123",
+                    icon: Icons.lock_outline,
+                    keyboardType:
+                        TextInputType.number,
+                    obscureText: true,
+                    inputFormatters: [
+                      FilteringTextInputFormatter
+                          .digitsOnly,
+                      LengthLimitingTextInputFormatter(
+                        4,
+                      ),
+                    ],
+                    validator: (value) {
+                      final cvv =
+                          value?.replaceAll(
+                                RegExp(r'\D'),
+                                '',
+                              ) ??
+                              '';
+
+                      if (cvv.length < 3 ||
+                          cvv.length > 4) {
+                        return "CVV inválido";
+                      }
+
+                      return null;
+                    },
+                  ),
+                ),
+              ],
+            ),
+
+            const SizedBox(height: 15),
+
+            Container(
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius:
+                    BorderRadius.circular(12),
+              ),
+              child: const Row(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Color(0xFFF97316),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "Informe o nome do titular exatamente como aparece no cartão. CPF, telefone e endereço de cobrança não são necessários nesta etapa.",
+                      style: TextStyle(
+                        fontSize: 13,
+                      ),
                     ),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        "Pagamento seguro",
+                  ),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 25),
+
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed:
+                    carregando ? null : pagar,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      const Color(0xFFF97316),
+                  foregroundColor: Colors.white,
+                  padding:
+                      const EdgeInsets.symmetric(
+                    vertical: 17,
+                  ),
+                  shape:
+                      RoundedRectangleBorder(
+                    borderRadius:
+                        BorderRadius.circular(12),
+                  ),
+                ),
+                child: carregando
+                    ? const SizedBox(
+                        height: 23,
+                        width: 23,
+                        child:
+                            CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
+                      )
+                    : const Text(
+                        "Pagar com cartão",
                         style: TextStyle(
+                          fontSize: 17,
                           fontWeight:
                               FontWeight.bold,
                         ),
                       ),
-                    ),
-                  ],
-                ),
               ),
+            ),
 
-              const SizedBox(height: 24),
+            const SizedBox(height: 20),
 
-              const Text(
-                "Dados do cartão",
+            Center(
+              child: Text(
+                "Pagamento seguro",
                 style: TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade600,
+                  fontSize: 13,
                 ),
               ),
-
-              const SizedBox(height: 16),
-
-              // ==================================================
-              // NOME DO TITULAR
-              // ==================================================
-
-              campo(
-                controller: nomeController,
-                label: "Nome no cartão",
-                hintText:
-                    "Nome como aparece no cartão",
-                icon: Icons.person_outline,
-                textCapitalization:
-                    TextCapitalization.words,
-                validator: (value) {
-                  if (value == null ||
-                      value.trim().isEmpty) {
-                    return "Informe o nome do titular";
-                  }
-
-                  if (value.trim().length < 3) {
-                    return "Informe o nome completo";
-                  }
-
-                  return null;
-                },
-              ),
-
-              // ==================================================
-              // NUMERO
-              // ==================================================
-
-              campo(
-                controller: numeroController,
-                label: "Número do cartão",
-                hintText: "0000 0000 0000 0000",
-                icon: Icons.credit_card,
-                keyboardType:
-                    TextInputType.number,
-                inputFormatters: [
-                  FilteringTextInputFormatter
-                      .digitsOnly,
-                  LengthLimitingTextInputFormatter(
-                    19,
-                  ),
-                  CardNumberInputFormatter(),
-                ],
-                validator: (value) {
-                  final numero =
-                      value?.replaceAll(
-                            RegExp(r'\D'),
-                            '',
-                          ) ??
-                          '';
-
-                  if (numero.isEmpty) {
-                    return "Informe o número do cartão";
-                  }
-
-                  if (numero.length < 13 ||
-                      numero.length > 19) {
-                    return "Número de cartão inválido";
-                  }
-
-                  return null;
-                },
-              ),
-
-              Row(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: campo(
-                      controller:
-                          validadeController,
-                      label: "Validade",
-                      hintText: "MM/AA",
-                      icon:
-                          Icons.calendar_month,
-                      keyboardType:
-                          TextInputType.number,
-                      inputFormatters: [
-                        FilteringTextInputFormatter
-                            .digitsOnly,
-                        LengthLimitingTextInputFormatter(
-                          6,
-                        ),
-                        ValidityInputFormatter(),
-                      ],
-                      validator: (value) {
-                        if (value == null ||
-                            value.isEmpty) {
-                          return "Informe a validade";
-                        }
-
-                        final match =
-                            RegExp(
-                          r'^(\d{2})\/(\d{2}|\d{4})$',
-                        ).firstMatch(
-                          value.trim(),
-                        );
-
-                        if (match == null) {
-                          return "MM/AA";
-                        }
-
-                        final mes =
-                            int.tryParse(
-                          match.group(1)!,
-                        );
-
-                        if (mes == null ||
-                            mes < 1 ||
-                            mes > 12) {
-                          return "Mês inválido";
-                        }
-
-                        return null;
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: campo(
-                      controller: cvvController,
-                      label: "CVV",
-                      hintText: "123",
-                      icon: Icons.lock_outline,
-                      keyboardType:
-                          TextInputType.number,
-                      obscureText: true,
-                      inputFormatters: [
-                        FilteringTextInputFormatter
-                            .digitsOnly,
-                        LengthLimitingTextInputFormatter(
-                          4,
-                        ),
-                      ],
-                      validator: (value) {
-                        final cvv =
-                            value?.replaceAll(
-                                  RegExp(r'\D'),
-                                  '',
-                                ) ??
-                                '';
-
-                        if (cvv.isEmpty) {
-                          return "Informe o CVV";
-                        }
-
-                        if (cvv.length < 3 ||
-                            cvv.length > 4) {
-                          return "CVV inválido";
-                        }
-
-                        return null;
-                      },
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 4),
-
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade50,
-                  borderRadius:
-                      BorderRadius.circular(12),
-                ),
-                child: const Text(
-                  "Informe apenas o nome do titular exatamente como aparece no cartão. CPF, telefone e endereço de cobrança não são necessários nesta etapa.",
-                  style: TextStyle(
-                    fontSize: 13,
-                  ),
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius:
-                      BorderRadius.circular(14),
-                ),
-                child: Row(
-                  mainAxisAlignment:
-                      MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      "Total",
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                    Text(
-                      "R\$ ${totalPedido.toStringAsFixed(2).replaceAll('.', ',')}",
-                      style: const TextStyle(
-                        fontSize: 20,
-                        fontWeight:
-                            FontWeight.bold,
-                        color:
-                            Color(0xFFF97316),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 20),
-
-              SizedBox(
-                width: double.infinity,
-                height: 54,
-                child: ElevatedButton(
-                  onPressed:
-                      processando ? null : pagar,
-                  style:
-                      ElevatedButton.styleFrom(
-                    backgroundColor:
-                        const Color(0xFFF97316),
-                    foregroundColor:
-                        Colors.white,
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: processando
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child:
-                              CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : const Text(
-                          "Pagar com cartão",
-                          style: TextStyle(
-                            fontSize: 16,
-                            fontWeight:
-                                FontWeight.bold,
-                          ),
-                        ),
-                ),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1258,73 +1203,47 @@ class _CardPaymentPageState
   Widget campo({
     required TextEditingController controller,
     required String label,
+    required String hintText,
     required IconData icon,
     TextInputType? keyboardType,
-    bool obscureText = false,
-    List<TextInputFormatter>?
-        inputFormatters,
+    List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
-    String? hintText,
+    bool obscureText = false,
     TextCapitalization textCapitalization =
         TextCapitalization.none,
   }) {
-    return Padding(
-      padding:
-          const EdgeInsets.only(bottom: 14),
-      child: TextFormField(
-        controller: controller,
-        keyboardType: keyboardType,
-        obscureText: obscureText,
-        textCapitalization:
-            textCapitalization,
-        inputFormatters:
-            inputFormatters,
-        validator: validator,
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hintText,
-          prefixIcon: Icon(icon),
-          filled: true,
-          fillColor: Colors.white,
-          border: OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
-            borderSide: BorderSide.none,
+    return TextFormField(
+      controller: controller,
+      keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
+      validator: validator,
+      obscureText: obscureText,
+      textCapitalization:
+          textCapitalization,
+      decoration: InputDecoration(
+        labelText: label,
+        hintText: hintText,
+        prefixIcon: Icon(icon),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(12),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(12),
+          borderSide: BorderSide(
+            color: Colors.grey.shade300,
           ),
-          enabledBorder:
-              OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
-            borderSide:
-                BorderSide(color: Colors.grey.shade300),
-          ),
-          focusedBorder:
-              OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
-            borderSide: const BorderSide(
-              color: Color(0xFFF97316),
-              width: 2,
-            ),
-          ),
-          errorBorder:
-              OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
-            borderSide:
-                const BorderSide(
-              color: Colors.red,
-            ),
-          ),
-          focusedErrorBorder:
-              OutlineInputBorder(
-            borderRadius:
-                BorderRadius.circular(12),
-            borderSide:
-                const BorderSide(
-              color: Colors.red,
-              width: 2,
-            ),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius:
+              BorderRadius.circular(12),
+          borderSide: const BorderSide(
+            color: Color(0xFFF97316),
+            width: 2,
           ),
         ),
       ),
@@ -1333,7 +1252,7 @@ class _CardPaymentPageState
 }
 
 // ============================================================
-// FORMATADOR DO NUMERO DO CARTAO
+// FORMATADOR DO NÚMERO DO CARTÃO
 // ============================================================
 
 class CardNumberInputFormatter
@@ -1349,31 +1268,37 @@ class CardNumberInputFormatter
       '',
     );
 
+    final limited =
+        digits.length > 19
+            ? digits.substring(0, 19)
+            : digits;
+
     final buffer = StringBuffer();
 
     for (int i = 0;
-        i < digits.length && i < 19;
+        i < limited.length;
         i++) {
       if (i > 0 && i % 4 == 0) {
         buffer.write(' ');
       }
 
-      buffer.write(digits[i]);
+      buffer.write(limited[i]);
     }
 
-    final result = buffer.toString();
+    final formatted = buffer.toString();
 
     return TextEditingValue(
-      text: result,
+      text: formatted,
       selection: TextSelection.collapsed(
-        offset: result.length,
+        offset: formatted.length,
       ),
     );
   }
 }
 
 // ============================================================
-// FORMATADOR DE VALIDADE
+// FORMATADOR DA VALIDADE
+// MM/AA
 // ============================================================
 
 class ValidityInputFormatter
@@ -1389,22 +1314,24 @@ class ValidityInputFormatter
       '',
     );
 
-    if (digits.length <= 2) {
-      return TextEditingValue(
-        text: digits,
-        selection: TextSelection.collapsed(
-          offset: digits.length,
-        ),
-      );
+    final limited =
+        digits.length > 4
+            ? digits.substring(0, 4)
+            : digits;
+
+    String formatted;
+
+    if (limited.length <= 2) {
+      formatted = limited;
+    } else {
+      formatted =
+          "${limited.substring(0, 2)}/${limited.substring(2)}";
     }
 
-    final result =
-        "${digits.substring(0, 2)}/${digits.substring(2)}";
-
     return TextEditingValue(
-      text: result,
+      text: formatted,
       selection: TextSelection.collapsed(
-        offset: result.length,
+        offset: formatted.length,
       ),
     );
   }
