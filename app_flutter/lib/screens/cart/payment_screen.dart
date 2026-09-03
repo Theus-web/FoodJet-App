@@ -340,9 +340,9 @@ class _PixCheckoutPageState
         context,
         MaterialPageRoute(
           builder: (_) =>
-              OrderTrackingScreen(
-            pedidoId: pedidoId.toString(),
-          ),
+    OrderTrackingScreen(
+  pedidoId: int.parse(pedidoId.toString()),
+),
         ),
       );
     } catch (_) {
@@ -876,10 +876,9 @@ class _CardPaymentPageState
           context,
           MaterialPageRoute(
             builder: (_) =>
-                OrderTrackingScreen(
-              pedidoId:
-                  pedidoId.toString(),
-            ),
+    OrderTrackingScreen(
+  pedidoId: int.parse(pedidoId.toString()),
+),
           ),
         );
 
@@ -1336,4 +1335,3 @@ class ValidityInputFormatter
     );
   }
 }
-
