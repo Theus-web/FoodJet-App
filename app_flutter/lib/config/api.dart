@@ -1,3 +1,4 @@
 class Api {
-  static const String baseUrl = "http://192.168.1.101:3000/api";
+  static const String baseUrl =
+      "https://foodjet-backend.onrender.com/api";
 }

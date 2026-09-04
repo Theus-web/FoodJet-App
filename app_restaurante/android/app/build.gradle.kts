@@ -17,7 +17,7 @@ android {
     defaultConfig {
         applicationId = "com.example.app_restaurante"
 
-        minSdk = 23
+        minSdk = flutter.minSdkVersion
 
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
