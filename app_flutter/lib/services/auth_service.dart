@@ -1,4 +1,5 @@
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -10,18 +11,6 @@ import '../config/api.dart';
 class AuthService {
   // ==========================================================
   // URL DA API
-  // ==========================================================
-  //
-  // IMPORTANTE:
-  // O FoodJet agora utiliza o backend hospedado no Render.
-  //
-  // Não usar:
-  //   localhost
-  //   10.0.2.2
-  //   IP local da rede
-  //
-  // O Api.baseUrl já contém:
-  // https://foodjet-backend.onrender.com/api
   // ==========================================================
 
   static String get baseUrl {
@@ -38,41 +27,66 @@ class AuthService {
   ) async {
     final emailNormalizado = email.trim().toLowerCase();
 
+    final url = '$baseUrl/auth/login';
+
+    debugPrint('');
     debugPrint('========================================');
     debugPrint('🔐 FOODJET - LOGIN');
     debugPrint('📧 E-MAIL: $emailNormalizado');
     debugPrint('🌐 API: $baseUrl');
+    debugPrint('🎯 URL LOGIN: $url');
+    debugPrint('📡 MÉTODO: POST');
     debugPrint('========================================');
 
     try {
+      final uri = Uri.parse(url);
+
+      debugPrint('🔵 ETAPA 1: Preparando requisição...');
+      debugPrint('🔵 URI: $uri');
+
+      final body = jsonEncode({
+        'email': emailNormalizado,
+        'senha': senha,
+      });
+
+      debugPrint('🔵 ETAPA 2: Corpo JSON preparado');
+      debugPrint('🔵 E-mail enviado: $emailNormalizado');
+      debugPrint('🔵 Iniciando POST...');
+
+      final inicio = DateTime.now();
+
       final response = await http
           .post(
-            Uri.parse('$baseUrl/auth/login'),
+            uri,
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
+              'Connection': 'close',
+              'User-Agent': 'FoodJet/1.0',
             },
-            body: jsonEncode({
-              'email': emailNormalizado,
-              'senha': senha,
-            }),
+            body: body,
           )
           .timeout(
-            const Duration(seconds: 20),
+            const Duration(seconds: 60),
           );
 
-      debugPrint(
-        '📡 STATUS LOGIN: ${response.statusCode}',
-      );
+      final fim = DateTime.now();
+      final duracao = fim.difference(inicio);
 
-      debugPrint(
-        '📡 RESPOSTA LOGIN: ${response.body}',
-      );
+      debugPrint('');
+      debugPrint('========================================');
+      debugPrint('🟢 RESPOSTA RECEBIDA DO SERVIDOR');
+      debugPrint('⏱️ TEMPO: ${duracao.inMilliseconds} ms');
+      debugPrint('📡 STATUS HTTP: ${response.statusCode}');
+      debugPrint('📡 RESPOSTA: ${response.body}');
+      debugPrint('========================================');
 
       final data = _decodeResponse(response);
 
       if (response.statusCode >= 200 &&
           response.statusCode < 300) {
+        debugPrint('✅ STATUS HTTP VÁLIDO');
+
         final prefs =
             await SharedPreferences.getInstance();
 
@@ -88,13 +102,9 @@ class AuthService {
             token,
           );
 
-          debugPrint(
-            '✅ TOKEN SALVO',
-          );
+          debugPrint('✅ TOKEN SALVO');
         } else {
-          debugPrint(
-            '⚠️ LOGIN NÃO RETORNOU TOKEN',
-          );
+          debugPrint('⚠️ LOGIN NÃO RETORNOU TOKEN');
         }
 
         // ======================================================
@@ -103,13 +113,10 @@ class AuthService {
 
         dynamic usuario = data['usuario'];
 
-        // Caso o backend utilize "user"
         if (usuario == null) {
           usuario = data['user'];
         }
 
-        // Caso o backend retorne o usuário
-        // diretamente na resposta
         if (usuario == null &&
             (data['id'] != null ||
                 data['email'] != null ||
@@ -121,9 +128,7 @@ class AuthService {
 
         if (usuario is Map) {
           usuarioFinal =
-              Map<String, dynamic>.from(
-            usuario,
-          );
+              Map<String, dynamic>.from(usuario);
         } else {
           usuarioFinal = {};
         }
@@ -154,7 +159,7 @@ class AuthService {
         );
 
         // ======================================================
-        // SALVAR E-MAIL SEPARADAMENTE
+        // SALVAR E-MAIL
         // ======================================================
 
         await prefs.setString(
@@ -162,33 +167,24 @@ class AuthService {
           emailNormalizado,
         );
 
-        debugPrint(
-          '========================================',
-        );
-
-        debugPrint(
-          '✅ LOGIN CONCLUÍDO',
-        );
-
-        debugPrint(
-          '📧 E-MAIL SALVO: $emailNormalizado',
-        );
-
-        debugPrint(
-          '👤 USUÁRIO SALVO: $usuarioFinal',
-        );
-
+        debugPrint('');
+        debugPrint('========================================');
+        debugPrint('✅ LOGIN CONCLUÍDO');
+        debugPrint('📧 E-MAIL SALVO: $emailNormalizado');
+        debugPrint('👤 USUÁRIO SALVO: $usuarioFinal');
         debugPrint(
           '🔐 TOKEN SALVO: '
           '${token != null && token.isNotEmpty}',
         );
-
-        debugPrint(
-          '========================================',
-        );
+        debugPrint('========================================');
 
         return data;
       }
+
+      debugPrint(
+        '🔴 SERVIDOR RETORNOU ERRO HTTP: '
+        '${response.statusCode}',
+      );
 
       throw Exception(
         data['erro']?.toString() ??
@@ -196,10 +192,33 @@ class AuthService {
             data['error']?.toString() ??
             'Erro ao realizar login.',
       );
+    } on TimeoutException catch (e) {
+      debugPrint('');
+      debugPrint('========================================');
+      debugPrint('⏰ TIMEOUT NO LOGIN');
+      debugPrint('⏰ A requisição ultrapassou 60 segundos.');
+      debugPrint('🌐 URL: $url');
+      debugPrint('❌ ERRO: $e');
+      debugPrint('========================================');
+
+      rethrow;
+    } on http.ClientException catch (e) {
+      debugPrint('');
+      debugPrint('========================================');
+      debugPrint('🌐 ERRO DE CLIENTE HTTP');
+      debugPrint('🌐 URL: $url');
+      debugPrint('❌ ERRO: $e');
+      debugPrint('========================================');
+
+      rethrow;
     } catch (e) {
-      debugPrint(
-        '❌ ERRO LOGIN: $e',
-      );
+      debugPrint('');
+      debugPrint('========================================');
+      debugPrint('❌ ERRO LOGIN');
+      debugPrint('🌐 URL: $url');
+      debugPrint('❌ TIPO: ${e.runtimeType}');
+      debugPrint('❌ ERRO: $e');
+      debugPrint('========================================');
 
       rethrow;
     }
@@ -228,7 +247,6 @@ class AuthService {
     final prefs =
         await SharedPreferences.getInstance();
 
-    // Primeiro tenta o campo separado
     final email =
         prefs.getString('email');
 
@@ -237,7 +255,6 @@ class AuthService {
       return email.trim().toLowerCase();
     }
 
-    // Depois tenta dentro do usuário
     final usuarioJson =
         prefs.getString('usuario');
 
@@ -294,9 +311,7 @@ class AuthService {
 
         if (decoded is Map) {
           usuario =
-              Map<String, dynamic>.from(
-            decoded,
-          );
+              Map<String, dynamic>.from(decoded);
         }
       } catch (e) {
         debugPrint(
@@ -304,10 +319,6 @@ class AuthService {
         );
       }
     }
-
-    // ========================================================
-    // RECUPERAR E-MAIL
-    // ========================================================
 
     if (usuario['email'] == null ||
         usuario['email']
@@ -355,6 +366,8 @@ class AuthService {
             headers: {
               'Content-Type': 'application/json',
               'Accept': 'application/json',
+              'Connection': 'close',
+              'User-Agent': 'FoodJet/1.0',
             },
             body: jsonEncode({
               'email': email
@@ -363,7 +376,7 @@ class AuthService {
             }),
           )
           .timeout(
-            const Duration(seconds: 20),
+            const Duration(seconds: 60),
           );
 
       debugPrint(
@@ -413,6 +426,8 @@ class AuthService {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
+            'Connection': 'close',
+            'User-Agent': 'FoodJet/1.0',
           },
           body: jsonEncode({
             'email': email
@@ -422,7 +437,7 @@ class AuthService {
           }),
         )
         .timeout(
-          const Duration(seconds: 20),
+          const Duration(seconds: 60),
         );
 
     final data =
@@ -458,6 +473,8 @@ class AuthService {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
+            'Connection': 'close',
+            'User-Agent': 'FoodJet/1.0',
           },
           body: jsonEncode({
             'email': email
@@ -468,7 +485,7 @@ class AuthService {
           }),
         )
         .timeout(
-          const Duration(seconds: 20),
+          const Duration(seconds: 60),
         );
 
     final data =
@@ -504,8 +521,8 @@ class AuthService {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
-            'Authorization':
-                'Bearer $token',
+            'Connection': 'close',
+            'User-Agent': 'FoodJet/1.0',
           },
           body: jsonEncode({
             'senhaAtual': senhaAtual,
@@ -513,7 +530,7 @@ class AuthService {
           }),
         )
         .timeout(
-          const Duration(seconds: 20),
+          const Duration(seconds: 60),
         );
 
     final data =
@@ -571,13 +588,15 @@ class AuthService {
           headers: {
             'Content-Type': 'application/json',
             'Accept': 'application/json',
+            'Connection': 'close',
+            'User-Agent': 'FoodJet/1.0',
             'Authorization':
                 'Bearer $token',
           },
           body: jsonEncode(body),
         )
         .timeout(
-          const Duration(seconds: 20),
+          const Duration(seconds: 60),
         );
 
     final data =

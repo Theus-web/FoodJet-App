@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -15,7 +16,6 @@ class RestaurantScreen extends StatefulWidget {
   final String descricao;
   final String avaliacao;
 
-  // IMAGEM DO RESTAURANTE
   final String? imagem;
 
   const RestaurantScreen({
@@ -35,7 +35,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   static const Color laranja = Color(0xFFF97316);
   static const Color laranjaEscuro = Color(0xFFEA580C);
   static const Color fundo = Color(0xFFF6F7F9);
-   
 
   final List<CartItem> carrinho = [];
 
@@ -126,9 +125,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         carregandoFavorito = false;
       });
     } catch (e) {
-      debugPrint(
-        'ERRO AO CARREGAR FAVORITO: $e',
-      );
+      debugPrint('ERRO AO CARREGAR FAVORITO: $e');
 
       if (!mounted) return;
 
@@ -167,16 +164,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         'restauranteId': restauranteId,
         '_id': restauranteId,
         'restaurantId': restauranteId,
-
         'nome': widget.nome,
         'descricao': widget.descricao,
         'avaliacao': widget.avaliacao,
-
         'logo': logoRestaurante,
         'logoBase64': logoBase64,
         'imagem': logoRestaurante,
         'imagemUrl': logoRestaurante,
-
         'tipo': 'restaurante',
         'categoria': 'restaurante',
       };
@@ -192,9 +186,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         restaurante,
       );
 
-      debugPrint(
-        'NOVO ESTADO DO FAVORITO: $resultado',
-      );
+      debugPrint('NOVO ESTADO DO FAVORITO: $resultado');
 
       if (!mounted) return;
 
@@ -340,6 +332,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         '${Api.baseUrl}/restaurants/$restauranteId',
       );
 
+      debugPrint('========================================');
+      debugPrint('BUSCANDO RESTAURANTE');
+      debugPrint('ID: $restauranteId');
+      debugPrint('URL: $uri');
+      debugPrint('========================================');
+
       final resposta = await http
           .get(
             uri,
@@ -401,7 +399,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       }
 
       // ========================================================
-      // BUSCAR FOTO REAL DO RESTAURANTE
+      // FOTO DO RESTAURANTE
       // ========================================================
 
       String? logo;
@@ -425,7 +423,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           logo = valor.toString().trim();
 
           debugPrint(
-            'FOTO DO RESTAURANTE ENCONTRADA: $logo',
+            'FOTO RESTAURANTE ENCONTRADA NO CAMPO: $logo',
           );
 
           break;
@@ -433,7 +431,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       }
 
       // ========================================================
-      // BUSCAR BASE64
+      // BASE64
       // ========================================================
 
       String? base64Logo;
@@ -549,7 +547,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       }
     } catch (e) {
       debugPrint(
-        'Erro ao verificar status do restaurante: $e',
+        'ERRO AO VERIFICAR RESTAURANTE: $e',
       );
 
       if (!mounted) return;
@@ -586,6 +584,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         '${Api.baseUrl}/products',
       );
 
+      debugPrint('========================================');
+      debugPrint('BUSCANDO PRODUTOS');
+      debugPrint('URL: $uri');
+      debugPrint('RESTAURANTE ID: $restauranteId');
+      debugPrint('========================================');
+
       final resposta = await http
           .get(
             uri,
@@ -609,8 +613,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         );
       }
 
-      final resultado =
-          jsonDecode(resposta.body);
+      final resultado = jsonDecode(resposta.body);
 
       List<dynamic> listaProdutos;
 
@@ -667,6 +670,16 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             idProduto.toString();
 
         produtosApi.add(produto);
+
+        final imagemProduto =
+            produto['imagem']?.toString().trim();
+
+        if (imagemProduto != null &&
+            imagemProduto.isNotEmpty) {
+          debugPrint(
+            'IMAGEM PRODUTO: ${_urlImagemProduto(imagemProduto)}',
+          );
+        }
       }
 
       if (!mounted) return;
@@ -683,7 +696,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       });
     } catch (e) {
       debugPrint(
-        'Erro ao buscar produtos: $e',
+        'ERRO AO BUSCAR PRODUTOS: $e',
       );
 
       if (!mounted) return;
@@ -889,8 +902,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       MaterialPageRoute(
         builder: (_) => CartScreen(
           itens: carrinho,
-          restauranteId:
-              restauranteId,
+          restauranteId: restauranteId,
         ),
       ),
     ).then((_) {
@@ -941,49 +953,186 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
-  // URL IMAGEM
+  // URL BASE DO BACKEND
   // ============================================================
+
+  String get _backendBaseUrl {
+    final base = Api.baseUrl.trim();
+
+    return base.replaceFirst(
+      RegExp(r'/api/?$'),
+      '',
+    );
+  }
+
+  // ============================================================
+  // NORMALIZAR URL DA IMAGEM
+  // ============================================================
+
+  String _normalizarUrlImagem(
+    String imagem, {
+    String tipo = 'imagem',
+  }) {
+    var valor = imagem.trim();
+
+    if (valor.isEmpty) {
+      return '';
+    }
+
+    // ----------------------------------------------------------
+    // BASE64
+    // ----------------------------------------------------------
+
+    if (valor.startsWith('data:image/')) {
+      return valor;
+    }
+
+    // ----------------------------------------------------------
+    // URL ANTIGA DO LOCALHOST
+    // ----------------------------------------------------------
+
+    final localhostRegex = RegExp(
+      r'^https?://localhost(?::\d+)?(.*)$',
+      caseSensitive: false,
+    );
+
+    final localhostMatch =
+        localhostRegex.firstMatch(valor);
+
+    if (localhostMatch != null) {
+      final caminho =
+          localhostMatch.group(1) ?? '';
+
+      valor = '$_backendBaseUrl$caminho';
+
+      debugPrint(
+        'URL $tipo CORRIGIDA DE LOCALHOST:',
+      );
+      debugPrint('ANTIGA: $imagem');
+      debugPrint('NOVA: $valor');
+
+      return valor;
+    }
+
+    // ----------------------------------------------------------
+    // URL 127.0.0.1
+    // ----------------------------------------------------------
+
+    final loopbackRegex = RegExp(
+      r'^https?://127\.0\.0\.1(?::\d+)?(.*)$',
+      caseSensitive: false,
+    );
+
+    final loopbackMatch =
+        loopbackRegex.firstMatch(valor);
+
+    if (loopbackMatch != null) {
+      final caminho =
+          loopbackMatch.group(1) ?? '';
+
+      valor = '$_backendBaseUrl$caminho';
+
+      debugPrint(
+        'URL $tipo CORRIGIDA DE 127.0.0.1:',
+      );
+      debugPrint('ANTIGA: $imagem');
+      debugPrint('NOVA: $valor');
+
+      return valor;
+    }
+
+    // ----------------------------------------------------------
+    // URL DE IP LOCAL
+    // Exemplo:
+    // http://192.168.1.101:3000/uploads/foto.jpg
+    // ----------------------------------------------------------
+
+    final ipLocalRegex = RegExp(
+      r'^https?://(?:192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}|172\.(?:1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3})(?::\d+)?(.*)$',
+      caseSensitive: false,
+    );
+
+    final ipLocalMatch =
+        ipLocalRegex.firstMatch(valor);
+
+    if (ipLocalMatch != null) {
+      final caminho =
+          ipLocalMatch.group(1) ?? '';
+
+      valor = '$_backendBaseUrl$caminho';
+
+      debugPrint(
+        'URL $tipo CORRIGIDA DE IP LOCAL:',
+      );
+      debugPrint('ANTIGA: $imagem');
+      debugPrint('NOVA: $valor');
+
+      return valor;
+    }
+
+    // ----------------------------------------------------------
+    // URL HTTPS/HTTP EXTERNA
+    // ----------------------------------------------------------
+
+    if (valor.startsWith('https://') ||
+        valor.startsWith('http://')) {
+      debugPrint(
+        'URL $tipo REMOTA:',
+      );
+      debugPrint(valor);
+
+      return valor;
+    }
+
+    // ----------------------------------------------------------
+    // CAMINHO RELATIVO
+    // ----------------------------------------------------------
+
+    if (valor.startsWith('/')) {
+      final url =
+          '$_backendBaseUrl$valor';
+
+      debugPrint(
+        'URL $tipo RELATIVA:',
+      );
+      debugPrint('ORIGINAL: $imagem');
+      debugPrint('FINAL: $url');
+
+      return url;
+    }
+
+    // ----------------------------------------------------------
+    // CAMINHO SEM /
+    // ----------------------------------------------------------
+
+    final url =
+        '$_backendBaseUrl/$valor';
+
+    debugPrint(
+      'URL $tipo SEM PREFIXO:',
+    );
+    debugPrint('ORIGINAL: $imagem');
+    debugPrint('FINAL: $url');
+
+    return url;
+  }
 
   String _urlImagemProduto(
     String imagem,
   ) {
-    if (imagem.startsWith('http://') ||
-        imagem.startsWith('https://')) {
-      return imagem;
-    }
-
-    final baseUrl =
-        Api.baseUrl.replaceFirst(
-      RegExp(r'/api/?$'),
-      '',
+    return _normalizarUrlImagem(
+      imagem,
+      tipo: 'PRODUTO',
     );
-
-    if (imagem.startsWith('/')) {
-      return '$baseUrl$imagem';
-    }
-
-    return '$baseUrl/$imagem';
   }
 
-  String _urlLogo(String imagem) {
-    final valor = imagem.trim();
-
-    if (valor.startsWith('http://') ||
-        valor.startsWith('https://')) {
-      return valor;
-    }
-
-    final baseUrl =
-        Api.baseUrl.replaceFirst(
-      RegExp(r'/api/?$'),
-      '',
+  String _urlLogo(
+    String imagem,
+  ) {
+    return _normalizarUrlImagem(
+      imagem,
+      tipo: 'RESTAURANTE',
     );
-
-    if (valor.startsWith('/')) {
-      return '$baseUrl$valor';
-    }
-
-    return '$baseUrl/$valor';
   }
 
   // ============================================================
@@ -1000,7 +1149,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       String base64String =
           logoBase64!.trim();
 
-      if (base64String.contains(',')) {
+      if (base64String.startsWith(
+        'data:image/',
+      )) {
+        base64String =
+            base64String.split(',').last;
+      } else if (base64String.contains(',')) {
         base64String =
             base64String.split(',').last;
       }
@@ -1019,7 +1173,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       );
     } catch (e) {
       debugPrint(
-        'Erro ao carregar logo Base64: $e',
+        'ERRO AO CARREGAR LOGO BASE64: $e',
       );
 
       return null;
@@ -1027,115 +1181,137 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
-// LOGO / FOTO DO RESTAURANTE
-// ============================================================
+  // LOGO / FOTO DO RESTAURANTE
+  // ============================================================
 
-Widget _logoRestaurante() {
-  // Primeiro usa a imagem que veio do HOME
-  final imagemHome = widget.imagem?.trim();
+  Widget _logoRestaurante() {
+    final imagemHome =
+        widget.imagem?.trim();
 
-  // Depois usa a imagem que veio da API
-  final imagemApi = logoRestaurante?.trim();
+    final imagemApi =
+        logoRestaurante?.trim();
 
-  // Prioridade:
-  // 1. Imagem do Home
-  // 2. Imagem carregada da API
-  // 3. Base64
-  // 4. Ícone padrão
+    String? imagemFinal;
 
-  String? imagemFinal;
+    if (imagemHome != null &&
+        imagemHome.isNotEmpty) {
+      imagemFinal = imagemHome;
+    } else if (imagemApi != null &&
+        imagemApi.isNotEmpty) {
+      imagemFinal = imagemApi;
+    }
 
-  if (imagemHome != null && imagemHome.isNotEmpty) {
-    imagemFinal = imagemHome;
-  } else if (imagemApi != null && imagemApi.isNotEmpty) {
-    imagemFinal = imagemApi;
-  }
+    Widget imagem;
 
-  Widget imagem;
+    if (imagemFinal != null) {
+      final urlFinal =
+          _urlLogo(imagemFinal);
 
-  if (imagemFinal != null) {
-    imagem = Image.network(
-      _urlLogo(imagemFinal),
-      width: 100,
-      height: 100,
-      fit: BoxFit.cover,
-      loadingBuilder: (
-        context,
-        child,
-        loadingProgress,
-      ) {
-        if (loadingProgress == null) {
-          return child;
-        }
+      debugPrint('========================================');
+      debugPrint('LOGO RESTAURANTE');
+      debugPrint('NOME: ${widget.nome}');
+      debugPrint('IMAGEM ORIGINAL: $imagemFinal');
+      debugPrint('URL FINAL: $urlFinal');
+      debugPrint('========================================');
 
-        return Container(
-          color: Colors.white,
-          child: const Center(
-            child: SizedBox(
-              width: 24,
-              height: 24,
-              child: CircularProgressIndicator(
-                strokeWidth: 2.5,
-                color: laranja,
+      imagem = Image.network(
+        urlFinal,
+        width: 100,
+        height: 100,
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.high,
+        loadingBuilder: (
+          context,
+          child,
+          loadingProgress,
+        ) {
+          if (loadingProgress == null) {
+            debugPrint(
+              'LOGO RESTAURANTE CARREGADA COM SUCESSO',
+            );
+
+            return child;
+          }
+
+          return Container(
+            color: Colors.white,
+            child: const Center(
+              child: SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: laranja,
+                ),
               ),
             ),
+          );
+        },
+        errorBuilder: (
+          context,
+          error,
+          stackTrace,
+        ) {
+          debugPrint('========================================');
+          debugPrint('ERRO AO CARREGAR LOGO RESTAURANTE');
+          debugPrint('URL: $urlFinal');
+          debugPrint('ERRO: $error');
+          debugPrint('========================================');
+
+          return _logoBase64Widget() ??
+              _iconeLogo();
+        },
+      );
+    } else {
+      debugPrint(
+        'NENHUMA IMAGEM DO RESTAURANTE FOI INFORMADA.',
+      );
+
+      imagem =
+          _logoBase64Widget() ??
+          _iconeLogo();
+    }
+
+    return Container(
+      width: 100,
+      height: 100,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(
+              alpha: 0.20,
+            ),
+            blurRadius: 28,
+            offset:
+                const Offset(0, 12),
           ),
-        );
-      },
-      errorBuilder: (
-        context,
-        error,
-        stackTrace,
-      ) {
-        // Se a imagem do Home falhar,
-        // tenta Base64 antes do ícone.
-        return _logoBase64Widget() ??
-            _iconeLogo();
-      },
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius:
+            BorderRadius.circular(30),
+        child: imagem,
+      ),
     );
-  } else {
-    imagem =
-        _logoBase64Widget() ??
-        _iconeLogo();
   }
 
-  return Container(
-    width: 100,
-    height: 100,
-    decoration: BoxDecoration(
+  Widget _iconeLogo() {
+    return Container(
+      width: 100,
+      height: 100,
       color: Colors.white,
-      borderRadius: BorderRadius.circular(30),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(
-            alpha: 0.20,
-          ),
-          blurRadius: 28,
-          offset: const Offset(0, 12),
+      child: const Center(
+        child: Icon(
+          Icons.restaurant_rounded,
+          color: laranja,
+          size: 48,
         ),
-      ],
-    ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(30),
-      child: imagem,
-    ),
-  );
-}
-
-Widget _iconeLogo() {
-  return Container(
-    width: 100,
-    height: 100,
-    color: Colors.white,
-    child: const Center(
-      child: Icon(
-        Icons.restaurant_rounded,
-        color: laranja,
-        size: 48,
       ),
-    ),
-  );
-}
+    );
+  }
 
   // ============================================================
   // BUILD
@@ -2066,8 +2242,7 @@ Widget _iconeLogo() {
           color: restauranteOnline
               ? null
               : Colors.grey.shade400,
-          shape:
-              BoxShape.circle,
+          shape: BoxShape.circle,
           boxShadow:
               restauranteOnline
                   ? [
@@ -2108,19 +2283,30 @@ Widget _iconeLogo() {
       );
     }
 
+    final url =
+        _urlImagemProduto(
+      imagem.trim(),
+    );
+
     return Image.network(
-      _urlImagemProduto(
-        imagem.trim(),
-      ),
+      url,
       width: tamanho,
       height: tamanho,
       fit: BoxFit.cover,
+      filterQuality: FilterQuality.high,
       errorBuilder:
           (
         context,
         error,
         stackTrace,
       ) {
+        debugPrint(
+          'ERRO IMAGEM PRODUTO: $url',
+        );
+        debugPrint(
+          'DETALHE: $error',
+        );
+
         return _placeholderImagem(
           tamanho,
         );
@@ -2403,3 +2589,4 @@ Widget _iconeLogo() {
     );
   }
 }
+
