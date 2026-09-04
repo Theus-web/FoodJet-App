@@ -1,22 +1,31 @@
+
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../config/api.dart';
+
 class AuthService {
   // ==========================================================
   // URL DA API
   // ==========================================================
+  //
+  // IMPORTANTE:
+  // O FoodJet agora utiliza o backend hospedado no Render.
+  //
+  // Não usar:
+  //   localhost
+  //   10.0.2.2
+  //   IP local da rede
+  //
+  // O Api.baseUrl já contém:
+  // https://foodjet-backend.onrender.com/api
+  // ==========================================================
 
   static String get baseUrl {
-    // Flutter Web
-    if (kIsWeb) {
-      return 'http://localhost:3000/api';
-    }
-
-    // Android Emulator
-    return 'http://10.0.2.2:3000/api';
+    return Api.baseUrl;
   }
 
   // ==========================================================
@@ -27,156 +36,173 @@ class AuthService {
     String email,
     String senha,
   ) async {
-    final emailNormalizado =
-        email.trim().toLowerCase();
+    final emailNormalizado = email.trim().toLowerCase();
 
     debugPrint('========================================');
     debugPrint('🔐 FOODJET - LOGIN');
     debugPrint('📧 E-MAIL: $emailNormalizado');
+    debugPrint('🌐 API: $baseUrl');
     debugPrint('========================================');
 
-    final response = await http
-        .post(
-          Uri.parse('$baseUrl/auth/login'),
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: jsonEncode({
-            'email': emailNormalizado,
-            'senha': senha,
-          }),
-        )
-        .timeout(
-          const Duration(seconds: 15),
-        );
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/auth/login'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({
+              'email': emailNormalizado,
+              'senha': senha,
+            }),
+          )
+          .timeout(
+            const Duration(seconds: 20),
+          );
 
-    debugPrint(
-      '📡 STATUS LOGIN: ${response.statusCode}',
-    );
+      debugPrint(
+        '📡 STATUS LOGIN: ${response.statusCode}',
+      );
 
-    debugPrint(
-      '📡 RESPOSTA LOGIN: ${response.body}',
-    );
+      debugPrint(
+        '📡 RESPOSTA LOGIN: ${response.body}',
+      );
 
-    final data = _decodeResponse(response);
+      final data = _decodeResponse(response);
 
-    if (response.statusCode >= 200 &&
-        response.statusCode < 300) {
-      final prefs =
-          await SharedPreferences.getInstance();
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300) {
+        final prefs =
+            await SharedPreferences.getInstance();
 
-      // ======================================================
-      // TOKEN
-      // ======================================================
+        // ======================================================
+        // TOKEN
+        // ======================================================
 
-      final token =
-          data['token']?.toString();
+        final token = data['token']?.toString();
 
-      if (token != null &&
-          token.isNotEmpty) {
+        if (token != null && token.isNotEmpty) {
+          await prefs.setString(
+            'token',
+            token,
+          );
+
+          debugPrint(
+            '✅ TOKEN SALVO',
+          );
+        } else {
+          debugPrint(
+            '⚠️ LOGIN NÃO RETORNOU TOKEN',
+          );
+        }
+
+        // ======================================================
+        // USUÁRIO
+        // ======================================================
+
+        dynamic usuario = data['usuario'];
+
+        // Caso o backend utilize "user"
+        if (usuario == null) {
+          usuario = data['user'];
+        }
+
+        // Caso o backend retorne o usuário
+        // diretamente na resposta
+        if (usuario == null &&
+            (data['id'] != null ||
+                data['email'] != null ||
+                data['nome'] != null)) {
+          usuario = data;
+        }
+
+        Map<String, dynamic> usuarioFinal;
+
+        if (usuario is Map) {
+          usuarioFinal =
+              Map<String, dynamic>.from(
+            usuario,
+          );
+        } else {
+          usuarioFinal = {};
+        }
+
+        // ======================================================
+        // GARANTIR E-MAIL
+        // ======================================================
+
+        final emailUsuario =
+            usuarioFinal['email']
+                ?.toString()
+                .trim()
+                .toLowerCase();
+
+        if (emailUsuario == null ||
+            emailUsuario.isEmpty) {
+          usuarioFinal['email'] =
+              emailNormalizado;
+        }
+
+        // ======================================================
+        // SALVAR USUÁRIO
+        // ======================================================
+
         await prefs.setString(
-          'token',
-          token,
+          'usuario',
+          jsonEncode(usuarioFinal),
+        );
+
+        // ======================================================
+        // SALVAR E-MAIL SEPARADAMENTE
+        // ======================================================
+
+        await prefs.setString(
+          'email',
+          emailNormalizado,
         );
 
         debugPrint(
-          '✅ TOKEN SALVO',
+          '========================================',
         );
-      } else {
+
         debugPrint(
-          '⚠️ LOGIN NÃO RETORNOU TOKEN',
+          '✅ LOGIN CONCLUÍDO',
         );
-      }
 
-      // ======================================================
-      // USUÁRIO
-      // ======================================================
-
-      dynamic usuario =
-          data['usuario'];
-
-      // Caso o backend utilize "user"
-      if (usuario == null) {
-        usuario = data['user'];
-      }
-
-      // Caso o backend retorne o usuário
-      // diretamente na resposta
-      if (usuario == null &&
-          (data['id'] != null ||
-              data['email'] != null ||
-              data['nome'] != null)) {
-        usuario = data;
-      }
-
-      Map<String, dynamic> usuarioFinal;
-
-      if (usuario is Map) {
-        usuarioFinal =
-            Map<String, dynamic>.from(
-          usuario,
+        debugPrint(
+          '📧 E-MAIL SALVO: $emailNormalizado',
         );
-      } else {
-        usuarioFinal = {};
+
+        debugPrint(
+          '👤 USUÁRIO SALVO: $usuarioFinal',
+        );
+
+        debugPrint(
+          '🔐 TOKEN SALVO: '
+          '${token != null && token.isNotEmpty}',
+        );
+
+        debugPrint(
+          '========================================',
+        );
+
+        return data;
       }
 
-      // ======================================================
-      // GARANTIR E-MAIL
-      // ======================================================
-
-      final emailUsuario =
-          usuarioFinal['email']
-              ?.toString()
-              .trim()
-              .toLowerCase();
-
-      if (emailUsuario == null ||
-          emailUsuario.isEmpty) {
-        usuarioFinal['email'] =
-            emailNormalizado;
-      }
-
-      // ======================================================
-      // SALVAR USUÁRIO
-      // ======================================================
-
-      await prefs.setString(
-        'usuario',
-        jsonEncode(usuarioFinal),
+      throw Exception(
+        data['erro']?.toString() ??
+            data['mensagem']?.toString() ??
+            data['error']?.toString() ??
+            'Erro ao realizar login.',
       );
-
-      // ======================================================
-      // SALVAR E-MAIL SEPARADAMENTE
-      // ======================================================
-
-      await prefs.setString(
-        'email',
-        emailNormalizado,
-      );
-
-      debugPrint('========================================');
-      debugPrint('✅ LOGIN CONCLUÍDO');
+    } catch (e) {
       debugPrint(
-        '📧 E-MAIL SALVO: $emailNormalizado',
+        '❌ ERRO LOGIN: $e',
       );
-      debugPrint(
-        '👤 USUÁRIO SALVO: $usuarioFinal',
-      );
-      debugPrint(
-        '🔐 TOKEN SALVO: ${token != null && token.isNotEmpty}',
-      );
-      debugPrint('========================================');
 
-      return data;
+      rethrow;
     }
-
-    throw Exception(
-      data['erro']?.toString() ??
-          data['mensagem']?.toString() ??
-          data['error']?.toString() ??
-          'Erro ao realizar login.',
-    );
   }
 
   // ==========================================================
@@ -337,7 +363,7 @@ class AuthService {
             }),
           )
           .timeout(
-            const Duration(seconds: 15),
+            const Duration(seconds: 20),
           );
 
       debugPrint(
@@ -396,7 +422,7 @@ class AuthService {
           }),
         )
         .timeout(
-          const Duration(seconds: 15),
+          const Duration(seconds: 20),
         );
 
     final data =
@@ -442,7 +468,7 @@ class AuthService {
           }),
         )
         .timeout(
-          const Duration(seconds: 15),
+          const Duration(seconds: 20),
         );
 
     final data =
@@ -487,7 +513,7 @@ class AuthService {
           }),
         )
         .timeout(
-          const Duration(seconds: 15),
+          const Duration(seconds: 20),
         );
 
     final data =
@@ -517,8 +543,7 @@ class AuthService {
     String? telefone,
     String? foto,
   }) async {
-    final Map<String, dynamic> body =
-        {};
+    final Map<String, dynamic> body = {};
 
     if (nome != null) {
       body['nome'] = nome;
@@ -552,7 +577,7 @@ class AuthService {
           body: jsonEncode(body),
         )
         .timeout(
-          const Duration(seconds: 15),
+          const Duration(seconds: 20),
         );
 
     final data =
@@ -649,3 +674,4 @@ class AuthService {
     }
   }
 }
+
