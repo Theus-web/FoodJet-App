@@ -36,6 +36,59 @@ async function prepararBanco() {
 
 
 // ======================================================
+// CONVERTER VALOR PARA JSONB
+// ======================================================
+//
+// IMPORTANTE:
+// O node-postgres pode interpretar arrays JavaScript como
+// arrays PostgreSQL quando passados diretamente.
+//
+// Como nossas colunas são JSONB, serializamos explicitamente.
+//
+// ======================================================
+
+function prepararJsonB(valor, fallback) {
+
+    const valorSeguro =
+        valor === undefined ||
+        valor === null
+            ? fallback
+            : valor;
+
+    try {
+
+        const json =
+            JSON.stringify(valorSeguro);
+
+        if (
+            json === undefined
+        ) {
+
+            return JSON.stringify(
+                fallback
+            );
+
+        }
+
+        return json;
+
+    } catch (erro) {
+
+        console.error(
+            "❌ ERRO AO SERIALIZAR JSONB:",
+            erro.message
+        );
+
+        return JSON.stringify(
+            fallback
+        );
+
+    }
+
+}
+
+
+// ======================================================
 // LIMPAR PEDIDOS ANTIGOS
 // ======================================================
 
@@ -228,7 +281,9 @@ async function encontrarPagamentoAsaasPendente(
         ).trim();
 
     if (!referencia) {
+
         return null;
+
     }
 
     const resultado =
@@ -463,12 +518,15 @@ async function marcarPagamentoAsaasConciliado(
         `
         UPDATE pagamentos_asaas
         SET
-            dados = $1,
+            dados = $1::jsonb,
             atualizado_em = $2
         WHERE id = $3
         `,
         [
-            dadosAtualizados,
+            prepararJsonB(
+                dadosAtualizados,
+                {}
+            ),
             new Date(),
             pagamentoAsaas.id,
         ]
@@ -549,6 +607,7 @@ async function criar(pedido) {
             ? pedido.itens
             : [];
 
+
     const endereco =
         pedido.endereco &&
         typeof pedido.endereco === "object"
@@ -578,6 +637,7 @@ async function criar(pedido) {
         Number(
             pedido.total
         );
+
 
     if (
         !Number.isFinite(total) ||
@@ -856,35 +916,43 @@ async function criar(pedido) {
             novoPedido.clienteId
         );
 
+
     const restauranteId =
         String(
             novoPedido.restauranteId
         );
 
+
     const pagamentoStatus =
         novoPedido.pagamentoStatus ||
         null;
 
+
     const statusPagamento =
         novoPedido.statusPagamento ||
         null;
+
 
     const pagamentoAprovado =
         Boolean(
             novoPedido.pagamentoAprovado
         );
 
+
     const externalReferenceFinal =
         novoPedido.externalReference ||
         null;
+
 
     const referenciaPagamentoFinal =
         novoPedido.referenciaPagamento ||
         null;
 
+
     const statusFinal =
         novoPedido.status ||
         null;
+
 
     const suporte =
         novoPedido.suporte &&
@@ -895,6 +963,79 @@ async function criar(pedido) {
                 status: "FECHADO",
                 mensagens: [],
             };
+
+
+    // ==================================================
+    // SERIALIZAR JSONB
+    // ==================================================
+
+    const itensJson =
+        prepararJsonB(
+            itens,
+            []
+        );
+
+
+    const enderecoJson =
+        prepararJsonB(
+            endereco,
+            {}
+        );
+
+
+    const suporteJson =
+        prepararJsonB(
+            suporte,
+            {
+                aberto: false,
+                status: "FECHADO",
+                mensagens: [],
+            }
+        );
+
+
+    const dadosJson =
+        prepararJsonB(
+            novoPedido,
+            {}
+        );
+
+
+    // ==================================================
+    // DEBUG DOS CAMPOS JSONB
+    // ==================================================
+
+    console.log(
+        "========================================"
+    );
+
+    console.log(
+        "🧪 VALIDANDO JSONB ANTES DO INSERT"
+    );
+
+    console.log(
+        "ITENS JSON:",
+        itensJson
+    );
+
+    console.log(
+        "ENDERECO JSON:",
+        enderecoJson
+    );
+
+    console.log(
+        "SUPORTE JSON:",
+        suporteJson
+    );
+
+    console.log(
+        "DADOS JSON:",
+        dadosJson
+    );
+
+    console.log(
+        "========================================"
+    );
 
 
     // ==================================================
@@ -933,8 +1074,8 @@ async function criar(pedido) {
                 $1,
                 $2,
                 $3,
-                $4,
-                $5,
+                $4::jsonb,
+                $5::jsonb,
                 $6,
                 $7,
                 $8,
@@ -949,10 +1090,10 @@ async function criar(pedido) {
                 $17,
                 $18,
                 $19,
-                $20,
+                $20::jsonb,
                 $21,
                 $22,
-                $23
+                $23::jsonb
             )
             RETURNING *
             `,
@@ -960,26 +1101,34 @@ async function criar(pedido) {
                 id,
                 clienteId,
                 restauranteId,
-                itens,
-                endereco,
+
+                itensJson,
+                enderecoJson,
+
                 pagamento,
                 pagamentoStatus,
                 statusPagamento,
                 pagamentoAprovado,
+
                 subtotal,
                 taxaServico,
                 taxaEntrega,
                 total,
+
                 precisaTroco,
                 trocoPara,
                 valorTroco,
+
                 externalReferenceFinal,
                 referenciaPagamentoFinal,
                 statusFinal,
-                suporte,
+
+                suporteJson,
+
                 criadoEm,
                 criadoEm,
-                novoPedido,
+
+                dadosJson,
             ]
         );
 
@@ -1108,8 +1257,7 @@ async function listar() {
     const resultado =
         await pool.query(
             `
-            SELECT
-                *
+            SELECT *
             FROM pedidos
             ORDER BY id ASC
             `
@@ -1153,8 +1301,7 @@ async function buscarPorId(id) {
     const resultado =
         await pool.query(
             `
-            SELECT
-                *
+            SELECT *
             FROM pedidos
             WHERE id = $1
             LIMIT 1
@@ -1195,6 +1342,7 @@ async function atualizarDadosPedido(
         return null;
 
     }
+
 
     const pedidoAtualizado = {
 
@@ -1347,6 +1495,42 @@ async function atualizarDadosPedido(
 
 
     // ==================================================
+    // SERIALIZAR JSONB
+    // ==================================================
+
+    const itensJson =
+        prepararJsonB(
+            itens,
+            []
+        );
+
+
+    const enderecoJson =
+        prepararJsonB(
+            endereco,
+            {}
+        );
+
+
+    const suporteJson =
+        prepararJsonB(
+            suporte,
+            {
+                aberto: false,
+                status: "FECHADO",
+                mensagens: [],
+            }
+        );
+
+
+    const dadosJson =
+        prepararJsonB(
+            pedidoAtualizado,
+            {}
+        );
+
+
+    // ==================================================
     // ATUALIZAR POSTGRESQL
     // ==================================================
 
@@ -1357,8 +1541,8 @@ async function atualizarDadosPedido(
             SET
                 cliente_id = $1,
                 restaurante_id = $2,
-                itens = $3,
-                endereco = $4,
+                itens = $3::jsonb,
+                endereco = $4::jsonb,
                 pagamento = $5,
                 pagamento_status = $6,
                 status_pagamento = $7,
@@ -1373,34 +1557,43 @@ async function atualizarDadosPedido(
                 external_reference = $16,
                 referencia_pagamento = $17,
                 status = $18,
-                suporte = $19,
+                suporte = $19::jsonb,
                 atualizado_em = $20,
-                dados = $21
+                dados = $21::jsonb
             WHERE id = $22
             RETURNING *
             `,
             [
                 clienteId,
                 restauranteId,
-                itens,
-                endereco,
+
+                itensJson,
+                enderecoJson,
+
                 pagamento,
                 pagamentoStatus,
                 statusPagamento,
                 pagamentoAprovado,
+
                 subtotal,
                 taxaServico,
                 taxaEntrega,
                 total,
+
                 precisaTroco,
                 trocoPara,
                 valorTroco,
+
                 externalReference,
                 referenciaPagamento,
                 status,
-                suporte,
+
+                suporteJson,
+
                 pedidoAtualizado.atualizadoEm,
-                pedidoAtualizado,
+
+                dadosJson,
+
                 Number(id),
             ]
         );
@@ -1601,8 +1794,7 @@ async function listarPorRestaurante(
     const resultado =
         await pool.query(
             `
-            SELECT
-                *
+            SELECT *
             FROM pedidos
             WHERE restaurante_id = $1
             ORDER BY id DESC
@@ -1641,8 +1833,7 @@ async function listarPorCliente(
     const resultado =
         await pool.query(
             `
-            SELECT
-                *
+            SELECT *
             FROM pedidos
             WHERE cliente_id = $1
             ORDER BY id DESC
@@ -1669,8 +1860,7 @@ async function listarDisponiveisEntrega() {
     const resultado =
         await pool.query(
             `
-            SELECT
-                *
+            SELECT *
             FROM pedidos
             WHERE status = 'PRONTO'
             ORDER BY id ASC
@@ -1830,8 +2020,7 @@ async function listarSuportes() {
     const resultado =
         await pool.query(
             `
-            SELECT
-                *
+            SELECT *
             FROM pedidos
             WHERE
                 COALESCE(
@@ -2030,10 +2219,6 @@ function montarPedido(row) {
 
     }
 
-
-    // ==================================================
-    // COLUNAS POSTGRESQL TÊM PRIORIDADE
-    // ==================================================
 
     const pedido = {
 
