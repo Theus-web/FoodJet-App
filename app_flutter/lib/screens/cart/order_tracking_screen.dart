@@ -1,8 +1,10 @@
+
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+
 import '../../config/api.dart';
 
 class OrderTrackingScreen extends StatefulWidget {
@@ -26,15 +28,26 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
   Map<String, dynamic>? pedido;
 
+  bool buscando = false;
+
   @override
   void initState() {
     super.initState();
 
+    print('==============================================');
+    print('📦 ORDER TRACKING INICIADO');
+    print('📦 PEDIDO: ${widget.pedidoId}');
+    print('==============================================');
+
     buscarPedido();
 
+    // =====================================================
+    // ATUALIZA AUTOMATICAMENTE A CADA 3 SEGUNDOS
+    // =====================================================
+
     timer = Timer.periodic(
-      const Duration(seconds: 10),
-      (timer) {
+      const Duration(seconds: 3),
+      (_) {
         buscarPedido();
       },
     );
@@ -47,19 +60,78 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   }
 
   // =====================================================
+  // NORMALIZAR STATUS
+  // =====================================================
+
+  String normalizarStatus(dynamic valor) {
+    if (valor == null) {
+      return 'AGUARDANDO_RESTAURANTE';
+    }
+
+    String status = valor
+        .toString()
+        .trim()
+        .toUpperCase();
+
+    // ===================================================
+    // STATUS DE ACEITE
+    // ===================================================
+
+    if (status == 'ACEITO' ||
+        status == 'ACEITADO' ||
+        status == 'CONFIRMADO' ||
+        status == 'CONFIRMADO_RESTAURANTE' ||
+        status == 'RESTAURANTE_ACEITOU') {
+      return 'CONFIRMADO';
+    }
+
+    // ===================================================
+    // OUTROS NOMES POSSÍVEIS
+    // ===================================================
+
+    if (status == 'EM_PREPARO') {
+      return 'PREPARANDO';
+    }
+
+    if (status == 'SAIU_PARA_ENTREGA') {
+      return 'EM_ENTREGA';
+    }
+
+    if (status == 'ENTREGUE') {
+      return 'ENTREGUE';
+    }
+
+    if (status == 'CANCELADO' ||
+        status == 'CANCELADA' ||
+        status == 'CANCELLED') {
+      return 'CANCELADO';
+    }
+
+    return status;
+  }
+
+  // =====================================================
   // BUSCAR PEDIDO NA API
   // =====================================================
 
   Future<void> buscarPedido() async {
+    if (buscando) {
+      return;
+    }
+
+    buscando = true;
+
     try {
+      final url = '${Api.baseUrl}/orders/${widget.pedidoId}';
+
+      print('📡 BUSCANDO PEDIDO: $url');
+
       final resposta = await http.get(
-        Uri.parse(
-          '${Api.baseUrl}/orders/${widget.pedidoId}',
-        ),
+        Uri.parse(url),
       );
 
       print(
-        '📡 STATUS PEDIDO: ${resposta.statusCode}',
+        '📡 STATUS HTTP PEDIDO: ${resposta.statusCode}',
       );
 
       print(
@@ -69,19 +141,93 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       if (resposta.statusCode == 200) {
         final dados = jsonDecode(resposta.body);
 
+        Map<String, dynamic>? pedidoRecebido;
+
+        // =================================================
+        // FORMATO:
+        // { "pedido": {...} }
+        // =================================================
+
+        if (dados is Map<String, dynamic>) {
+          if (dados['pedido'] is Map) {
+            pedidoRecebido = Map<String, dynamic>.from(
+              dados['pedido'],
+            );
+          } else {
+            pedidoRecebido = dados;
+          }
+        }
+
+        if (pedidoRecebido == null) {
+          print('⚠️ PEDIDO NÃO ENCONTRADO NA RESPOSTA');
+
+          if (mounted) {
+            setState(() {
+              carregando = false;
+            });
+          }
+
+          return;
+        }
+
+        // =================================================
+        // PEGAR STATUS
+        // =================================================
+
+        dynamic statusRecebido;
+
+        if (pedidoRecebido['status'] != null) {
+          statusRecebido = pedidoRecebido['status'];
+        } else if (pedidoRecebido['statusPedido'] != null) {
+          statusRecebido = pedidoRecebido['statusPedido'];
+        } else if (pedidoRecebido['situacao'] != null) {
+          statusRecebido = pedidoRecebido['situacao'];
+        }
+
+        final novoStatus = normalizarStatus(
+          statusRecebido,
+        );
+
+        print('==============================================');
+        print('📦 PEDIDO ${widget.pedidoId}');
+        print('📦 STATUS RECEBIDO: $statusRecebido');
+        print('📦 STATUS NORMALIZADO: $novoStatus');
+        print('==============================================');
+
         if (!mounted) {
           return;
         }
 
         setState(() {
-          pedido = dados['pedido'] ?? dados;
-
-          statusPedido =
-              pedido?['status'] ?? 'AGUARDANDO_RESTAURANTE';
-
+          pedido = pedidoRecebido;
+          statusPedido = novoStatus;
           carregando = false;
         });
+
+        // =================================================
+        // SE O RESTAURANTE ACEITOU
+        // =================================================
+
+        if (novoStatus == 'CONFIRMADO') {
+          print(
+            '✅ RESTAURANTE ACEITOU O PEDIDO ${widget.pedidoId}',
+          );
+        }
+
+        // =================================================
+        // SE FOI CANCELADO
+        // =================================================
+
+        if (novoStatus == 'CANCELADO') {
+          print(
+            '❌ PEDIDO ${widget.pedidoId} FOI CANCELADO',
+          );
+        }
       } else {
+        print(
+          '❌ ERRO HTTP AO BUSCAR PEDIDO: ${resposta.statusCode}',
+        );
+
         if (!mounted) {
           return;
         }
@@ -102,6 +248,8 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       setState(() {
         carregando = false;
       });
+    } finally {
+      buscando = false;
     }
   }
 
@@ -115,7 +263,7 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         return 'Aguardando confirmação do restaurante';
 
       case 'CONFIRMADO':
-        return 'Pedido confirmado';
+        return 'Pedido confirmado pelo restaurante';
 
       case 'PREPARANDO':
         return 'Restaurante preparando';
@@ -188,6 +336,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
         return Colors.orange;
 
       case 'PRONTO':
+        return Colors.green;
+
+      case 'CONFIRMADO':
         return Colors.green;
 
       default:
@@ -269,10 +420,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           : RefreshIndicator(
               onRefresh: buscarPedido,
               child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
+                physics:
+                    const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(20),
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     // ===================================
                     // STATUS PRINCIPAL
@@ -282,10 +435,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                       color: Colors.white,
                       elevation: 1,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius:
+                            BorderRadius.circular(20),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.all(20),
+                        padding:
+                            const EdgeInsets.all(20),
                         child: Column(
                           children: [
                             Container(
@@ -308,10 +463,12 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
                             Text(
                               textoStatus(),
-                              textAlign: TextAlign.center,
+                              textAlign:
+                                  TextAlign.center,
                               style: TextStyle(
                                 fontSize: 23,
-                                fontWeight: FontWeight.bold,
+                                fontWeight:
+                                    FontWeight.bold,
                                 color: corStatus(),
                               ),
                             ),
@@ -320,55 +477,167 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
                             Text(
                               'Pedido #${widget.pedidoId}',
-                              style: const TextStyle(
+                              style:
+                                  const TextStyle(
                                 color: Colors.grey,
                                 fontSize: 16,
                               ),
                             ),
 
-                            // =================================
-                            // DESTAQUE QUANDO ESTÁ EM ENTREGA
-                            // =================================
+                            // =============================
+                            // DESTAQUE PEDIDO CONFIRMADO
+                            // =============================
 
-                            if (statusPedido == 'EM_ENTREGA') ...[
+                            if (statusPedido ==
+                                'CONFIRMADO') ...[
                               const SizedBox(height: 18),
 
                               Container(
                                 width: double.infinity,
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFFEFF6FF),
-                                  borderRadius: BorderRadius.circular(15),
+                                padding:
+                                    const EdgeInsets.all(
+                                  14,
+                                ),
+                                decoration:
+                                    BoxDecoration(
+                                  color:
+                                      const Color(
+                                    0xFFECFDF5,
+                                  ),
+                                  borderRadius:
+                                      BorderRadius.circular(
+                                    15,
+                                  ),
                                   border: Border.all(
-                                    color: const Color(0xFFBFDBFE),
+                                    color:
+                                        const Color(
+                                      0xFFBBF7D0,
+                                    ),
                                   ),
                                 ),
                                 child: const Row(
                                   children: [
                                     Icon(
-                                      Icons.delivery_dining,
-                                      color: Color(0xFF2563EB),
+                                      Icons.check_circle,
+                                      color:
+                                          Color(0xFF16A34A),
                                       size: 28,
                                     ),
                                     SizedBox(width: 12),
                                     Expanded(
                                       child: Column(
                                         crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                            CrossAxisAlignment
+                                                .start,
                                         children: [
                                           Text(
-                                            'Seu pedido está a caminho!',
-                                            style: TextStyle(
-                                              color: Color(0xFF1D4ED8),
-                                              fontWeight: FontWeight.bold,
+                                            'Pedido aceito!',
+                                            style:
+                                                TextStyle(
+                                              color:
+                                                  Color(
+                                                0xFF15803D,
+                                              ),
+                                              fontWeight:
+                                                  FontWeight
+                                                      .bold,
                                               fontSize: 14,
                                             ),
                                           ),
-                                          SizedBox(height: 3),
+                                          SizedBox(
+                                            height: 3,
+                                          ),
+                                          Text(
+                                            'O restaurante aceitou seu pedido e vai começar a preparar.',
+                                            style:
+                                                TextStyle(
+                                              color:
+                                                  Colors
+                                                      .black87,
+                                              fontSize: 12,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+
+                            // =============================
+                            // DESTAQUE EM ENTREGA
+                            // =============================
+
+                            if (statusPedido ==
+                                'EM_ENTREGA') ...[
+                              const SizedBox(height: 18),
+
+                              Container(
+                                width: double.infinity,
+                                padding:
+                                    const EdgeInsets.all(
+                                  14,
+                                ),
+                                decoration:
+                                    BoxDecoration(
+                                  color:
+                                      const Color(
+                                    0xFFEFF6FF,
+                                  ),
+                                  borderRadius:
+                                      BorderRadius.circular(
+                                    15,
+                                  ),
+                                  border: Border.all(
+                                    color:
+                                        const Color(
+                                      0xFFBFDBFE,
+                                    ),
+                                  ),
+                                ),
+                                child: const Row(
+                                  children: [
+                                    Icon(
+                                      Icons
+                                          .delivery_dining,
+                                      color:
+                                          Color(
+                                        0xFF2563EB,
+                                      ),
+                                      size: 28,
+                                    ),
+                                    SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment
+                                                .start,
+                                        children: [
+                                          Text(
+                                            'Seu pedido está a caminho!',
+                                            style:
+                                                TextStyle(
+                                              color:
+                                                  Color(
+                                                0xFF1D4ED8,
+                                              ),
+                                              fontWeight:
+                                                  FontWeight
+                                                      .bold,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                          SizedBox(
+                                            height: 3,
+                                          ),
                                           Text(
                                             'O entregador está levando seu pedido até você.',
-                                            style: TextStyle(
-                                              color: Colors.black87,
+                                            style:
+                                                TextStyle(
+                                              color:
+                                                  Colors
+                                                      .black87,
                                               fontSize: 12,
                                             ),
                                           ),
@@ -408,46 +677,52 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                       color: Colors.white,
                       elevation: 1,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius:
+                            BorderRadius.circular(20),
                       ),
                       child: Padding(
-                        padding: const EdgeInsets.all(20),
+                        padding:
+                            const EdgeInsets.all(20),
                         child: Column(
                           children: [
                             _statusItem(
                               titulo:
                                   'Aguardando confirmação do restaurante',
-                              status: 'AGUARDANDO_RESTAURANTE',
-                              icone: Icons.receipt_long,
+                              status:
+                                  'AGUARDANDO_RESTAURANTE',
+                              icone:
+                                  Icons.receipt_long,
                               primeiro: true,
                             ),
 
                             _statusItem(
-                              titulo: 'Pedido confirmado',
+                              titulo:
+                                  'Pedido confirmado',
                               status: 'CONFIRMADO',
-                              icone: Icons.check_circle,
+                              icone:
+                                  Icons.check_circle,
                             ),
 
                             _statusItem(
-                              titulo: 'Restaurante preparando',
+                              titulo:
+                                  'Restaurante preparando',
                               status: 'PREPARANDO',
                               icone: Icons.restaurant,
                             ),
 
                             _statusItem(
-                              titulo: 'Pedido pronto',
+                              titulo:
+                                  'Pedido pronto',
                               status: 'PRONTO',
-                              icone: Icons.inventory_2,
+                              icone:
+                                  Icons.inventory_2,
                             ),
-
-                            // =================================
-                            // SAIU PARA ENTREGA
-                            // =================================
 
                             _statusEntrega(),
 
                             _statusItem(
-                              titulo: 'Pedido entregue',
+                              titulo:
+                                  'Pedido entregue',
                               status: 'ENTREGUE',
                               icone: Icons.done_all,
                               ultimo: true,
@@ -467,46 +742,58 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
                       Card(
                         color: Colors.white,
                         elevation: 1,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(20),
+                        shape:
+                            RoundedRectangleBorder(
+                          borderRadius:
+                              BorderRadius.circular(20),
                         ),
                         child: Padding(
-                          padding: const EdgeInsets.all(20),
+                          padding:
+                              const EdgeInsets.all(20),
                           child: Column(
                             crossAxisAlignment:
-                                CrossAxisAlignment.start,
+                                CrossAxisAlignment
+                                    .start,
                             children: [
                               const Text(
                                 'Informações do pedido',
                                 style: TextStyle(
                                   fontSize: 18,
-                                  fontWeight: FontWeight.bold,
+                                  fontWeight:
+                                      FontWeight.bold,
                                 ),
                               ),
 
                               const SizedBox(height: 15),
 
-                              if (pedido!['total'] != null)
+                              if (pedido!['total'] !=
+                                  null)
                                 Row(
                                   mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                      MainAxisAlignment
+                                          .spaceBetween,
                                   children: [
                                     const Text(
                                       'Total',
                                       style: TextStyle(
-                                        color: Colors.grey,
+                                        color:
+                                            Colors.grey,
                                       ),
                                     ),
                                     Text(
                                       formatarPreco(
                                         double.tryParse(
-                                              pedido!['total']
+                                              pedido![
+                                                      'total']
                                                   .toString(),
                                             ) ??
                                             0,
                                       ),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
+                                      style:
+                                          const TextStyle(
+                                        fontWeight:
+                                            FontWeight
+                                                .bold,
                                         fontSize: 18,
                                       ),
                                     ),
@@ -515,21 +802,30 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
                               const SizedBox(height: 12),
 
-                              if (pedido!['pagamento'] != null)
+                              if (pedido![
+                                      'pagamento'] !=
+                                  null)
                                 Row(
                                   mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
+                                      MainAxisAlignment
+                                          .spaceBetween,
                                   children: [
                                     const Text(
                                       'Pagamento',
                                       style: TextStyle(
-                                        color: Colors.grey,
+                                        color:
+                                            Colors.grey,
                                       ),
                                     ),
                                     Text(
-                                      pedido!['pagamento'].toString(),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
+                                      pedido![
+                                              'pagamento']
+                                          .toString(),
+                                      style:
+                                          const TextStyle(
+                                        fontWeight:
+                                            FontWeight
+                                                .bold,
                                       ),
                                     ),
                                   ],
@@ -547,22 +843,34 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
                     SizedBox(
                       width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: buscarPedido,
+                      child:
+                          ElevatedButton.icon(
+                        onPressed: buscando
+                            ? null
+                            : buscarPedido,
                         icon: const Icon(
                           Icons.refresh,
                         ),
-                        label: const Text(
-                          'ATUALIZAR PEDIDO',
+                        label: Text(
+                          buscando
+                              ? 'ATUALIZANDO...'
+                              : 'ATUALIZAR PEDIDO',
                         ),
-                        style: ElevatedButton.styleFrom(
+                        style:
+                            ElevatedButton.styleFrom(
                           backgroundColor: laranja,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
+                          foregroundColor:
+                              Colors.white,
+                          padding:
+                              const EdgeInsets.symmetric(
                             vertical: 16,
                           ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
+                          shape:
+                              RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(
+                              12,
+                            ),
                           ),
                         ),
                       ),
@@ -579,8 +887,6 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   // =====================================================
 
   Widget _statusEntrega() {
-    // Quando ainda não chegou em entrega,
-    // mantém exatamente o visual normal.
     if (statusPedido != 'EM_ENTREGA') {
       return _statusItem(
         titulo: 'Saiu para entrega',
@@ -589,8 +895,6 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
       );
     }
 
-    // Quando chegou em EM_ENTREGA,
-    // transforma essa etapa em um destaque.
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.symmetric(
@@ -648,13 +952,15 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(
+            padding:
+                const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 11,
             ),
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
+              borderRadius:
+                  BorderRadius.circular(12),
             ),
             child: const Row(
               children: [
@@ -680,13 +986,15 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
           const SizedBox(height: 12),
 
           Container(
-            padding: const EdgeInsets.symmetric(
+            padding:
+                const EdgeInsets.symmetric(
               horizontal: 12,
               vertical: 7,
             ),
             decoration: BoxDecoration(
               color: const Color(0xFFDBEAFE),
-              borderRadius: BorderRadius.circular(20),
+              borderRadius:
+                  BorderRadius.circular(20),
             ),
             child: const Row(
               mainAxisSize: MainAxisSize.min,
@@ -729,12 +1037,9 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     const laranja = Color(0xFFF97316);
 
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
       children: [
-        // ===============================================
-        // ÍCONE + LINHA
-        // ===============================================
-
         Column(
           children: [
             Container(
@@ -768,15 +1073,10 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
 
         const SizedBox(width: 15),
 
-        // ===============================================
-        // TEXTO
-        // ===============================================
-
         Expanded(
           child: Padding(
-            padding: const EdgeInsets.only(
-              top: 10,
-            ),
+            padding:
+                const EdgeInsets.only(top: 10),
             child: Text(
               titulo,
               style: TextStyle(
@@ -795,3 +1095,4 @@ class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
     );
   }
 }
+

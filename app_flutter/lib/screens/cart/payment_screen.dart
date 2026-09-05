@@ -44,7 +44,8 @@ class _PaymentScreenState extends State<PaymentScreen> {
   void initState() {
     super.initState();
 
-    formaPagamento = widget.formaPagamento.trim().toUpperCase();
+    formaPagamento =
+        widget.formaPagamento.trim().toUpperCase();
   }
 
   double get totalPedido {
@@ -86,6 +87,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
                   restauranteId: widget.restauranteId,
                   taxaEntrega: widget.taxaEntrega,
                   taxaServico: widget.taxaServico,
+                  pedidoId: widget.pedidoId,
                 )
               : Center(
                   child: Text(
@@ -125,10 +127,12 @@ class PixCheckoutPage extends StatefulWidget {
   });
 
   @override
-  State<PixCheckoutPage> createState() => _PixCheckoutPageState();
+  State<PixCheckoutPage> createState() =>
+      _PixCheckoutPageState();
 }
 
-class _PixCheckoutPageState extends State<PixCheckoutPage> {
+class _PixCheckoutPageState
+    extends State<PixCheckoutPage> {
   bool carregando = false;
   bool pagamentoGerado = false;
 
@@ -166,7 +170,8 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   }
 
   Future<String?> obterToken() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs =
+        await SharedPreferences.getInstance();
 
     return prefs.getString("token") ??
         prefs.getString("jwt") ??
@@ -211,11 +216,9 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
         "itens": prepararItens(),
       };
 
-      debugPrint("========================================");
-      debugPrint("PIX - GERANDO PAGAMENTO");
-      debugPrint("URL: $url");
-      debugPrint("VALOR: $totalPedido");
-      debugPrint("========================================");
+      debugPrint(
+        "PIX - GERANDO PAGAMENTO",
+      );
 
       final response = await http.post(
         url,
@@ -230,10 +233,6 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
         "PIX - STATUS HTTP: ${response.statusCode}",
       );
 
-      debugPrint(
-        "PIX - RESPOSTA RECEBIDA",
-      );
-
       final dados = jsonDecode(response.body);
 
       if (response.statusCode < 200 ||
@@ -245,25 +244,6 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
               "Não foi possível gerar o PIX.",
         );
       }
-
-      // ==========================================================
-      // IMPORTANTE:
-      //
-      // O BACKEND RETORNA:
-      //
-      // {
-      //   sucesso: true,
-      //   pagamentoId: "...",
-      //   pix: {
-      //      qrCode: "...",
-      //      qrCodeBase64: "...",
-      //      ticketUrl: "...",
-      //      expiracao: "..."
-      //   }
-      // }
-      //
-      // Portanto precisamos acessar dados["pix"].
-      // ==========================================================
 
       final pix = dados["pix"];
 
@@ -292,22 +272,6 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
           pix["expiracao"]?.toString() ??
               pix["expirationDate"]?.toString() ??
               "";
-
-      debugPrint(
-        "PIX - PAGAMENTO ID: ${novoPagamentoId ?? "NÃO RETORNADO"}",
-      );
-
-      debugPrint(
-        "PIX - QR CODE BASE64: ${novoQrCodeBase64.isNotEmpty ? "RECEBIDO" : "VAZIO"}",
-      );
-
-      debugPrint(
-        "PIX - COPIA E COLA: ${novoPixCopiaCola.isNotEmpty ? "RECEBIDO" : "VAZIO"}",
-      );
-
-      debugPrint(
-        "PIX - TICKET URL: ${novoTicketUrl.isNotEmpty ? "RECEBIDO" : "VAZIO"}",
-      );
 
       if (novoPagamentoId == null ||
           novoPagamentoId.isEmpty) {
@@ -352,8 +316,6 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
         }
       });
 
-      // Começa a consultar somente depois que
-      // o QR Code foi carregado.
       iniciarConsultaPagamento();
     } catch (e) {
       if (!mounted) return;
@@ -376,7 +338,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   }
 
   // ============================================================
-  // CONSULTAR PAGAMENTO
+  // CONSULTAR PIX
   // ============================================================
 
   void iniciarConsultaPagamento() {
@@ -431,7 +393,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
               status == "CONFIRMED";
 
       debugPrint(
-        "PIX - STATUS PAGAMENTO: ${status ?? "DESCONHECIDO"}",
+        "PIX - STATUS: ${status ?? "DESCONHECIDO"}",
       );
 
       if (!aprovado) {
@@ -444,8 +406,16 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
 
       if (pedidoId == null) {
         debugPrint(
-          "PIX - PAGAMENTO APROVADO, MAS PEDIDO AINDA NÃO FOI LOCALIZADO.",
+          "PIX - PAGAMENTO APROVADO, AGUARDANDO PEDIDO.",
         );
+        return;
+      }
+
+      final id = int.tryParse(
+        pedidoId.toString(),
+      );
+
+      if (id == null) {
         return;
       }
 
@@ -453,7 +423,8 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
 
       if (!mounted) return;
 
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
         const SnackBar(
           backgroundColor: Colors.green,
           content: Text(
@@ -465,10 +436,9 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) => OrderTrackingScreen(
-            pedidoId: int.parse(
-              pedidoId.toString(),
-            ),
+          builder: (_) =>
+              OrderTrackingScreen(
+            pedidoId: id,
           ),
         ),
       );
@@ -564,10 +534,12 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
           if (mensagem != null)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(14),
+              padding:
+                  const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius:
+                    BorderRadius.circular(12),
               ),
               child: Text(
                 mensagem!,
@@ -622,15 +594,12 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
           if (pagamentoGerado) ...[
             const SizedBox(height: 20),
 
-            // ==================================================
-            // QR CODE
-            // ==================================================
-
             if (qrCodeBase64 != null &&
                 qrCodeBase64!.isNotEmpty)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(18),
+                padding:
+                    const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius:
@@ -655,9 +624,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
                             FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 15),
-
                     Image.memory(
                       base64Decode(
                         limparBase64(
@@ -669,10 +636,10 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
                       fit: BoxFit.contain,
                       errorBuilder:
                           (
-                            context,
-                            error,
-                            stackTrace,
-                          ) {
+                        context,
+                        error,
+                        stackTrace,
+                      ) {
                         return const Padding(
                           padding:
                               EdgeInsets.all(20),
@@ -686,8 +653,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
                                     Colors.red,
                               ),
                               SizedBox(
-                                height: 10,
-                              ),
+                                  height: 10),
                               Text(
                                 "Não foi possível carregar o QR Code.",
                                 textAlign:
@@ -703,17 +669,14 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
                 ),
               ),
 
-            // ==================================================
-            // CASO NÃO TENHA IMAGEM, MAS TENHA COPIA E COLA
-            // ==================================================
-
             if ((qrCodeBase64 == null ||
                     qrCodeBase64!.isEmpty) &&
                 pixCopiaCola != null &&
                 pixCopiaCola!.isNotEmpty)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(18),
+                padding:
+                    const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius:
@@ -729,7 +692,8 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
                     SizedBox(height: 10),
                     Text(
                       "Use o código PIX copia e cola abaixo.",
-                      textAlign: TextAlign.center,
+                      textAlign:
+                          TextAlign.center,
                       style: TextStyle(
                         fontSize: 15,
                       ),
@@ -740,15 +704,12 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
 
             const SizedBox(height: 20),
 
-            // ==================================================
-            // COPIA E COLA
-            // ==================================================
-
             if (pixCopiaCola != null &&
                 pixCopiaCola!.isNotEmpty)
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(14),
+                padding:
+                    const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius:
@@ -770,9 +731,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
                             FontWeight.bold,
                       ),
                     ),
-
                     const SizedBox(height: 8),
-
                     Text(
                       pixCopiaCola!,
                       maxLines: 4,
@@ -780,13 +739,11 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
                           TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors
-                            .grey.shade700,
+                        color:
+                            Colors.grey.shade700,
                       ),
                     ),
-
                     const SizedBox(height: 12),
-
                     SizedBox(
                       width: double.infinity,
                       child:
@@ -815,13 +772,10 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
 
             const SizedBox(height: 22),
 
-            // ==================================================
-            // STATUS
-            // ==================================================
-
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding:
+                  const EdgeInsets.all(16),
               decoration: BoxDecoration(
                 color: Colors.orange.shade50,
                 borderRadius:
@@ -832,8 +786,7 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
                     CrossAxisAlignment.start,
                 children: [
                   Icon(
-                    Icons
-                        .hourglass_top_rounded,
+                    Icons.hourglass_top_rounded,
                     color:
                         Color(0xFFF97316),
                   ),
@@ -858,7 +811,8 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
                 "Válido até: ${_formatarData(expiracao!)}",
                 style: TextStyle(
                   fontSize: 12,
-                  color: Colors.grey.shade600,
+                  color:
+                      Colors.grey.shade600,
                 ),
               ),
             ],
@@ -871,10 +825,13 @@ class _PixCheckoutPageState extends State<PixCheckoutPage> {
   String _formatarData(DateTime data) {
     final dia =
         data.day.toString().padLeft(2, '0');
+
     final mes =
         data.month.toString().padLeft(2, '0');
+
     final hora =
         data.hour.toString().padLeft(2, '0');
+
     final minuto =
         data.minute.toString().padLeft(2, '0');
 
@@ -893,6 +850,7 @@ class CardPaymentPage extends StatefulWidget {
   final String restauranteId;
   final double taxaEntrega;
   final double taxaServico;
+  final String? pedidoId;
 
   const CardPaymentPage({
     super.key,
@@ -902,6 +860,7 @@ class CardPaymentPage extends StatefulWidget {
     required this.restauranteId,
     required this.taxaEntrega,
     required this.taxaServico,
+    this.pedidoId,
   });
 
   @override
@@ -911,7 +870,8 @@ class CardPaymentPage extends StatefulWidget {
 
 class _CardPaymentPageState
     extends State<CardPaymentPage> {
-  final formKey = GlobalKey<FormState>();
+  final formKey =
+      GlobalKey<FormState>();
 
   final nomeController =
       TextEditingController();
@@ -927,6 +887,10 @@ class _CardPaymentPageState
 
   bool carregando = false;
 
+  Timer? timer;
+
+  bool navegandoPedido = false;
+
   double get totalPedido {
     return widget.subtotal +
         widget.taxaEntrega +
@@ -935,10 +899,13 @@ class _CardPaymentPageState
 
   @override
   void dispose() {
+    timer?.cancel();
+
     nomeController.dispose();
     numeroController.dispose();
     validadeController.dispose();
     cvvController.dispose();
+
     super.dispose();
   }
 
@@ -952,6 +919,10 @@ class _CardPaymentPageState
         prefs.getString("auth_token");
   }
 
+  // ============================================================
+  // VALIDADE
+  // ============================================================
+
   bool validadeExpirada(String validade) {
     final partes = validade.split("/");
 
@@ -959,7 +930,9 @@ class _CardPaymentPageState
       return true;
     }
 
-    final mes = int.tryParse(partes[0]);
+    final mes =
+        int.tryParse(partes[0]);
+
     final anoDoisDigitos =
         int.tryParse(partes[1]);
 
@@ -970,24 +943,26 @@ class _CardPaymentPageState
       return true;
     }
 
-    final ano = 2000 + anoDoisDigitos;
+    final ano =
+        2000 + anoDoisDigitos;
 
     final agora = DateTime.now();
 
-    final anoAtual = agora.year;
-    final mesAtual = agora.month;
-
-    if (ano < anoAtual) {
+    if (ano < agora.year) {
       return true;
     }
 
-    if (ano == anoAtual &&
-        mes < mesAtual) {
+    if (ano == agora.year &&
+        mes < agora.month) {
       return true;
     }
 
     return false;
   }
+
+  // ============================================================
+  // PAGAR CARTÃO
+  // ============================================================
 
   Future<void> pagar() async {
     if (carregando) return;
@@ -998,11 +973,17 @@ class _CardPaymentPageState
 
     final numero =
         numeroController.text
-            .replaceAll(RegExp(r'\D'), '');
+            .replaceAll(
+          RegExp(r'\D'),
+          '',
+        );
 
     final cvv =
         cvvController.text
-            .replaceAll(RegExp(r'\D'), '');
+            .replaceAll(
+          RegExp(r'\D'),
+          '',
+        );
 
     final validade =
         validadeController.text.trim();
@@ -1056,6 +1037,10 @@ class _CardPaymentPageState
         );
       }
 
+      // ========================================================
+      // DADOS DO CHECKOUT
+      // ========================================================
+
       final body = {
         "valor": totalPedido,
         "total": totalPedido,
@@ -1063,20 +1048,31 @@ class _CardPaymentPageState
         "taxaEntrega": widget.taxaEntrega,
         "taxaServico": widget.taxaServico,
         "restauranteId": widget.restauranteId,
+        "pedidoId": widget.pedidoId,
         "endereco": widget.endereco,
         "itens": prepararItens(),
         "formaPagamento": "CREDITO",
         "pagamento": "CREDITO",
+
         "cartao": {
           "numero": numero,
-          "nome": nomeController.text.trim(),
+          "nome":
+              nomeController.text.trim(),
           "validade": validade,
           "cvv": cvv,
         },
       };
 
       debugPrint(
-        "💳 PAGAMENTO CARTAO: ENVIANDO PARA O BACKEND",
+        "========================================",
+      );
+
+      debugPrint(
+        "💳 PAGAMENTO CARTAO",
+      );
+
+      debugPrint(
+        "💳 ENVIANDO PAGAMENTO",
       );
 
       debugPrint(
@@ -1084,11 +1080,11 @@ class _CardPaymentPageState
       );
 
       debugPrint(
-        "💳 CPF/TELEFONE: NAO ENVIADOS",
+        "💳 DADOS DO CARTAO: NAO EXIBIDOS NO LOG",
       );
 
       debugPrint(
-        "💳 ENDERECO DE COBRANCA: NAO ENVIADO",
+        "========================================",
       );
 
       final response = await http.post(
@@ -1096,14 +1092,20 @@ class _CardPaymentPageState
           "${Api.baseUrl}/pagamentos/cartao",
         ),
         headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
+          "Content-Type":
+              "application/json",
+          "Authorization":
+              "Bearer $token",
         },
         body: jsonEncode(body),
       );
 
       final dados =
           jsonDecode(response.body);
+
+      debugPrint(
+        "💳 STATUS HTTP: ${response.statusCode}",
+      );
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300 ||
@@ -1115,24 +1117,63 @@ class _CardPaymentPageState
         );
       }
 
+      // ========================================================
+      // PEGAR PAGAMENTO
+      // ========================================================
+
+      final pagamentoId =
+          dados["pagamentoId"]?.toString() ??
+              dados["paymentId"]?.toString();
+
+      // ========================================================
+      // IMPORTANTE:
+      //
+      // SE O BACKEND JÁ DEVOLVEU O PEDIDO,
+      // VAMOS DIRETO PARA O ACOMPANHAMENTO.
+      // ========================================================
+
+      final pedidoRetornado =
+          dados["pedidoId"] ??
+              dados["orderId"];
+
+      final pedidoNumero =
+          int.tryParse(
+        pedidoRetornado?.toString() ?? "",
+      );
+
+      if (pedidoNumero != null) {
+        if (!mounted) return;
+
+        await abrirAcompanhamento(
+          pedidoNumero,
+        );
+
+        return;
+      }
+
+      if (pagamentoId == null ||
+          pagamentoId.isEmpty) {
+        throw Exception(
+          "O pagamento foi enviado, mas o servidor não retornou o ID do pagamento.",
+        );
+      }
+
       if (!mounted) return;
 
       ScaffoldMessenger.of(context)
           .showSnackBar(
         const SnackBar(
+          backgroundColor:
+              Color(0xFFF97316),
           content: Text(
             "Pagamento enviado! Aguardando confirmação.",
           ),
         ),
       );
 
-      final pagamentoId =
-          dados["pagamentoId"]?.toString();
-
-      if (pagamentoId == null ||
-          pagamentoId.isEmpty) {
-        return;
-      }
+      // ========================================================
+      // AGUARDAR PAGAMENTO + PEDIDO
+      // ========================================================
 
       await aguardarPagamento(
         pagamentoId,
@@ -1161,10 +1202,23 @@ class _CardPaymentPageState
     }
   }
 
+  // ============================================================
+  // AGUARDAR PAGAMENTO
+  // ============================================================
+
   Future<void> aguardarPagamento(
     String pagamentoId,
     String token,
   ) async {
+    debugPrint(
+      "💳 AGUARDANDO CONFIRMAÇÃO DO PAGAMENTO",
+    );
+
+    // ========================================================
+    // 60 TENTATIVAS
+    // 60 x 3 segundos = 3 MINUTOS
+    // ========================================================
+
     for (int i = 0; i < 60; i++) {
       await Future.delayed(
         const Duration(seconds: 3),
@@ -1178,12 +1232,16 @@ class _CardPaymentPageState
             "${Api.baseUrl}/pagamentos/$pagamentoId",
           ),
           headers: {
-            "Authorization": "Bearer $token",
+            "Authorization":
+                "Bearer $token",
           },
         );
 
         if (response.statusCode < 200 ||
             response.statusCode >= 300) {
+          debugPrint(
+            "💳 CONSULTA PAGAMENTO HTTP ${response.statusCode}",
+          );
           continue;
         }
 
@@ -1202,37 +1260,85 @@ class _CardPaymentPageState
                 status == "RECEIVED" ||
                 status == "CONFIRMED";
 
+        debugPrint(
+          "💳 PAGAMENTO ${i + 1}/60 - STATUS: ${status ?? "DESCONHECIDO"}",
+        );
+
+        // ======================================================
+        // PAGAMENTO AINDA NÃO APROVADO
+        // ======================================================
+
         if (!aprovado) {
           continue;
         }
+
+        debugPrint(
+          "✅ PAGAMENTO APROVADO",
+        );
+
+        // ======================================================
+        // PEGAR PEDIDO
+        // ======================================================
 
         final pedidoId =
             dados["pedidoId"] ??
                 dados["orderId"];
 
         if (pedidoId == null) {
+          debugPrint(
+            "⏳ PAGAMENTO APROVADO, MAS PEDIDO AINDA NÃO FOI CRIADO.",
+          );
+
+          // O webhook pode estar criando
+          // o pedido neste momento.
           continue;
         }
 
-        if (!mounted) return;
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (_) =>
-                OrderTrackingScreen(
-              pedidoId: int.parse(
-                pedidoId.toString(),
-              ),
-            ),
-          ),
+        final id =
+            int.tryParse(
+          pedidoId.toString(),
         );
 
+        if (id == null) {
+          debugPrint(
+            "❌ PEDIDO ID INVÁLIDO: $pedidoId",
+          );
+          continue;
+        }
+
+        debugPrint(
+          "========================================",
+        );
+
+        debugPrint(
+          "✅ PEDIDO LOCALIZADO",
+        );
+
+        debugPrint(
+          "✅ PEDIDO ID: $id",
+        );
+
+        debugPrint(
+          "➡️ ABRINDO ACOMPANHAMENTO",
+        );
+
+        debugPrint(
+          "========================================",
+        );
+
+        await abrirAcompanhamento(id);
+
         return;
-      } catch (_) {
-        // Continua tentando.
+      } catch (e) {
+        debugPrint(
+          "⚠️ ERRO CONSULTANDO PAGAMENTO: $e",
+        );
       }
     }
+
+    // ========================================================
+    // TEMPO ESGOTADO
+    // ========================================================
 
     if (!mounted) return;
 
@@ -1246,6 +1352,56 @@ class _CardPaymentPageState
     );
   }
 
+  // ============================================================
+  // ABRIR ACOMPANHAMENTO
+  // ============================================================
+
+  Future<void> abrirAcompanhamento(
+    int pedidoId,
+  ) async {
+    if (navegandoPedido) {
+      return;
+    }
+
+    navegandoPedido = true;
+
+    if (!mounted) {
+      return;
+    }
+
+    // ========================================================
+    // LIMPAR CAMPOS SENSÍVEIS ANTES DE SAIR
+    // ========================================================
+
+    numeroController.clear();
+    validadeController.clear();
+    cvvController.clear();
+
+    // ========================================================
+    // PARAR QUALQUER TIMER
+    // ========================================================
+
+    timer?.cancel();
+
+    debugPrint(
+      "🚀 ABRINDO ORDER TRACKING: $pedidoId",
+    );
+
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            OrderTrackingScreen(
+          pedidoId: pedidoId,
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // ITENS
+  // ============================================================
+
   List<Map<String, dynamic>> prepararItens() {
     return widget.itens.map((item) {
       return {
@@ -1257,12 +1413,17 @@ class _CardPaymentPageState
     }).toList();
   }
 
+  // ============================================================
+  // BUILD
+  // ============================================================
+
   @override
   Widget build(BuildContext context) {
     return Form(
       key: formKey,
       child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
+        padding:
+            const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
@@ -1271,7 +1432,8 @@ class _CardPaymentPageState
               "Cartão de crédito",
               style: TextStyle(
                 fontSize: 24,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
 
@@ -1281,18 +1443,22 @@ class _CardPaymentPageState
               "Total: R\$ ${totalPedido.toStringAsFixed(2).replaceAll('.', ',')}",
               style: const TextStyle(
                 fontSize: 19,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
 
             const SizedBox(height: 25),
 
             campo(
-              controller: nomeController,
-              label: "Nome no cartão",
+              controller:
+                  nomeController,
+              label:
+                  "Nome no cartão",
               hintText:
                   "Nome como aparece no cartão",
-              icon: Icons.person_outline,
+              icon:
+                  Icons.person_outline,
               textCapitalization:
                   TextCapitalization.words,
               validator: (value) {
@@ -1301,7 +1467,8 @@ class _CardPaymentPageState
                   return "Informe o nome do titular";
                 }
 
-                if (value.trim().length < 3) {
+                if (value.trim().length <
+                    3) {
                   return "Informe o nome completo";
                 }
 
@@ -1312,11 +1479,14 @@ class _CardPaymentPageState
             const SizedBox(height: 15),
 
             campo(
-              controller: numeroController,
-              label: "Número do cartão",
+              controller:
+                  numeroController,
+              label:
+                  "Número do cartão",
               hintText:
                   "Digite o número do cartão",
-              icon: Icons.credit_card,
+              icon:
+                  Icons.credit_card,
               keyboardType:
                   TextInputType.number,
               inputFormatters: [
@@ -1356,9 +1526,12 @@ class _CardPaymentPageState
                   child: campo(
                     controller:
                         validadeController,
-                    label: "Validade",
-                    hintText: "MM/AA",
-                    icon: Icons.calendar_month,
+                    label:
+                        "Validade",
+                    hintText:
+                        "MM/AA",
+                    icon:
+                        Icons.calendar_month,
                     keyboardType:
                         TextInputType.number,
                     inputFormatters: [
@@ -1371,7 +1544,8 @@ class _CardPaymentPageState
                     ],
                     validator: (value) {
                       final texto =
-                          value?.trim() ?? '';
+                          value?.trim() ??
+                              '';
 
                       if (!RegExp(
                         r'^\d{2}\/\d{2}$',
@@ -1408,13 +1582,18 @@ class _CardPaymentPageState
 
                 Expanded(
                   child: campo(
-                    controller: cvvController,
-                    label: "CVV",
-                    hintText: "123",
-                    icon: Icons.lock_outline,
+                    controller:
+                        cvvController,
+                    label:
+                        "CVV",
+                    hintText:
+                        "123",
+                    icon:
+                        Icons.lock_outline,
                     keyboardType:
                         TextInputType.number,
-                    obscureText: true,
+                    obscureText:
+                        true,
                     inputFormatters: [
                       FilteringTextInputFormatter
                           .digitsOnly,
@@ -1430,7 +1609,8 @@ class _CardPaymentPageState
                               ) ??
                               '';
 
-                      if (cvv.length < 3 ||
+                      if (cvv.length <
+                              3 ||
                           cvv.length > 4) {
                         return "CVV inválido";
                       }
@@ -1448,14 +1628,19 @@ class _CardPaymentPageState
               width: double.infinity,
               padding:
                   const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
+              decoration:
+                  BoxDecoration(
+                color:
+                    Colors.orange.shade50,
                 borderRadius:
-                    BorderRadius.circular(12),
+                    BorderRadius.circular(
+                  12,
+                ),
               ),
               child: const Row(
                 crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    CrossAxisAlignment
+                        .start,
                 children: [
                   Icon(
                     Icons.info_outline,
@@ -1481,19 +1666,28 @@ class _CardPaymentPageState
               width: double.infinity,
               child: ElevatedButton(
                 onPressed:
-                    carregando ? null : pagar,
-                style: ElevatedButton.styleFrom(
+                    carregando
+                        ? null
+                        : pagar,
+                style:
+                    ElevatedButton.styleFrom(
                   backgroundColor:
-                      const Color(0xFFF97316),
-                  foregroundColor: Colors.white,
+                      const Color(
+                    0xFFF97316,
+                  ),
+                  foregroundColor:
+                      Colors.white,
                   padding:
-                      const EdgeInsets.symmetric(
+                      const EdgeInsets
+                          .symmetric(
                     vertical: 17,
                   ),
                   shape:
                       RoundedRectangleBorder(
                     borderRadius:
-                        BorderRadius.circular(12),
+                        BorderRadius.circular(
+                      12,
+                    ),
                   ),
                 ),
                 child: carregando
@@ -1503,7 +1697,8 @@ class _CardPaymentPageState
                         child:
                             CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color:
+                              Colors.white,
                         ),
                       )
                     : const Text(
@@ -1523,7 +1718,8 @@ class _CardPaymentPageState
               child: Text(
                 "Pagamento seguro",
                 style: TextStyle(
-                  color: Colors.grey.shade600,
+                  color:
+                      Colors.grey.shade600,
                   fontSize: 13,
                 ),
               ),
@@ -1534,49 +1730,75 @@ class _CardPaymentPageState
     );
   }
 
+  // ============================================================
+  // CAMPO
+  // ============================================================
+
   Widget campo({
-    required TextEditingController controller,
+    required TextEditingController
+        controller,
     required String label,
     required String hintText,
     required IconData icon,
     TextInputType? keyboardType,
-    List<TextInputFormatter>? inputFormatters,
-    String? Function(String?)? validator,
+    List<TextInputFormatter>?
+        inputFormatters,
+    String? Function(String?)?
+        validator,
     bool obscureText = false,
-    TextCapitalization textCapitalization =
+    TextCapitalization
+        textCapitalization =
         TextCapitalization.none,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
-      inputFormatters: inputFormatters,
+      inputFormatters:
+          inputFormatters,
       validator: validator,
       obscureText: obscureText,
       textCapitalization:
           textCapitalization,
-      decoration: InputDecoration(
+      decoration:
+          InputDecoration(
         labelText: label,
         hintText: hintText,
-        prefixIcon: Icon(icon),
+        prefixIcon:
+            Icon(icon),
         filled: true,
-        fillColor: Colors.white,
-        border: OutlineInputBorder(
+        fillColor:
+            Colors.white,
+        border:
+            OutlineInputBorder(
           borderRadius:
-              BorderRadius.circular(12),
-          borderSide: BorderSide.none,
+              BorderRadius.circular(
+            12,
+          ),
+          borderSide:
+              BorderSide.none,
         ),
-        enabledBorder: OutlineInputBorder(
+        enabledBorder:
+            OutlineInputBorder(
           borderRadius:
-              BorderRadius.circular(12),
-          borderSide: BorderSide(
-            color: Colors.grey.shade300,
+              BorderRadius.circular(
+            12,
+          ),
+          borderSide:
+              BorderSide(
+            color:
+                Colors.grey.shade300,
           ),
         ),
-        focusedBorder: OutlineInputBorder(
+        focusedBorder:
+            OutlineInputBorder(
           borderRadius:
-              BorderRadius.circular(12),
-          borderSide: const BorderSide(
-            color: Color(0xFFF97316),
+              BorderRadius.circular(
+            12,
+          ),
+          borderSide:
+              const BorderSide(
+            color:
+                Color(0xFFF97316),
             width: 2,
           ),
         ),
@@ -1592,7 +1814,8 @@ class _CardPaymentPageState
 class CardNumberInputFormatter
     extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(
+  TextEditingValue
+      formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
@@ -1604,27 +1827,37 @@ class CardNumberInputFormatter
 
     final limited =
         digits.length > 19
-            ? digits.substring(0, 19)
+            ? digits.substring(
+                0,
+                19,
+              )
             : digits;
 
-    final buffer = StringBuffer();
+    final buffer =
+        StringBuffer();
 
     for (int i = 0;
         i < limited.length;
         i++) {
-      if (i > 0 && i % 4 == 0) {
+      if (i > 0 &&
+          i % 4 == 0) {
         buffer.write(' ');
       }
 
-      buffer.write(limited[i]);
+      buffer.write(
+        limited[i],
+      );
     }
 
-    final formatted = buffer.toString();
+    final formatted =
+        buffer.toString();
 
     return TextEditingValue(
       text: formatted,
-      selection: TextSelection.collapsed(
-        offset: formatted.length,
+      selection:
+          TextSelection.collapsed(
+        offset:
+            formatted.length,
       ),
     );
   }
@@ -1638,7 +1871,8 @@ class CardNumberInputFormatter
 class ValidityInputFormatter
     extends TextInputFormatter {
   @override
-  TextEditingValue formatEditUpdate(
+  TextEditingValue
+      formatEditUpdate(
     TextEditingValue oldValue,
     TextEditingValue newValue,
   ) {
@@ -1650,7 +1884,10 @@ class ValidityInputFormatter
 
     final limited =
         digits.length > 4
-            ? digits.substring(0, 4)
+            ? digits.substring(
+                0,
+                4,
+              )
             : digits;
 
     String formatted;
@@ -1664,8 +1901,10 @@ class ValidityInputFormatter
 
     return TextEditingValue(
       text: formatted,
-      selection: TextSelection.collapsed(
-        offset: formatted.length,
+      selection:
+          TextSelection.collapsed(
+        offset:
+            formatted.length,
       ),
     );
   }
