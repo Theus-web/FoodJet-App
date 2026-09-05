@@ -60,6 +60,19 @@ router.post(
   paymentController.gerarCartao
 );
 
+
+// ============================================================
+// STATUS DA CONTA ASAAS
+// TEMPORÁRIO - REMOVER APÓS O TESTE
+// ============================================================
+
+router.get(
+    "/status-conta-asaas",
+    autenticar,
+    paymentController.statusContaAsaas
+);
+
+
 // ============================================================
 // CONSULTAR PAGAMENTO
 // ============================================================

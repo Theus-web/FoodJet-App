@@ -1670,6 +1670,49 @@ async function estornarPagamento(
 }
 
 
+// ============================================================
+// CONSULTAR STATUS DA CONTA ASAAS
+// TEMPORÁRIO - USADO PARA VERIFICAR APROVAÇÃO DA CONTA
+// ============================================================
+
+async function consultarStatusConta() {
+    try {
+        const response = await api.get("/v3/myAccount/status/");
+
+        const dados = response.data || {};
+
+        console.log("\n========================================");
+        console.log("🏦 FOODJET - STATUS DA CONTA ASAAS");
+        console.log("========================================");
+        console.log("📊 INFORMAÇÕES COMERCIAIS:", dados.commercialInfo);
+        console.log("🏦 CONTA BANCÁRIA:", dados.bankAccountInfo);
+        console.log("📄 DOCUMENTAÇÃO:", dados.documentation);
+        console.log("✅ APROVAÇÃO GERAL:", dados.general);
+        console.log("========================================\n");
+
+        return dados;
+
+    } catch (error) {
+
+        console.error("\n========================================");
+        console.error("❌ ERRO AO CONSULTAR STATUS ASAAS");
+        console.error("========================================");
+
+        console.error(
+            "📊 STATUS HTTP:",
+            error.response?.status || "SEM STATUS"
+        );
+
+        console.error(
+            "📄 RESPOSTA:",
+            error.response?.data || error.message
+        );
+
+        console.error("========================================\n");
+
+        throw error;
+    }
+}
 
 module.exports = {
     criarPix,
@@ -1678,7 +1721,9 @@ module.exports = {
     obterQrCodePix,
     consultarPagamento,
     estornarPagamento,
+    consultarStatusConta,
 };
+
 
 
 

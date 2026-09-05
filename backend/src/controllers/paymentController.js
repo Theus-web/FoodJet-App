@@ -10,6 +10,7 @@ const {
     criarDebito,
     consultarPagamento,
     obterQrCodePix,
+    consultarStatusConta,
 } = asaasService;
 
 const User =
@@ -107,6 +108,55 @@ async function buscarUsuarioAutenticado(req) {
 
     return usuario;
 }
+
+// ============================================================
+// STATUS DA CONTA ASAAS
+// TEMPORÁRIO - REMOVER APÓS O TESTE
+// ============================================================
+
+async function statusContaAsaas(req, res) {
+
+    try {
+
+        const dados = await consultarStatusConta();
+
+        const aprovado =
+            String(dados.general || "").toUpperCase() === "APPROVED";
+
+        return res.json({
+            sucesso: true,
+
+            aprovado,
+
+            mensagem: aprovado
+                ? "Conta Asaas aprovada."
+                : "Conta Asaas ainda não está aprovada para todos os recursos.",
+
+            status: {
+                commercialInfo: dados.commercialInfo || null,
+                bankAccountInfo: dados.bankAccountInfo || null,
+                documentation: dados.documentation || null,
+                general: dados.general || null,
+            },
+        });
+
+    } catch (error) {
+
+        return res.status(
+            error.response?.status || 500
+        ).json({
+
+            sucesso: false,
+
+            mensagem:
+                error.response?.data?.errors?.[0]?.description ||
+                error.message ||
+                "Não foi possível consultar o status da conta Asaas.",
+        });
+    }
+}
+
+
 
 
 // ============================================================
@@ -2097,6 +2147,8 @@ module.exports = {
     gerarDebito,
 
     consultar,
+
+    statusContaAsaas,   
 
 };
 
