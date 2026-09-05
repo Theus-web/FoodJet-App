@@ -52,24 +52,17 @@ function obterUsuarioAutenticado(req) {
 // - PIX
 // - CARTÃO DE CRÉDITO
 //
-// Não utiliza RECEIVED_IN_CASH.
+// Estrutura atual da tabela pagamentos_asaas:
 //
-// Retorno:
-// {
-//     encontrado: true/false,
-//     estornado: true/false,
-//     emProcessamento: true/false,
-//     statusAsaas: "..."
-// }
+// pagamento_id
+// pedido_id
+// external_reference
+// status
+// valor
+// dados
+// criado_em
+// atualizado_em
 //
-// IMPORTANTE:
-// O Asaas pode retornar REFUND_IN_PROGRESS.
-// Nesse caso o pedido pode continuar sendo
-// cancelado/recusado, mas o pagamento fica marcado
-// no banco como REFUND_IN_PROGRESS.
-//
-// Quando o webhook PAYMENT_REFUNDED chegar,
-// o webhook deverá atualizar para REFUNDED.
 // ======================================================
 
 async function processarEstornoPedido(pedidoAtual) {
@@ -103,6 +96,19 @@ async function processarEstornoPedido(pedidoAtual) {
     // ==================================================
     // BUSCAR PAGAMENTO ASAAS NO POSTGRESQL
     // ==================================================
+    //
+    // Primeiro tentamos pelo pedido_id.
+    //
+    // Isso é importante principalmente para cartão,
+    // porque o external_reference inicialmente é:
+    //
+    // FOODJET-CHK-...
+    //
+    // e não o ID do pedido.
+    //
+    // Também mantemos busca pela external_reference
+    // para compatibilidade com PIX e registros antigos.
+    // ==================================================
 
     let pagamentoAsaas = null;
 
@@ -112,16 +118,31 @@ async function processarEstornoPedido(pedidoAtual) {
             await pool.query(
                 `
                 SELECT
-                    payment_id,
+                    id,
+                    pagamento_id,
+                    pedido_id,
                     external_reference,
-                    status_asaas
+                    status,
+                    valor,
+                    dados
                 FROM pagamentos_asaas
-                WHERE external_reference = $1
-                ORDER BY created_at DESC
+                WHERE
+                    pedido_id = $1
+                    OR external_reference = $2
+                    OR dados->>'pedidoId' = $1
+                ORDER BY
+                    atualizado_em DESC NULLS LAST,
+                    criado_em DESC NULLS LAST
                 LIMIT 1
                 `,
                 [
-                    String(pedidoAtual.id),
+                    String(
+                        pedidoAtual.id
+                    ),
+
+                    String(
+                        pedidoAtual.id
+                    ),
                 ]
             );
 
@@ -170,7 +191,7 @@ async function processarEstornoPedido(pedidoAtual) {
 
 
     const pagamentoId =
-        pagamentoAsaas.payment_id;
+        pagamentoAsaas.pagamento_id;
 
 
     console.log(
@@ -180,7 +201,12 @@ async function processarEstornoPedido(pedidoAtual) {
 
     console.log(
         "📊 STATUS NO BANCO:",
-        pagamentoAsaas.status_asaas
+        pagamentoAsaas.status
+    );
+
+    console.log(
+        "🔖 REFERÊNCIA:",
+        pagamentoAsaas.external_reference
     );
 
 
@@ -191,7 +217,7 @@ async function processarEstornoPedido(pedidoAtual) {
     if (!pagamentoId) {
 
         console.log(
-            "⚠️ PAGAMENTO ASAAS ENCONTRADO, MAS SEM payment_id."
+            "⚠️ PAGAMENTO ASAAS ENCONTRADO, MAS SEM pagamento_id."
         );
 
         console.log(
@@ -217,7 +243,7 @@ async function processarEstornoPedido(pedidoAtual) {
 
     const statusBanco =
         String(
-            pagamentoAsaas.status_asaas || ""
+            pagamentoAsaas.status || ""
         )
             .trim()
             .toUpperCase();
@@ -355,10 +381,14 @@ async function processarEstornoPedido(pedidoAtual) {
             await pool.query(
                 `
                 UPDATE pagamentos_asaas
-                SET status_asaas = 'REFUNDED'
-                WHERE payment_id = $1
+                SET
+                    status = $1,
+                    atualizado_em = NOW()
+                WHERE pagamento_id = $2
                 `,
                 [
+                    "REFUNDED",
+
                     pagamentoId,
                 ]
             );
@@ -403,11 +433,14 @@ async function processarEstornoPedido(pedidoAtual) {
             await pool.query(
                 `
                 UPDATE pagamentos_asaas
-                SET status_asaas = $1
-                WHERE payment_id = $2
+                SET
+                    status = $1,
+                    atualizado_em = NOW()
+                WHERE pagamento_id = $2
                 `,
                 [
                     statusAsaas,
+
                     pagamentoId,
                 ]
             );
@@ -619,11 +652,14 @@ async function processarEstornoPedido(pedidoAtual) {
         await pool.query(
             `
             UPDATE pagamentos_asaas
-            SET status_asaas = $1
-            WHERE payment_id = $2
+            SET
+                status = $1,
+                atualizado_em = NOW()
+            WHERE pagamento_id = $2
             `,
             [
                 novoStatusBanco,
+
                 pagamentoId,
             ]
         );
@@ -672,6 +708,7 @@ async function processarEstornoPedido(pedidoAtual) {
 
 
     return {
+
         encontrado: true,
 
         estornado:
