@@ -5,26 +5,14 @@ const { pool } = require("../config/database");
 // CONFIGURAÇÃO
 // ======================================================
 
-// Pedidos finalizados/cancelados serão apagados após
-// este período.
-//
-// 24 horas = 1 dia
 const HORAS_HISTORICO_PEDIDOS = 24;
 
-// Intervalo para executar a limpeza automática.
-//
-// 1 hora
 const INTERVALO_LIMPEZA_MS =
     60 * 60 * 1000;
 
 
 // ======================================================
 // STATUS QUE PODEM SER APAGADOS
-// ======================================================
-//
-// Somente pedidos que já terminaram ou foram cancelados.
-//
-// Pedidos em andamento NÃO serão apagados.
 // ======================================================
 
 const STATUS_FINAIS_PARA_LIMPEZA = [
@@ -50,28 +38,6 @@ async function prepararBanco() {
 // ======================================================
 // LIMPAR PEDIDOS ANTIGOS
 // ======================================================
-//
-// IMPORTANTE:
-//
-// Esta função APAGA somente os pedidos da tabela:
-//
-// pedidos
-//
-// Ela NÃO apaga:
-//
-// pagamentos_asaas
-//
-// Portanto, o histórico de pagamentos do Asaas permanece
-// preservado.
-//
-// Somente pedidos:
-//
-// - finalizados/cancelados
-// - com mais de 24 horas
-// - sem suporte aberto
-//
-// serão removidos.
-// ======================================================
 
 async function limparPedidosAntigos() {
 
@@ -86,22 +52,24 @@ async function limparPedidosAntigos() {
                 WHERE
                     UPPER(
                         COALESCE(
+                            status,
                             dados->>'status',
                             ''
                         )
                     ) = ANY($1::text[])
 
                     AND
-                    dados->>'criadoEm' IS NOT NULL
-
-                    AND
-                    dados->>'criadoEm'
-                        ~ '^\\d{4}-\\d{2}-\\d{2}T'
-
-                    AND
-                    (
-                        dados->>'criadoEm'
-                    )::timestamptz
+                    COALESCE(
+                        criado_em,
+                        CASE
+                            WHEN dados->>'criadoEm'
+                                ~ '^\\d{4}-\\d{2}-\\d{2}T'
+                            THEN
+                                (dados->>'criadoEm')::timestamptz
+                            ELSE
+                                NULL
+                        END
+                    )
                     <
                     NOW() -
                     ($2 * INTERVAL '1 hour')
@@ -109,8 +77,11 @@ async function limparPedidosAntigos() {
                     AND
                     COALESCE(
                         (
-                            dados->'suporte'
-                            ->>'aberto'
+                            COALESCE(
+                                suporte,
+                                dados->'suporte',
+                                '{}'::jsonb
+                            )->>'aberto'
                         )::boolean,
                         false
                     ) = false
@@ -189,30 +160,6 @@ async function limparPedidosAntigos() {
 // ======================================================
 // INICIAR LIMPEZA AUTOMÁTICA
 // ======================================================
-//
-// Executa:
-//
-// 1. Uma vez quando o backend inicia
-// 2. Depois a cada 1 hora
-//
-// Isso significa que um pedido que completou 24 horas
-// será removido na próxima execução da limpeza.
-//
-// Exemplo:
-//
-// Pedido criado:
-// 10:00
-//
-// Completa 24h:
-// dia seguinte às 10:00
-//
-// Próxima verificação:
-// pode ser 10:05, 10:30, 11:00 etc.
-//
-// Portanto, a exclusão acontece automaticamente após
-// completar 24 horas, com tolerância de até aproximadamente
-// 1 hora dependendo do momento da verificação.
-// ======================================================
 
 setTimeout(
     () => {
@@ -236,12 +183,6 @@ setTimeout(
 // ======================================================
 // GERAR ID DO PEDIDO
 // ======================================================
-//
-// O PostgreSQL possui uma sequence na coluna pedidos.id.
-//
-// Isso evita gerar ID manualmente no Node e mantém a
-// sequência existente após a migração.
-// ======================================================
 
 async function gerarIdPedido() {
 
@@ -260,9 +201,11 @@ async function gerarIdPedido() {
         !resultado.rows.length ||
         resultado.rows[0].id === null
     ) {
+
         throw new Error(
             "Não foi possível gerar o ID do pedido."
         );
+
     }
 
     return Number(
@@ -315,7 +258,9 @@ async function encontrarPagamentoAsaasPendente(
     if (
         resultado.rows.length === 0
     ) {
+
         return null;
+
     }
 
     const row =
@@ -484,7 +429,9 @@ async function marcarPagamentoAsaasConciliado(
         !pagamentoAsaas.id ||
         !pedido
     ) {
+
         return;
+
     }
 
     const dadosAtuais =
@@ -497,7 +444,8 @@ async function marcarPagamentoAsaasConciliado(
 
         ...dadosAtuais,
 
-        conciliado: true,
+        conciliado:
+            true,
 
         conciliadoEm:
             new Date().toISOString(),
@@ -550,6 +498,7 @@ async function criar(pedido) {
         throw new Error(
             "Dados do pedido inválidos."
         );
+
     }
 
     if (
@@ -563,6 +512,7 @@ async function criar(pedido) {
         throw new Error(
             "Cliente não identificado."
         );
+
     }
 
     if (
@@ -576,32 +526,71 @@ async function criar(pedido) {
         throw new Error(
             "Restaurante não identificado."
         );
+
     }
+
+
+    // ==================================================
+    // ID
+    // ==================================================
 
     const id =
         await gerarIdPedido();
 
+
+    // ==================================================
+    // DADOS BÁSICOS
+    // ==================================================
+
     const itens =
-        Array.isArray(pedido.itens)
+        Array.isArray(
+            pedido.itens
+        )
             ? pedido.itens
             : [];
+
+    const endereco =
+        pedido.endereco &&
+        typeof pedido.endereco === "object"
+            ? pedido.endereco
+            : {};
+
 
     const subtotal =
         Number(
             pedido.subtotal
         ) || 0;
 
+
     const taxaServico =
         Number(
             pedido.taxaServico
         ) || 0;
 
-    const total =
+
+    const taxaEntrega =
+        Number(
+            pedido.taxaEntrega
+        ) || 0;
+
+
+    let total =
         Number(
             pedido.total
-        ) ||
-        subtotal +
-        taxaServico;
+        );
+
+    if (
+        !Number.isFinite(total) ||
+        total <= 0
+    ) {
+
+        total =
+            subtotal +
+            taxaServico +
+            taxaEntrega;
+
+    }
+
 
     const pagamento =
         String(
@@ -611,6 +600,7 @@ async function criar(pedido) {
             .trim()
             .toUpperCase();
 
+
     const precisaTroco =
         pagamento === "DINHEIRO"
             ? Boolean(
@@ -618,12 +608,14 @@ async function criar(pedido) {
             )
             : false;
 
+
     const trocoPara =
         precisaTroco
             ? Number(
                 pedido.trocoPara
             ) || 0
             : null;
+
 
     const valorTroco =
         precisaTroco &&
@@ -634,12 +626,23 @@ async function criar(pedido) {
             )
             : 0;
 
+
     const externalReference =
         String(
             pedido.externalReference ||
             pedido.referenciaPagamento ||
             id
         ).trim();
+
+
+    const criadoEm =
+        pedido.criadoEm ||
+        new Date().toISOString();
+
+
+    // ==================================================
+    // PEDIDO BASE
+    // ==================================================
 
     const novoPedido = {
 
@@ -657,8 +660,7 @@ async function criar(pedido) {
 
         itens,
 
-        endereco:
-            pedido.endereco || {},
+        endereco,
 
         pagamento,
 
@@ -676,6 +678,8 @@ async function criar(pedido) {
         subtotal,
 
         taxaServico,
+
+        taxaEntrega,
 
         total,
 
@@ -695,17 +699,21 @@ async function criar(pedido) {
 
         suporte: {
 
-            aberto: false,
+            aberto:
+                false,
 
-            status: "FECHADO",
+            status:
+                "FECHADO",
 
-            mensagens: []
+            mensagens:
+                []
 
         },
 
-        criadoEm:
-            pedido.criadoEm ||
-            new Date().toISOString()
+        criadoEm,
+
+        atualizadoEm:
+            criadoEm
 
     };
 
@@ -732,13 +740,6 @@ async function criar(pedido) {
 
 
     // ==================================================
-    // NÃO SALVAR TAXA DE ENTREGA
-    // ==================================================
-
-    delete novoPedido.taxaEntrega;
-
-
-    // ==================================================
     // RECONCILIAR ASAAS
     // ==================================================
 
@@ -746,6 +747,7 @@ async function criar(pedido) {
         await encontrarPagamentoAsaasPendente(
             novoPedido.externalReference
         );
+
 
     if (pagamentoAsaas) {
 
@@ -840,45 +842,59 @@ async function criar(pedido) {
             novoPedido.pagamentoStatus =
                 "PAGO";
 
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "✅ PIX JÁ ESTAVA PAGO"
-            );
-
-            console.log(
-                "💳 STATUS:",
-                "APPROVED"
-            );
-
-            console.log(
-                "📦 PEDIDO:",
-                novoPedido.id
-            );
-
-            console.log(
-                "🍽️ STATUS:",
-                "AGUARDANDO_RESTAURANTE"
-            );
-
-            console.log(
-                "========================================"
-            );
-
-        } else {
-
-            novoPedido.pagamentoAprovado =
-                false;
-
-            console.log(
-                "⏳ PAGAMENTO ASAAS AINDA PENDENTE"
-            );
-
         }
 
     }
+
+
+    // ==================================================
+    // VALORES DAS COLUNAS POSTGRESQL
+    // ==================================================
+
+    const clienteId =
+        String(
+            novoPedido.clienteId
+        );
+
+    const restauranteId =
+        String(
+            novoPedido.restauranteId
+        );
+
+    const pagamentoStatus =
+        novoPedido.pagamentoStatus ||
+        null;
+
+    const statusPagamento =
+        novoPedido.statusPagamento ||
+        null;
+
+    const pagamentoAprovado =
+        Boolean(
+            novoPedido.pagamentoAprovado
+        );
+
+    const externalReferenceFinal =
+        novoPedido.externalReference ||
+        null;
+
+    const referenciaPagamentoFinal =
+        novoPedido.referenciaPagamento ||
+        null;
+
+    const statusFinal =
+        novoPedido.status ||
+        null;
+
+    const suporte =
+        novoPedido.suporte &&
+        typeof novoPedido.suporte === "object"
+            ? novoPedido.suporte
+            : {
+                aberto: false,
+                status: "FECHADO",
+                mensagens: [],
+            };
 
 
     // ==================================================
@@ -890,21 +906,83 @@ async function criar(pedido) {
             `
             INSERT INTO pedidos (
                 id,
+                cliente_id,
+                restaurante_id,
+                itens,
+                endereco,
+                pagamento,
+                pagamento_status,
+                status_pagamento,
+                pagamento_aprovado,
+                subtotal,
+                taxa_servico,
+                taxa_entrega,
+                total,
+                precisa_troco,
+                troco_para,
+                valor_troco,
+                external_reference,
+                referencia_pagamento,
+                status,
+                suporte,
+                criado_em,
+                atualizado_em,
                 dados
             )
             VALUES (
                 $1,
-                $2
+                $2,
+                $3,
+                $4,
+                $5,
+                $6,
+                $7,
+                $8,
+                $9,
+                $10,
+                $11,
+                $12,
+                $13,
+                $14,
+                $15,
+                $16,
+                $17,
+                $18,
+                $19,
+                $20,
+                $21,
+                $22,
+                $23
             )
-            RETURNING
-                id,
-                dados
+            RETURNING *
             `,
             [
                 id,
+                clienteId,
+                restauranteId,
+                itens,
+                endereco,
+                pagamento,
+                pagamentoStatus,
+                statusPagamento,
+                pagamentoAprovado,
+                subtotal,
+                taxaServico,
+                taxaEntrega,
+                total,
+                precisaTroco,
+                trocoPara,
+                valorTroco,
+                externalReferenceFinal,
+                referenciaPagamentoFinal,
+                statusFinal,
+                suporte,
+                criadoEm,
+                criadoEm,
                 novoPedido,
             ]
         );
+
 
     const pedidoSalvo =
         montarPedido(
@@ -954,6 +1032,15 @@ async function criar(pedido) {
     );
 
     console.log(
+        "ITENS:",
+        Array.isArray(
+            pedidoSalvo.itens
+        )
+            ? pedidoSalvo.itens.length
+            : 0
+    );
+
+    console.log(
         "PAGAMENTO:",
         pedidoSalvo.pagamento
     );
@@ -972,6 +1059,21 @@ async function criar(pedido) {
     console.log(
         "PAGAMENTO APROVADO:",
         pedidoSalvo.pagamentoAprovado
+    );
+
+    console.log(
+        "SUBTOTAL:",
+        pedidoSalvo.subtotal
+    );
+
+    console.log(
+        "TAXA SERVIÇO:",
+        pedidoSalvo.taxaServico
+    );
+
+    console.log(
+        "TAXA ENTREGA:",
+        pedidoSalvo.taxaEntrega
     );
 
     console.log(
@@ -1007,8 +1109,7 @@ async function listar() {
         await pool.query(
             `
             SELECT
-                id,
-                dados
+                *
             FROM pedidos
             ORDER BY id ASC
             `
@@ -1031,7 +1132,9 @@ async function buscarPorId(id) {
         id === null ||
         String(id).trim() === ""
     ) {
+
         return null;
+
     }
 
     const numeroId =
@@ -1042,15 +1145,16 @@ async function buscarPorId(id) {
             numeroId
         )
     ) {
+
         return null;
+
     }
 
     const resultado =
         await pool.query(
             `
             SELECT
-                id,
-                dados
+                *
             FROM pedidos
             WHERE id = $1
             LIMIT 1
@@ -1063,7 +1167,9 @@ async function buscarPorId(id) {
     if (
         resultado.rows.length === 0
     ) {
+
         return null;
+
     }
 
     return montarPedido(
@@ -1073,7 +1179,7 @@ async function buscarPorId(id) {
 
 
 // ======================================================
-// ATUALIZAR PEDIDO NO JSONB
+// ATUALIZAR PEDIDO
 // ======================================================
 
 async function atualizarDadosPedido(
@@ -1085,7 +1191,9 @@ async function atualizarDadosPedido(
         await buscarPorId(id);
 
     if (!pedido) {
+
         return null;
+
     }
 
     const pedidoAtualizado = {
@@ -1102,27 +1210,210 @@ async function atualizarDadosPedido(
 
     };
 
+
+    // ==================================================
+    // NORMALIZAR CAMPOS
+    // ==================================================
+
+    const clienteId =
+        pedidoAtualizado.clienteId !== undefined &&
+        pedidoAtualizado.clienteId !== null
+            ? String(
+                pedidoAtualizado.clienteId
+            )
+            : null;
+
+
+    const restauranteId =
+        pedidoAtualizado.restauranteId !== undefined &&
+        pedidoAtualizado.restauranteId !== null
+            ? String(
+                pedidoAtualizado.restauranteId
+            )
+            : null;
+
+
+    const itens =
+        Array.isArray(
+            pedidoAtualizado.itens
+        )
+            ? pedidoAtualizado.itens
+            : [];
+
+
+    const endereco =
+        pedidoAtualizado.endereco &&
+        typeof pedidoAtualizado.endereco === "object"
+            ? pedidoAtualizado.endereco
+            : {};
+
+
+    const pagamento =
+        pedidoAtualizado.pagamento ||
+        null;
+
+
+    const pagamentoStatus =
+        pedidoAtualizado.pagamentoStatus ||
+        null;
+
+
+    const statusPagamento =
+        pedidoAtualizado.statusPagamento ||
+        null;
+
+
+    const pagamentoAprovado =
+        pedidoAtualizado.pagamentoAprovado !== undefined
+            ? Boolean(
+                pedidoAtualizado.pagamentoAprovado
+            )
+            : false;
+
+
+    const subtotal =
+        Number(
+            pedidoAtualizado.subtotal
+        ) || 0;
+
+
+    const taxaServico =
+        Number(
+            pedidoAtualizado.taxaServico
+        ) || 0;
+
+
+    const taxaEntrega =
+        Number(
+            pedidoAtualizado.taxaEntrega
+        ) || 0;
+
+
+    const total =
+        Number(
+            pedidoAtualizado.total
+        ) || 0;
+
+
+    const precisaTroco =
+        pagamento === "DINHEIRO"
+            ? Boolean(
+                pedidoAtualizado.precisaTroco
+            )
+            : false;
+
+
+    const trocoPara =
+        precisaTroco
+            ? Number(
+                pedidoAtualizado.trocoPara
+            ) || 0
+            : null;
+
+
+    const valorTroco =
+        precisaTroco
+            ? Math.max(
+                0,
+                trocoPara - total
+            )
+            : 0;
+
+
+    const externalReference =
+        pedidoAtualizado.externalReference ||
+        null;
+
+
+    const referenciaPagamento =
+        pedidoAtualizado.referenciaPagamento ||
+        null;
+
+
+    const status =
+        pedidoAtualizado.status ||
+        null;
+
+
+    const suporte =
+        pedidoAtualizado.suporte &&
+        typeof pedidoAtualizado.suporte === "object"
+            ? pedidoAtualizado.suporte
+            : {
+                aberto: false,
+                status: "FECHADO",
+                mensagens: [],
+            };
+
+
+    // ==================================================
+    // ATUALIZAR POSTGRESQL
+    // ==================================================
+
     const resultado =
         await pool.query(
             `
             UPDATE pedidos
-            SET dados = $1
-            WHERE id = $2
-            RETURNING
-                id,
-                dados
+            SET
+                cliente_id = $1,
+                restaurante_id = $2,
+                itens = $3,
+                endereco = $4,
+                pagamento = $5,
+                pagamento_status = $6,
+                status_pagamento = $7,
+                pagamento_aprovado = $8,
+                subtotal = $9,
+                taxa_servico = $10,
+                taxa_entrega = $11,
+                total = $12,
+                precisa_troco = $13,
+                troco_para = $14,
+                valor_troco = $15,
+                external_reference = $16,
+                referencia_pagamento = $17,
+                status = $18,
+                suporte = $19,
+                atualizado_em = $20,
+                dados = $21
+            WHERE id = $22
+            RETURNING *
             `,
             [
+                clienteId,
+                restauranteId,
+                itens,
+                endereco,
+                pagamento,
+                pagamentoStatus,
+                statusPagamento,
+                pagamentoAprovado,
+                subtotal,
+                taxaServico,
+                taxaEntrega,
+                total,
+                precisaTroco,
+                trocoPara,
+                valorTroco,
+                externalReference,
+                referenciaPagamento,
+                status,
+                suporte,
+                pedidoAtualizado.atualizadoEm,
                 pedidoAtualizado,
-                Number(id)
+                Number(id),
             ]
         );
+
 
     if (
         resultado.rows.length === 0
     ) {
+
         return null;
+
     }
+
 
     return montarPedido(
         resultado.rows[0]
@@ -1143,7 +1434,9 @@ async function atualizarStatus(
         await buscarPorId(id);
 
     if (!pedido) {
+
         return null;
+
     }
 
     return atualizarDadosPedido(
@@ -1168,14 +1461,18 @@ async function aceitarPedidoRestaurante(
         await buscarPorId(id);
 
     if (!pedido) {
+
         return null;
+
     }
 
     if (
         pedido.status !==
         "AGUARDANDO_RESTAURANTE"
     ) {
+
         return null;
+
     }
 
     return atualizarDadosPedido(
@@ -1204,14 +1501,18 @@ async function recusarPedidoRestaurante(
         await buscarPorId(id);
 
     if (!pedido) {
+
         return null;
+
     }
 
     if (
         pedido.status !==
         "AGUARDANDO_RESTAURANTE"
     ) {
+
         return null;
+
     }
 
     return atualizarDadosPedido(
@@ -1244,14 +1545,18 @@ async function aceitarEntrega(
         await buscarPorId(id);
 
     if (!pedido) {
+
         return null;
+
     }
 
     if (
         pedido.status !==
         "PRONTO"
     ) {
+
         return null;
+
     }
 
     return atualizarDadosPedido(
@@ -1275,13 +1580,6 @@ async function aceitarEntrega(
 // ======================================================
 // PEDIDOS DO RESTAURANTE
 // ======================================================
-//
-// Antes de buscar os pedidos, executamos uma limpeza.
-//
-// Assim, mesmo que o processo automático ainda não tenha
-// rodado naquele momento, pedidos com mais de 24 horas e
-// status final não serão devolvidos ao aplicativo.
-// ======================================================
 
 async function listarPorRestaurante(
     restauranteId
@@ -1292,29 +1590,21 @@ async function listarPorRestaurante(
         restauranteId === null ||
         String(restauranteId).trim() === ""
     ) {
+
         return [];
+
     }
-
-
-    // ==================================================
-    // LIMPEZA AUTOMÁTICA
-    // ==================================================
 
     await limparPedidosAntigos();
 
-
-    // ==================================================
-    // BUSCAR PEDIDOS
-    // ==================================================
 
     const resultado =
         await pool.query(
             `
             SELECT
-                id,
-                dados
+                *
             FROM pedidos
-            WHERE dados->>'restauranteId' = $1
+            WHERE restaurante_id = $1
             ORDER BY id DESC
             `,
             [
@@ -1343,17 +1633,18 @@ async function listarPorCliente(
         clienteId === null ||
         String(clienteId).trim() === ""
     ) {
+
         return [];
+
     }
 
     const resultado =
         await pool.query(
             `
             SELECT
-                id,
-                dados
+                *
             FROM pedidos
-            WHERE dados->>'clienteId' = $1
+            WHERE cliente_id = $1
             ORDER BY id DESC
             `,
             [
@@ -1379,10 +1670,9 @@ async function listarDisponiveisEntrega() {
         await pool.query(
             `
             SELECT
-                id,
-                dados
+                *
             FROM pedidos
-            WHERE dados->>'status' = 'PRONTO'
+            WHERE status = 'PRONTO'
             ORDER BY id ASC
             `
         );
@@ -1405,14 +1695,18 @@ async function finalizarEntrega(
         await buscarPorId(id);
 
     if (!pedido) {
+
         return null;
+
     }
 
     if (
         pedido.status !==
         "EM_ENTREGA"
     ) {
+
         return null;
+
     }
 
     return atualizarDadosPedido(
@@ -1446,20 +1740,25 @@ async function abrirSuporte(
         );
 
     if (!pedido) {
+
         return null;
+
     }
 
     const suporteAtual =
         pedido.suporte || {
 
-            aberto: false,
+            aberto:
+                false,
 
             status:
                 "FECHADO",
 
-            mensagens: []
+            mensagens:
+                []
 
         };
+
 
     if (
         !Array.isArray(
@@ -1471,8 +1770,10 @@ async function abrirSuporte(
 
     }
 
+
     const momento =
         new Date().toISOString();
+
 
     const mensagemSuporte = {
 
@@ -1494,9 +1795,11 @@ async function abrirSuporte(
 
     };
 
+
     suporteAtual.mensagens.push(
         mensagemSuporte
     );
+
 
     suporteAtual.aberto =
         true;
@@ -1506,6 +1809,7 @@ async function abrirSuporte(
 
     suporteAtual.abertoEm =
         momento;
+
 
     return atualizarDadosPedido(
         pedidoId,
@@ -1527,12 +1831,13 @@ async function listarSuportes() {
         await pool.query(
             `
             SELECT
-                id,
-                dados
+                *
             FROM pedidos
             WHERE
                 COALESCE(
-                    (dados->'suporte'->>'aberto')::boolean,
+                    (
+                        suporte->>'aberto'
+                    )::boolean,
                     false
                 ) = true
             ORDER BY id DESC
@@ -1561,18 +1866,24 @@ async function responderSuporte(
         );
 
     if (!pedido) {
+
         return null;
+
     }
 
     if (!pedido.suporte) {
+
         return null;
+
     }
+
 
     const suporte = {
 
         ...pedido.suporte,
 
     };
+
 
     if (
         !Array.isArray(
@@ -1584,8 +1895,10 @@ async function responderSuporte(
 
     }
 
+
     const momento =
         new Date().toISOString();
+
 
     suporte.mensagens.push({
 
@@ -1605,11 +1918,13 @@ async function responderSuporte(
 
     });
 
+
     suporte.status =
         "RESPONDIDO_ADMIN";
 
     suporte.ultimaRespostaEm =
         momento;
+
 
     return atualizarDadosPedido(
         pedidoId,
@@ -1634,12 +1949,17 @@ async function fecharSuporte(
         );
 
     if (!pedido) {
+
         return null;
+
     }
 
     if (!pedido.suporte) {
+
         return null;
+
     }
+
 
     const suporte = {
 
@@ -1655,6 +1975,7 @@ async function fecharSuporte(
             new Date().toISOString(),
 
     };
+
 
     return atualizarDadosPedido(
         pedidoId,
@@ -1672,11 +1993,15 @@ async function fecharSuporte(
 function montarPedido(row) {
 
     if (!row) {
+
         return null;
+
     }
+
 
     let dados =
         row.dados;
+
 
     if (
         typeof dados === "string"
@@ -1695,6 +2020,7 @@ function montarPedido(row) {
 
     }
 
+
     if (
         !dados ||
         typeof dados !== "object"
@@ -1704,7 +2030,12 @@ function montarPedido(row) {
 
     }
 
-    return {
+
+    // ==================================================
+    // COLUNAS POSTGRESQL TÊM PRIORIDADE
+    // ==================================================
+
+    const pedido = {
 
         ...dados,
 
@@ -1716,8 +2047,150 @@ function montarPedido(row) {
                 )
                 : dados.id,
 
+        clienteId:
+            row.cliente_id ??
+            dados.clienteId,
+
+        restauranteId:
+            row.restaurante_id ??
+            dados.restauranteId,
+
+        itens:
+            row.itens ??
+            dados.itens ??
+            [],
+
+        endereco:
+            row.endereco ??
+            dados.endereco ??
+            {},
+
+        pagamento:
+            row.pagamento ??
+            dados.pagamento,
+
+        pagamentoStatus:
+            row.pagamento_status ??
+            dados.pagamentoStatus,
+
+        statusPagamento:
+            row.status_pagamento ??
+            dados.statusPagamento,
+
+        pagamentoAprovado:
+            row.pagamento_aprovado ??
+            dados.pagamentoAprovado ??
+            false,
+
+        subtotal:
+            row.subtotal !== null &&
+            row.subtotal !== undefined
+                ? Number(
+                    row.subtotal
+                )
+                : Number(
+                    dados.subtotal
+                ) || 0,
+
+        taxaServico:
+            row.taxa_servico !== null &&
+            row.taxa_servico !== undefined
+                ? Number(
+                    row.taxa_servico
+                )
+                : Number(
+                    dados.taxaServico
+                ) || 0,
+
+        taxaEntrega:
+            row.taxa_entrega !== null &&
+            row.taxa_entrega !== undefined
+                ? Number(
+                    row.taxa_entrega
+                )
+                : Number(
+                    dados.taxaEntrega
+                ) || 0,
+
+        total:
+            row.total !== null &&
+            row.total !== undefined
+                ? Number(
+                    row.total
+                )
+                : Number(
+                    dados.total
+                ) || 0,
+
+        precisaTroco:
+            row.precisa_troco ??
+            dados.precisaTroco ??
+            false,
+
+        trocoPara:
+            row.troco_para !== null &&
+            row.troco_para !== undefined
+                ? Number(
+                    row.troco_para
+                )
+                : (
+                    dados.trocoPara !== undefined &&
+                    dados.trocoPara !== null
+                        ? Number(
+                            dados.trocoPara
+                        )
+                        : null
+                ),
+
+        valorTroco:
+            row.valor_troco !== null &&
+            row.valor_troco !== undefined
+                ? Number(
+                    row.valor_troco
+                )
+                : Number(
+                    dados.valorTroco
+                ) || 0,
+
+        externalReference:
+            row.external_reference ??
+            dados.externalReference,
+
+        referenciaPagamento:
+            row.referencia_pagamento ??
+            dados.referenciaPagamento,
+
+        status:
+            row.status ??
+            dados.status,
+
+        suporte:
+            row.suporte ??
+            dados.suporte ??
+            {
+                aberto: false,
+                status: "FECHADO",
+                mensagens: [],
+            },
+
+        criadoEm:
+            row.criado_em
+                ? new Date(
+                    row.criado_em
+                ).toISOString()
+                : dados.criadoEm,
+
+        atualizadoEm:
+            row.atualizado_em
+                ? new Date(
+                    row.atualizado_em
+                ).toISOString()
+                : dados.atualizadoEm,
+
     };
 
+
+    return pedido;
 }
 
 
@@ -1760,10 +2233,6 @@ module.exports = {
     responderSuporte,
 
     fecharSuporte,
-
-    // --------------------------------------------------
-    // LIMPEZA AUTOMÁTICA
-    // --------------------------------------------------
 
     limparPedidosAntigos,
 
