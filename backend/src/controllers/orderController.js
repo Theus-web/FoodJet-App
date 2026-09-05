@@ -12,6 +12,260 @@ const {
 
 
 // ======================================================
+// SOCKET.IO
+// ======================================================
+//
+// Envia a atualização somente depois que o PostgreSQL
+// confirmar a alteração.
+//
+// Salas utilizadas pelo server.js:
+//
+// pedido_<id>
+// restaurante_<id>
+// entregador_<id>
+//
+// ======================================================
+
+function emitirAtualizacaoPedido(pedido, evento = "status_pedido_atualizado") {
+
+    try {
+
+        if (!pedido || !pedido.id) {
+
+            console.warn(
+                "⚠️ SOCKET.IO: pedido inválido para emissão."
+            );
+
+            return;
+
+        }
+
+        if (
+            !global.io
+        ) {
+
+            console.warn(
+                "⚠️ SOCKET.IO: global.io não está disponível."
+            );
+
+            return;
+
+        }
+
+
+        const pedidoId =
+            String(
+                pedido.id
+            ).trim();
+
+
+        // ==================================================
+        // SALA DO PEDIDO
+        // ==================================================
+
+        const salaPedido =
+            `pedido_${pedidoId}`;
+
+
+        global.io
+            .to(salaPedido)
+            .emit(
+                evento,
+                pedido
+            );
+
+
+        console.log(
+            "🔌 SOCKET.IO → PEDIDO:",
+            salaPedido
+        );
+
+        console.log(
+            "📡 EVENTO:",
+            evento
+        );
+
+        console.log(
+            "📊 STATUS:",
+            pedido.status
+        );
+
+
+        // ==================================================
+        // SALA DO RESTAURANTE
+        // ==================================================
+
+        if (
+            pedido.restauranteId !== undefined &&
+            pedido.restauranteId !== null &&
+            String(
+                pedido.restauranteId
+            ).trim() !== ""
+        ) {
+
+            const restauranteId =
+                String(
+                    pedido.restauranteId
+                ).trim();
+
+            const salaRestaurante =
+                `restaurante_${restauranteId}`;
+
+
+            global.io
+                .to(salaRestaurante)
+                .emit(
+                    evento,
+                    pedido
+                );
+
+
+            console.log(
+                "🏪 SOCKET.IO → RESTAURANTE:",
+                salaRestaurante
+            );
+
+        }
+
+
+        // ==================================================
+        // SALA DO ENTREGADOR
+        // ==================================================
+
+        if (
+            pedido.entregadorId !== undefined &&
+            pedido.entregadorId !== null &&
+            String(
+                pedido.entregadorId
+            ).trim() !== ""
+        ) {
+
+            const entregadorId =
+                String(
+                    pedido.entregadorId
+                ).trim();
+
+            const salaEntregador =
+                `entregador_${entregadorId}`;
+
+
+            global.io
+                .to(salaEntregador)
+                .emit(
+                    evento,
+                    pedido
+                );
+
+
+            console.log(
+                "🏍️ SOCKET.IO → ENTREGADOR:",
+                salaEntregador
+            );
+
+        }
+
+
+        // ==================================================
+        // NOVO PEDIDO PARA RESTAURANTE
+        // ==================================================
+        //
+        // Esse evento é usado quando o pedido já está
+        // disponível para o restaurante.
+        //
+        // Não é emitido automaticamente para qualquer
+        // atualização. Somente quando solicitado pelo
+        // controller.
+        //
+        // ==================================================
+
+    } catch (erro) {
+
+        console.error(
+            "❌ ERRO AO EMITIR SOCKET.IO:",
+            erro.message
+        );
+
+    }
+
+}
+
+
+// ======================================================
+// EMITIR NOVO PEDIDO
+// ======================================================
+
+function emitirNovoPedidoRestaurante(pedido) {
+
+    try {
+
+        if (
+            !pedido ||
+            !pedido.id ||
+            !global.io
+        ) {
+
+            return;
+
+        }
+
+        if (
+            pedido.restauranteId === undefined ||
+            pedido.restauranteId === null ||
+            String(
+                pedido.restauranteId
+            ).trim() === ""
+        ) {
+
+            return;
+
+        }
+
+
+        const restauranteId =
+            String(
+                pedido.restauranteId
+            ).trim();
+
+
+        const sala =
+            `restaurante_${restauranteId}`;
+
+
+        global.io
+            .to(sala)
+            .emit(
+                "novo_pedido",
+                pedido
+            );
+
+
+        console.log(
+            "🆕 SOCKET.IO → NOVO PEDIDO"
+        );
+
+        console.log(
+            "🏪 SALA:",
+            sala
+        );
+
+        console.log(
+            "📦 PEDIDO:",
+            pedido.id
+        );
+
+    } catch (erro) {
+
+        console.error(
+            "❌ ERRO AO EMITIR NOVO PEDIDO:",
+            erro.message
+        );
+
+    }
+
+}
+
+
+// ======================================================
 // OBTER USUÁRIO AUTENTICADO
 // ======================================================
 
@@ -49,6 +303,7 @@ function obterUsuarioAutenticado(req) {
 // ======================================================
 //
 // Compatível com:
+//
 // - PIX
 // - CARTÃO DE CRÉDITO
 //
@@ -94,20 +349,7 @@ async function processarEstornoPedido(pedidoAtual) {
 
 
     // ==================================================
-    // BUSCAR PAGAMENTO ASAAS NO POSTGRESQL
-    // ==================================================
-    //
-    // Primeiro tentamos pelo pedido_id.
-    //
-    // Isso é importante principalmente para cartão,
-    // porque o external_reference inicialmente é:
-    //
-    // FOODJET-CHK-...
-    //
-    // e não o ID do pedido.
-    //
-    // Também mantemos busca pela external_reference
-    // para compatibilidade com PIX e registros antigos.
+    // BUSCAR PAGAMENTO ASAAS
     // ==================================================
 
     let pagamentoAsaas = null;
@@ -164,7 +406,7 @@ async function processarEstornoPedido(pedidoAtual) {
 
 
     // ==================================================
-    // NÃO EXISTE PAGAMENTO ASAAS
+    // NÃO EXISTE PAGAMENTO
     // ==================================================
 
     if (!pagamentoAsaas) {
@@ -280,7 +522,7 @@ async function processarEstornoPedido(pedidoAtual) {
 
 
     // ==================================================
-    // ESTORNO JÁ EM PROCESSAMENTO
+    // ESTORNO EM PROCESSAMENTO
     // ==================================================
 
     if (
@@ -316,7 +558,7 @@ async function processarEstornoPedido(pedidoAtual) {
 
 
     // ==================================================
-    // CONSULTAR ASAAS DIRETAMENTE
+    // CONSULTAR ASAAS
     // ==================================================
 
     console.log(
@@ -388,7 +630,6 @@ async function processarEstornoPedido(pedidoAtual) {
                 `,
                 [
                     "REFUNDED",
-
                     pagamentoId,
                 ]
             );
@@ -416,7 +657,7 @@ async function processarEstornoPedido(pedidoAtual) {
 
 
     // ==================================================
-    // ESTORNO JÁ EM PROCESSAMENTO NO ASAAS
+    // ESTORNO EM PROCESSAMENTO NO ASAAS
     // ==================================================
 
     if (
@@ -440,7 +681,6 @@ async function processarEstornoPedido(pedidoAtual) {
                 `,
                 [
                     statusAsaas,
-
                     pagamentoId,
                 ]
             );
@@ -464,16 +704,6 @@ async function processarEstornoPedido(pedidoAtual) {
 
     // ==================================================
     // PAGAMENTOS QUE PODEM SER ESTORNADOS
-    // ==================================================
-    //
-    // PIX:
-    // RECEIVED
-    //
-    // CARTÃO:
-    // RECEIVED
-    // CONFIRMED
-    //
-    // RECEIVED_IN_CASH NÃO ENTRA.
     // ==================================================
 
     const pagamentoPago = [
@@ -589,7 +819,7 @@ async function processarEstornoPedido(pedidoAtual) {
 
 
     // ==================================================
-    // IDENTIFICAR STATUS RETORNADO PELO ASAAS
+    // IDENTIFICAR STATUS RETORNADO
     // ==================================================
 
     const statusRetornado =
@@ -631,20 +861,13 @@ async function processarEstornoPedido(pedidoAtual) {
 
     } else {
 
-        // ------------------------------------------------
-        // Caso o Asaas não retorne status de estorno,
-        // usamos REFUND_IN_PROGRESS para impedir que
-        // outra chamada tente estornar novamente antes
-        // do webhook confirmar o resultado.
-        // ------------------------------------------------
-
         novoStatusBanco =
             "REFUND_IN_PROGRESS";
     }
 
 
     // ==================================================
-    // REGISTRAR STATUS DO ESTORNO NO POSTGRESQL
+    // REGISTRAR ESTORNO
     // ==================================================
 
     try {
@@ -659,7 +882,6 @@ async function processarEstornoPedido(pedidoAtual) {
             `,
             [
                 novoStatusBanco,
-
                 pagamentoId,
             ]
         );
@@ -1023,7 +1245,7 @@ async function updateStatus(req, res) {
 
 
         // ==================================================
-        // BUSCAR PEDIDO ANTES DA ALTERAÇÃO
+        // BUSCAR ANTES
         // ==================================================
 
         const pedidoAtual =
@@ -1045,7 +1267,7 @@ async function updateStatus(req, res) {
 
 
         // ==================================================
-        // NORMALIZAR STATUS
+        // NORMALIZAR
         // ==================================================
 
         const statusNormalizado =
@@ -1053,10 +1275,6 @@ async function updateStatus(req, res) {
                 .trim()
                 .toUpperCase();
 
-
-        // ==================================================
-        // IDENTIFICAR CANCELAMENTO
-        // ==================================================
 
         const statusCancelamento = [
 
@@ -1076,7 +1294,7 @@ async function updateStatus(req, res) {
 
 
         // ==================================================
-        // PROCESSAR ESTORNO
+        // ESTORNO
         // ==================================================
 
         if (vaiCancelar) {
@@ -1145,7 +1363,7 @@ async function updateStatus(req, res) {
 
 
         // ==================================================
-        // ATUALIZAR STATUS DO PEDIDO
+        // ATUALIZAR STATUS
         // ==================================================
 
         const pedido =
@@ -1153,7 +1371,7 @@ async function updateStatus(req, res) {
 
                 req.params.id,
 
-                status
+                statusNormalizado
             );
 
 
@@ -1167,6 +1385,16 @@ async function updateStatus(req, res) {
                     "Pedido não encontrado.",
             });
         }
+
+
+        // ==================================================
+        // SOCKET.IO
+        // ==================================================
+
+        emitirAtualizacaoPedido(
+            pedido,
+            "status_pedido_atualizado"
+        );
 
 
         // ==================================================
@@ -1316,6 +1544,29 @@ async function acceptRestaurant(req, res) {
 
     try {
 
+        console.log("");
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "🏪 FOODJET - RESTAURANTE ACEITANDO PEDIDO"
+        );
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "🆔 PEDIDO:",
+            req.params.id
+        );
+
+
+        // ==================================================
+        // ACEITAR NO BANCO
+        // ==================================================
+
         const pedido =
             await Order.aceitarPedidoRestaurante(
                 req.params.id
@@ -1334,6 +1585,35 @@ async function acceptRestaurant(req, res) {
         }
 
 
+        console.log(
+            "✅ PEDIDO ACEITO NO POSTGRESQL"
+        );
+
+        console.log(
+            "🆔 PEDIDO:",
+            pedido.id
+        );
+
+        console.log(
+            "📊 NOVO STATUS:",
+            pedido.status
+        );
+
+
+        // ==================================================
+        // SOCKET.IO → CLIENTE
+        // ==================================================
+
+        emitirAtualizacaoPedido(
+            pedido,
+            "status_pedido_atualizado"
+        );
+
+
+        // ==================================================
+        // RESPOSTA
+        // ==================================================
+
         return res.json({
 
             sucesso: true,
@@ -1345,6 +1625,11 @@ async function acceptRestaurant(req, res) {
         });
 
     } catch (error) {
+
+        console.error(
+            "❌ ERRO AO ACEITAR PEDIDO:",
+            error
+        );
 
         return res.status(500).json({
 
@@ -1383,7 +1668,7 @@ async function rejectRestaurant(req, res) {
 
 
         // ==================================================
-        // BUSCAR PEDIDO ANTES DA RECUSA
+        // BUSCAR ANTES DA RECUSA
         // ==================================================
 
         const pedidoAtual =
@@ -1416,7 +1701,7 @@ async function rejectRestaurant(req, res) {
 
 
         // ==================================================
-        // PROCESSAR ESTORNO
+        // ESTORNO
         // ==================================================
 
         try {
@@ -1453,7 +1738,7 @@ async function rejectRestaurant(req, res) {
 
 
         // ==================================================
-        // RECUSAR PEDIDO NO BANCO
+        // RECUSAR NO BANCO
         // ==================================================
 
         const pedido =
@@ -1478,7 +1763,32 @@ async function rejectRestaurant(req, res) {
 
 
         console.log(
-            "✅ PEDIDO RECUSADO PELO RESTAURANTE."
+            "✅ PEDIDO RECUSADO NO POSTGRESQL"
+        );
+
+        console.log(
+            "🆔 PEDIDO:",
+            pedido.id
+        );
+
+        console.log(
+            "📊 NOVO STATUS:",
+            pedido.status
+        );
+
+
+        // ==================================================
+        // SOCKET.IO → CLIENTE
+        // ==================================================
+
+        emitirAtualizacaoPedido(
+            pedido,
+            "status_pedido_atualizado"
+        );
+
+
+        console.log(
+            "========================================"
         );
 
 
@@ -1544,6 +1854,16 @@ async function acceptDelivery(req, res) {
         }
 
 
+        // ==================================================
+        // SOCKET.IO
+        // ==================================================
+
+        emitirAtualizacaoPedido(
+            pedido,
+            "status_pedido_atualizado"
+        );
+
+
         return res.json({
 
             sucesso: true,
@@ -1594,6 +1914,16 @@ async function completeDelivery(req, res) {
                     "Pedido não encontrado ou não está em entrega.",
             });
         }
+
+
+        // ==================================================
+        // SOCKET.IO
+        // ==================================================
+
+        emitirAtualizacaoPedido(
+            pedido,
+            "status_pedido_atualizado"
+        );
 
 
         return res.json({
@@ -1671,6 +2001,16 @@ async function openSupport(req, res) {
                     "Pedido não encontrado.",
             });
         }
+
+
+        // ==================================================
+        // SOCKET.IO
+        // ==================================================
+
+        emitirAtualizacaoPedido(
+            pedido,
+            "status_pedido_atualizado"
+        );
 
 
         return res.json({
