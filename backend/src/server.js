@@ -1,3 +1,4 @@
+
 require("dotenv").config();
 
 const http = require("http");
@@ -68,18 +69,11 @@ const paymentRoutes =
 const financeRoutes =
   require("./routes/finance");
 
+const promotionRoutes =
+  require("./routes/promotion");
+
 // ============================================================
 // WEBHOOK ASAAS
-// ============================================================
-//
-// IMPORTANTE:
-//
-// O arquivo asaasWebhook.js NÃO é um Router.
-// Ele exporta:
-//   webhook
-//   registrarWebhook
-//
-// Portanto usamos registrarWebhook(app).
 // ============================================================
 
 let webhookAtivo = false;
@@ -170,6 +164,19 @@ app.use(
 
 console.log(
   "💰 ROTA /api/finance REGISTRADA"
+);
+
+// ============================================================
+// PROMOÇÕES
+// ============================================================
+
+app.use(
+  "/api/promocoes",
+  promotionRoutes
+);
+
+console.log(
+  "🔥 ROTA /api/promocoes REGISTRADA"
 );
 
 // ============================================================
@@ -412,6 +419,10 @@ async function iniciarServidor() {
         );
 
         console.log(
+          "🔥 PROMOÇÕES: ATIVAS"
+        );
+
+        console.log(
           "🔔 WEBHOOK:"
         );
 
@@ -455,3 +466,4 @@ async function iniciarServidor() {
 // ============================================================
 
 iniciarServidor();
+
