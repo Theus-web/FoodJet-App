@@ -1,3 +1,4 @@
+
 const crypto = require("crypto");
 
 const {
@@ -27,7 +28,6 @@ function normalizarId(valor) {
     }
 
     return String(valor).trim();
-
 }
 
 // ============================================================
@@ -37,7 +37,6 @@ function normalizarId(valor) {
 function agora() {
 
     return new Date().toISOString();
-
 }
 
 // ============================================================
@@ -73,13 +72,11 @@ function normalizarStatusAsaas(status) {
 
         default:
             return valor.toLowerCase();
-
     }
-
 }
 
 // ============================================================
-// EVENTO É PAGAMENTO APROVADO?
+// PAGAMENTO APROVADO?
 // ============================================================
 
 function pagamentoAprovado(status) {
@@ -91,13 +88,10 @@ function pagamentoAprovado(status) {
         valor === "RECEIVED" ||
         valor === "CONFIRMED"
     );
-
 }
 
-
-
 // ============================================================
-// EVENTO É CANCELAMENTO?
+// PAGAMENTO CANCELADO?
 // ============================================================
 
 function pagamentoCancelado(status) {
@@ -114,7 +108,6 @@ function pagamentoCancelado(status) {
         valor === "DUNNING_REQUESTED" ||
         valor === "DUNNING_RECEIVED"
     );
-
 }
 
 // ============================================================
@@ -130,7 +123,6 @@ function validarTokenWebhook(req) {
         );
 
         return false;
-
     }
 
     const tokenRecebido =
@@ -143,7 +135,6 @@ function validarTokenWebhook(req) {
         );
 
         return false;
-
     }
 
     const recebido =
@@ -155,9 +146,7 @@ function validarTokenWebhook(req) {
         ).trim();
 
     if (!recebido || !esperado) {
-
         return false;
-
     }
 
     try {
@@ -175,9 +164,7 @@ function validarTokenWebhook(req) {
             );
 
         if (a.length !== b.length) {
-
             return false;
-
         }
 
         return crypto.timingSafeEqual(
@@ -193,29 +180,23 @@ function validarTokenWebhook(req) {
         );
 
         return false;
-
     }
-
 }
 
 // ============================================================
-// PARSE DADOS JSONB
+// PARSE JSONB
 // ============================================================
 
 function parseDados(valor) {
 
     if (!valor) {
-
         return {};
-
     }
 
     if (
         typeof valor === "object"
     ) {
-
         return valor;
-
     }
 
     try {
@@ -230,13 +211,47 @@ function parseDados(valor) {
         );
 
         return {};
-
     }
-
 }
 
 // ============================================================
-// LOCALIZAR PEDIDO NO POSTGRESQL
+// MONTAR RESULTADO DO PEDIDO
+// ============================================================
+
+function montarResultadoPedido(row) {
+
+    if (!row) {
+
+        return {
+            pedido: null,
+            index: -1,
+            row: null,
+        };
+    }
+
+    const dados =
+        parseDados(
+            row.dados
+        );
+
+    return {
+
+        pedido: {
+
+            ...dados,
+
+            id:
+                Number(row.id),
+        },
+
+        index: -1,
+
+        row,
+    };
+}
+
+// ============================================================
+// LOCALIZAR PEDIDO
 // ============================================================
 
 async function localizarPedido(payment) {
@@ -287,9 +302,7 @@ async function localizarPedido(payment) {
             return montarResultadoPedido(
                 resultado.rows[0]
             );
-
         }
-
     }
 
     // --------------------------------------------------------
@@ -325,13 +338,11 @@ async function localizarPedido(payment) {
             return montarResultadoPedido(
                 resultado.rows[0]
             );
-
         }
-
     }
 
     // --------------------------------------------------------
-    // 3. ID DO PEDIDO
+    // 3. ORDER ID
     // --------------------------------------------------------
 
     if (orderId) {
@@ -365,15 +376,12 @@ async function localizarPedido(payment) {
                 return montarResultadoPedido(
                     resultado.rows[0]
                 );
-
             }
-
         }
-
     }
 
     // --------------------------------------------------------
-    // 4. REFERÊNCIA FOODJET
+    // 4. REFERÊNCIA FOODJET NUMÉRICA
     // --------------------------------------------------------
 
     if (referencia) {
@@ -386,7 +394,10 @@ async function localizarPedido(payment) {
                 )
                 .trim();
 
-        if (numeroReferencia) {
+        if (
+            numeroReferencia &&
+            /^\d+$/.test(numeroReferencia)
+        ) {
 
             const resultado =
                 await pool.query(
@@ -414,11 +425,8 @@ async function localizarPedido(payment) {
                 return montarResultadoPedido(
                     resultado.rows[0]
                 );
-
             }
-
         }
-
     }
 
     return {
@@ -428,53 +436,642 @@ async function localizarPedido(payment) {
         index: -1,
 
         row: null,
-
     };
-
 }
 
 // ============================================================
-// MONTAR RESULTADO DO PEDIDO
+// BUSCAR CHECKOUT PENDENTE
+// ============================================================
+//
+// O cartão usa uma referência:
+//
+// FOODJET-CHK-...
+//
+// Essa referência não é o ID do pedido.
+//
+// O snapshot original está salvo em:
+//
+// pagamentos_asaas.dados.checkout
+//
 // ============================================================
 
-function montarResultadoPedido(row) {
+async function buscarCheckoutPendente(
+    referencia,
+    pagamentoId
+) {
 
-    if (!row) {
+    let resultado;
 
-        return {
+    // --------------------------------------------------------
+    // 1. Tentar pelo PAYMENT ID
+    // --------------------------------------------------------
 
-            pedido: null,
+    if (pagamentoId) {
 
-            index: -1,
+        resultado =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    pagamento_id,
+                    pedido_id,
+                    external_reference,
+                    status,
+                    valor,
+                    dados
+                FROM pagamentos_asaas
+                WHERE pagamento_id = $1
+                ORDER BY criado_em DESC
+                LIMIT 1
+                `,
+                [
+                    pagamentoId,
+                ]
+            );
 
-            row: null,
+        if (
+            resultado.rows.length > 0
+        ) {
 
-        };
+            const registro =
+                resultado.rows[0];
 
+            const dados =
+                parseDados(
+                    registro.dados
+                );
+
+            const checkout =
+                dados.checkout ||
+                null;
+
+            if (checkout) {
+
+                return {
+                    registro,
+                    checkout,
+                };
+            }
+        }
     }
 
-    const dados =
-        parseDados(
-            row.dados
+    // --------------------------------------------------------
+    // 2. Tentar pela referência
+    // --------------------------------------------------------
+
+    if (referencia) {
+
+        resultado =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    pagamento_id,
+                    pedido_id,
+                    external_reference,
+                    status,
+                    valor,
+                    dados
+                FROM pagamentos_asaas
+                WHERE external_reference = $1
+                ORDER BY criado_em DESC
+                LIMIT 1
+                `,
+                [
+                    referencia,
+                ]
+            );
+
+        if (
+            resultado.rows.length > 0
+        ) {
+
+            const registro =
+                resultado.rows[0];
+
+            const dados =
+                parseDados(
+                    registro.dados
+                );
+
+            const checkout =
+                dados.checkout ||
+                null;
+
+            if (checkout) {
+
+                return {
+                    registro,
+                    checkout,
+                };
+            }
+        }
+    }
+
+    return null;
+}
+
+// ============================================================
+// VALIDAR CHECKOUT
+// ============================================================
+
+function validarCheckout(
+    checkout
+) {
+
+    if (!checkout) {
+
+        throw new Error(
+            "Checkout não encontrado."
+        );
+    }
+
+    if (
+        !checkout.clienteId
+    ) {
+
+        throw new Error(
+            "Checkout sem clienteId."
+        );
+    }
+
+    if (
+        !checkout.restauranteId
+    ) {
+
+        throw new Error(
+            "Checkout sem restauranteId."
+        );
+    }
+
+    if (
+        !Array.isArray(
+            checkout.itens
+        ) ||
+        checkout.itens.length === 0
+    ) {
+
+        throw new Error(
+            "Checkout sem itens."
+        );
+    }
+
+    if (
+        checkout.total === undefined ||
+        checkout.total === null
+    ) {
+
+        throw new Error(
+            "Checkout sem valor total."
+        );
+    }
+
+    return true;
+}
+
+// ============================================================
+// CRIAR PEDIDO A PARTIR DO CHECKOUT
+// ============================================================
+//
+// IMPORTANTE:
+//
+// Esta função só é chamada quando o pagamento estiver
+// RECEIVED ou CONFIRMED.
+//
+// Portanto:
+//
+// pagamento aprovado
+//        ↓
+// criar pedido
+//
+// ============================================================
+
+async function criarPedidoDoCheckout(
+    checkout,
+    payment,
+    evento
+) {
+
+    validarCheckout(
+        checkout
+    );
+
+    const pagamentoId =
+        normalizarId(
+            payment?.id
         );
 
-    return {
+    const referencia =
+        normalizarId(
+            payment?.externalReference
+        );
 
-        pedido: {
+    const total =
+        Number(
+            checkout.total
+        );
 
-            ...dados,
+    const subtotal =
+        Number(
+            checkout.subtotal ?? 0
+        );
 
+    const taxaServico =
+        Number(
+            checkout.taxaServico ?? 0
+        );
+
+    const taxaEntrega =
+        Number(
+            checkout.taxaEntrega ?? 0
+        );
+
+    if (
+        !Number.isFinite(total) ||
+        total <= 0
+    ) {
+
+        throw new Error(
+            "Valor total do checkout inválido."
+        );
+    }
+
+    // --------------------------------------------------------
+    // SEGURANÇA CONTRA DUPLICAÇÃO
+    // --------------------------------------------------------
+    //
+    // Antes de criar um novo pedido, verificamos novamente
+    // pelo pagamento Asaas e pela referência.
+    //
+    // Isso é importante porque o Asaas pode reenviar o
+    // mesmo webhook.
+    // --------------------------------------------------------
+
+    const pedidoExistente =
+        await localizarPedido({
             id:
-                Number(row.id),
+                pagamentoId,
 
-        },
+            externalReference:
+                referencia,
+        });
 
-        index: -1,
+    if (
+        pedidoExistente?.pedido
+    ) {
 
-        row,
+        console.log(
+            "♻️ PEDIDO JÁ EXISTE. NÃO SERÁ DUPLICADO."
+        );
 
+        console.log(
+            "🆔 PEDIDO:",
+            pedidoExistente.pedido.id
+        );
+
+        return pedidoExistente.pedido;
+    }
+
+    // --------------------------------------------------------
+    // CRIAR PEDIDO
+    // --------------------------------------------------------
+
+    const pedidoCriado =
+        await Order.criar({
+
+            clienteId:
+                String(
+                    checkout.clienteId
+                ),
+
+            restauranteId:
+                String(
+                    checkout.restauranteId
+                ),
+
+            itens:
+                checkout.itens,
+
+            endereco:
+                checkout.endereco ||
+                null,
+
+            pagamento:
+                String(
+                    checkout.pagamento ||
+                    "CREDITO"
+                ).toUpperCase(),
+
+            subtotal:
+                Number(
+                    subtotal.toFixed(2)
+                ),
+
+            taxaServico:
+                Number(
+                    taxaServico.toFixed(2)
+                ),
+
+            taxaEntrega:
+                Number(
+                    taxaEntrega.toFixed(2)
+                ),
+
+            total:
+                Number(
+                    total.toFixed(2)
+                ),
+
+            precisaTroco:
+                false,
+
+            trocoPara:
+                null,
+
+            valorTroco:
+                0,
+
+            status:
+                "AGUARDANDO_RESTAURANTE",
+
+            pagamentoStatus:
+                "APROVADO",
+
+            statusPagamento:
+                "approved",
+
+            pagamentoAprovado:
+                true,
+
+            pagamentoId:
+                pagamentoId,
+
+            paymentId:
+                pagamentoId,
+
+            asaasPaymentId:
+                pagamentoId,
+
+            externalReference:
+                referencia,
+
+            referenciaPagamento:
+                referencia,
+
+            statusPagamentoAsaas:
+                normalizarId(
+                    payment?.status
+                ).toUpperCase(),
+
+            asaasEvento:
+                evento,
+
+            asaasAtualizadoEm:
+                agora(),
+
+            pagamentoAprovadoEm:
+                agora(),
+        });
+
+    if (
+        !pedidoCriado ||
+        pedidoCriado.id === undefined ||
+        pedidoCriado.id === null
+    ) {
+
+        throw new Error(
+            "Order.criar() não retornou o pedido criado."
+        );
+    }
+
+    console.log(
+        "========================================"
+    );
+
+    console.log(
+        "🎉 PEDIDO CRIADO APÓS PAGAMENTO APROVADO"
+    );
+
+    console.log(
+        "🆔 PEDIDO:",
+        pedidoCriado.id
+    );
+
+    console.log(
+        "💳 ASAAS:",
+        pagamentoId
+    );
+
+    console.log(
+        "🔖 REFERÊNCIA:",
+        referencia
+    );
+
+    console.log(
+        "💰 TOTAL:",
+        total
+    );
+
+    console.log(
+        "========================================"
+    );
+
+    return pedidoCriado;
+}
+
+// ============================================================
+// VINCULAR PEDIDO AO PAGAMENTO ASAAS
+// ============================================================
+
+async function vincularPedidoAoPagamento(
+    pagamentoId,
+    referencia,
+    pedidoId,
+    checkout,
+    payment,
+    evento
+) {
+
+    if (!pagamentoId) {
+
+        throw new Error(
+            "Pagamento Asaas não informado."
+        );
+    }
+
+    if (
+        pedidoId === undefined ||
+        pedidoId === null
+    ) {
+
+        throw new Error(
+            "Pedido não informado para vinculação."
+        );
+    }
+
+    const dadosAtuais = {
+
+        tipo:
+            "CHECKOUT_CARTAO",
+
+        checkout:
+            checkout || null,
+
+        pagamentoId,
+
+        paymentId:
+            pagamentoId,
+
+        externalReference:
+            referencia,
+
+        pedidoId:
+            String(pedidoId),
+
+        statusAsaas:
+            normalizarId(
+                payment?.status
+            ).toUpperCase(),
+
+        statusPagamento:
+            normalizarStatusAsaas(
+                payment?.status
+            ),
+
+        evento,
+
+        valor:
+            Number(
+                payment?.value || 0
+            ),
+
+        atualizadoEm:
+            agora(),
+
+        asaas:
+            payment,
     };
 
+    await pool.query(
+        `
+        UPDATE pagamentos_asaas
+        SET
+            pedido_id = $1,
+            pagamento_id = $2,
+            external_reference = $3,
+            status = $4,
+            valor = $5,
+            dados = $6,
+            atualizado_em = NOW()
+        WHERE pagamento_id = $2
+        `,
+        [
+            String(
+                pedidoId
+            ),
+
+            pagamentoId,
+
+            referencia || null,
+
+            normalizarId(
+                payment?.status
+            ).toUpperCase() ||
+                "PENDING",
+
+            Number(
+                payment?.value || 0
+            ),
+
+            dadosAtuais,
+        ]
+    );
+
+    // --------------------------------------------------------
+    // Caso o registro ainda não exista
+    // --------------------------------------------------------
+
+    const verificacao =
+        await pool.query(
+            `
+            SELECT id
+            FROM pagamentos_asaas
+            WHERE pagamento_id = $1
+            LIMIT 1
+            `,
+            [
+                pagamentoId,
+            ]
+        );
+
+    if (
+        verificacao.rows.length === 0
+    ) {
+
+        await pool.query(
+            `
+            INSERT INTO pagamentos_asaas (
+                id,
+                pagamento_id,
+                pedido_id,
+                external_reference,
+                status,
+                valor,
+                dados,
+                criado_em,
+                atualizado_em
+            )
+            VALUES (
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                $6,
+                $7,
+                NOW(),
+                NOW()
+            )
+            `,
+            [
+
+                pagamentoId,
+
+                pagamentoId,
+
+                String(
+                    pedidoId
+                ),
+
+                referencia || null,
+
+                normalizarId(
+                    payment?.status
+                ).toUpperCase() ||
+                    "PENDING",
+
+                Number(
+                    payment?.value || 0
+                ),
+
+                dadosAtuais,
+            ]
+        );
+    }
+
+    console.log(
+        "🔗 PAGAMENTO VINCULADO AO PEDIDO:"
+    );
+
+    console.log(
+        "💳 ASAAS:",
+        pagamentoId
+    );
+
+    console.log(
+        "🆔 PEDIDO:",
+        pedidoId
+    );
 }
 
 // ============================================================
@@ -513,16 +1110,16 @@ async function atualizarPedido(
     const pedidoAtualizado = {
 
         ...pedido,
-
     };
-
-    // --------------------------------------------------------
-    // DADOS DO PAGAMENTO
-    // --------------------------------------------------------
 
     pedidoAtualizado.pagamentoId =
         pagamentoId ||
         pedidoAtualizado.pagamentoId ||
+        "";
+
+    pedidoAtualizado.paymentId =
+        pagamentoId ||
+        pedidoAtualizado.paymentId ||
         "";
 
     pedidoAtualizado.externalReference =
@@ -556,10 +1153,6 @@ async function atualizarPedido(
     pedidoAtualizado.pagamentoAtualizadoEm =
         momento;
 
-    // --------------------------------------------------------
-    // VALOR
-    // --------------------------------------------------------
-
     if (
         payment?.value !== undefined &&
         payment?.value !== null
@@ -576,9 +1169,7 @@ async function atualizarPedido(
 
             pedidoAtualizado.valorPagamento =
                 valor;
-
         }
-
     }
 
     // --------------------------------------------------------
@@ -609,13 +1200,11 @@ async function atualizarPedido(
 
             pedidoAtualizado.status =
                 "AGUARDANDO_RESTAURANTE";
-
         }
-
     }
 
     // --------------------------------------------------------
-    // CANCELADO / VENCIDO
+    // CANCELADO
     // --------------------------------------------------------
 
     if (
@@ -644,33 +1233,24 @@ async function atualizarPedido(
             pedidoAtualizado.canceladoEm =
                 pedidoAtualizado.canceladoEm ||
                 momento;
-
         }
-
     }
 
-    // --------------------------------------------------------
-    // ATUALIZAR NO POSTGRESQL
-    // --------------------------------------------------------
-
-    const atualizado =
-        await Order.atualizarDadosPedido(
-            pedidoAtualizado.id,
-            pedidoAtualizado
-        );
-
-    return atualizado;
-
+    return await Order.atualizarDadosPedido(
+        pedidoAtualizado.id,
+        pedidoAtualizado
+    );
 }
 
 // ============================================================
-// SALVAR PAGAMENTO ASAAS
+// SALVAR / ATUALIZAR PAGAMENTO ASAAS
 // ============================================================
 
 async function salvarPagamentoPendente(
     payment,
     evento,
-    pedidoId = null
+    pedidoId = null,
+    checkout = null
 ) {
 
     const pagamentoId =
@@ -684,9 +1264,7 @@ async function salvarPagamentoPendente(
         );
 
     if (!pagamentoId) {
-
         return null;
-
     }
 
     const statusAsaas =
@@ -704,11 +1282,52 @@ async function salvarPagamentoPendente(
             payment?.value
         ) || 0;
 
-    // ========================================================
-    // DADOS COMPLETOS DO PAGAMENTO
-    // ========================================================
+    // --------------------------------------------------------
+    // Preservar checkout existente
+    // --------------------------------------------------------
+
+    let checkoutFinal =
+        checkout || null;
+
+    if (!checkoutFinal) {
+
+        const existenteCheckout =
+            await pool.query(
+                `
+                SELECT dados
+                FROM pagamentos_asaas
+                WHERE pagamento_id = $1
+                LIMIT 1
+                `,
+                [
+                    pagamentoId,
+                ]
+            );
+
+        if (
+            existenteCheckout.rows.length > 0
+        ) {
+
+            const dados =
+                parseDados(
+                    existenteCheckout.rows[0].dados
+                );
+
+            checkoutFinal =
+                dados.checkout ||
+                null;
+        }
+    }
 
     const dadosPagamento = {
+
+        tipo:
+            checkoutFinal
+                ? "CHECKOUT_CARTAO"
+                : "ASAAS_PAYMENT",
+
+        checkout:
+            checkoutFinal,
 
         pagamentoId,
 
@@ -726,16 +1345,20 @@ async function salvarPagamentoPendente(
 
         valor,
 
+        pedidoId:
+            pedidoId
+                ? String(pedidoId)
+                : null,
+
         atualizadoEm:
             agora(),
 
         payment,
-
     };
 
-    // ========================================================
-    // VERIFICAR SE JÁ EXISTE
-    // ========================================================
+    // --------------------------------------------------------
+    // EXISTENTE
+    // --------------------------------------------------------
 
     const existente =
         await pool.query(
@@ -753,10 +1376,6 @@ async function salvarPagamentoPendente(
             ]
         );
 
-    // ========================================================
-    // ATUALIZAR PAGAMENTO EXISTENTE
-    // ========================================================
-
     if (
         existente.rows.length > 0
     ) {
@@ -764,15 +1383,25 @@ async function salvarPagamentoPendente(
         const registro =
             existente.rows[0];
 
-        const id =
-            registro.id;
+        const dadosAntigos =
+            parseDados(
+                registro.dados
+            );
+
+        const checkoutPreservado =
+            checkoutFinal ||
+            dadosAntigos.checkout ||
+            null;
+
+        dadosPagamento.checkout =
+            checkoutPreservado;
 
         await pool.query(
             `
             UPDATE pagamentos_asaas
             SET
                 pedido_id = COALESCE($1, pedido_id),
-                external_reference = $2,
+                external_reference = COALESCE($2, external_reference),
                 status = $3,
                 valor = $4,
                 dados = $5,
@@ -780,6 +1409,7 @@ async function salvarPagamentoPendente(
             WHERE id = $6
             `,
             [
+
                 pedidoId
                     ? String(pedidoId)
                     : null,
@@ -792,7 +1422,7 @@ async function salvarPagamentoPendente(
 
                 dadosPagamento,
 
-                id,
+                registro.id,
             ]
         );
 
@@ -811,13 +1441,20 @@ async function salvarPagamentoPendente(
             referencia
         );
 
-        return id;
+        if (pedidoId) {
 
+            console.log(
+                "🆔 PEDIDO VINCULADO:",
+                pedidoId
+            );
+        }
+
+        return registro.id;
     }
 
-    // ========================================================
-    // INSERIR NOVO PAGAMENTO
-    // ========================================================
+    // --------------------------------------------------------
+    // NOVO
+    // --------------------------------------------------------
 
     const inserido =
         await pool.query(
@@ -847,6 +1484,7 @@ async function salvarPagamentoPendente(
             RETURNING id
             `,
             [
+
                 pagamentoId,
 
                 pagamentoId,
@@ -884,7 +1522,6 @@ async function salvarPagamentoPendente(
         inserido.rows[0]?.id ||
         null
     );
-
 }
 
 // ============================================================
@@ -898,8 +1535,11 @@ function emitirAtualizacao(
 
     if (!global.io) {
 
-        return;
+        console.warn(
+            "⚠️ Socket.IO não disponível."
+        );
 
+        return;
     }
 
     // --------------------------------------------------------
@@ -930,10 +1570,6 @@ function emitirAtualizacao(
                 pedido
             );
 
-        // ----------------------------------------------------
-        // SE PAGAMENTO APROVADO
-        // ----------------------------------------------------
-
         if (
             pedido.statusPagamento ===
             "approved"
@@ -945,14 +1581,12 @@ function emitirAtualizacao(
                     "novo_pedido",
                     pedido
                 );
-
         }
 
         console.log(
             "🔔 SOCKET RESTAURANTE:",
             sala
         );
-
     }
 
     // --------------------------------------------------------
@@ -966,7 +1600,6 @@ function emitirAtualizacao(
             evento,
         }
     );
-
 }
 
 // ============================================================
@@ -994,7 +1627,7 @@ async function webhook(
     );
 
     // ========================================================
-    // VALIDAR TOKEN
+    // TOKEN
     // ========================================================
 
     if (
@@ -1015,9 +1648,7 @@ async function webhook(
 
             erro:
                 "Token do webhook inválido.",
-
         });
-
     }
 
     // ========================================================
@@ -1078,9 +1709,7 @@ async function webhook(
 
             mensagem:
                 "Evento não informado.",
-
         });
-
     }
 
     // ========================================================
@@ -1104,18 +1733,28 @@ async function webhook(
 
             mensagem:
                 "Pagamento não informado.",
-
         });
-
     }
 
     try {
 
         // ====================================================
-        // LOCALIZAR PEDIDO NO POSTGRESQL
+        // PRIMEIRO:
+        // SALVAR/ATUALIZAR O PAGAMENTO
         // ====================================================
 
-        const resultado =
+        await salvarPagamentoPendente(
+            payment,
+            evento,
+            null,
+            null
+        );
+
+        // ====================================================
+        // LOCALIZAR PEDIDO EXISTENTE
+        // ====================================================
+
+        let resultado =
             await localizarPedido(
                 payment
             );
@@ -1124,37 +1763,120 @@ async function webhook(
             resultado.pedido;
 
         // ====================================================
-        // PEDIDO NÃO EXISTE AINDA
+        // SE PEDIDO JÁ EXISTE
         // ====================================================
 
-        if (!pedido) {
+        if (pedido) {
 
-            console.warn(
-                "⚠️ PEDIDO AINDA NÃO EXISTE NO POSTGRESQL."
+            console.log(
+                "📦 PEDIDO JÁ EXISTE:",
+                pedido.id
             );
 
-            console.warn(
-                "🔖 REFERÊNCIA:",
-                payment.externalReference
-            );
-
-            console.warn(
-                "🆔 PAYMENT:",
-                payment.id
-            );
-
-            // ------------------------------------------------
-            // SALVAR WEBHOOK PARA CONCILIAÇÃO POSTERIOR
-            // ------------------------------------------------
+            pedido =
+                await atualizarPedido(
+                    pedido,
+                    payment,
+                    evento
+                );
 
             await salvarPagamentoPendente(
                 payment,
                 evento,
+                pedido.id,
                 null
             );
 
+            emitirAtualizacao(
+                pedido,
+                evento
+            );
+
             console.log(
-                "💾 PAGAMENTO SALVO EM pagamentos_asaas."
+                "========================================"
+            );
+
+            console.log(
+                "✅ WEBHOOK PROCESSADO"
+            );
+
+            console.log(
+                "🆔 PEDIDO:",
+                pedido.id
+            );
+
+            console.log(
+                "🆔 ASAAS:",
+                payment.id
+            );
+
+            console.log(
+                "📊 STATUS:",
+                payment.status
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            return res.status(200).json({
+
+                sucesso: true,
+
+                processado: true,
+
+                pedidoEncontrado: true,
+
+                pedidoCriadoAgora: false,
+
+                pagamentoId:
+                    payment.id,
+
+                pedidoId:
+                    pedido.id,
+
+                statusPagamento:
+                    pedido.statusPagamento,
+
+                statusPedido:
+                    pedido.status,
+            });
+        }
+
+        // ====================================================
+        // PEDIDO NÃO EXISTE
+        // ====================================================
+
+        console.warn(
+            "⚠️ PEDIDO AINDA NÃO EXISTE NO POSTGRESQL."
+        );
+
+        console.warn(
+            "🔖 REFERÊNCIA:",
+            payment.externalReference
+        );
+
+        console.warn(
+            "🆔 PAYMENT:",
+            payment.id
+        );
+
+        // ====================================================
+        // PAGAMENTO AINDA NÃO APROVADO
+        // ====================================================
+
+        if (
+            !pagamentoAprovado(
+                payment.status
+            )
+        ) {
+
+            console.log(
+                "⏳ PAGAMENTO AINDA NÃO APROVADO."
+            );
+
+            console.log(
+                "💾 Checkout/pagamento permanecerá pendente."
             );
 
             console.log(
@@ -1171,19 +1893,161 @@ async function webhook(
 
                 pedidoEncontrado: false,
 
+                pedidoCriado: false,
+
+                pagamentoAprovado: false,
+
                 pagamentoId:
                     payment.id,
 
                 externalReference:
                     payment.externalReference ||
                     "",
-
             });
-
         }
 
         // ====================================================
-        // ATUALIZAR PEDIDO
+        // PAGAMENTO APROVADO
+        // ====================================================
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "💰 PAGAMENTO APROVADO"
+        );
+
+        console.log(
+            "📦 INICIANDO CRIAÇÃO DO PEDIDO"
+        );
+
+        console.log(
+            "========================================"
+        );
+
+        // ====================================================
+        // RECUPERAR CHECKOUT
+        // ====================================================
+
+        const checkoutResultado =
+            await buscarCheckoutPendente(
+                normalizarId(
+                    payment.externalReference
+                ),
+                normalizarId(
+                    payment.id
+                )
+            );
+
+        if (
+            !checkoutResultado
+        ) {
+
+            console.error(
+                "❌ CHECKOUT NÃO ENCONTRADO."
+            );
+
+            console.error(
+                "🔖 REFERÊNCIA:",
+                payment.externalReference
+            );
+
+            console.error(
+                "🆔 PAYMENT:",
+                payment.id
+            );
+
+            // ------------------------------------------------
+            // Mantemos o pagamento registrado.
+            // Não criamos pedido sem os dados do checkout.
+            // ------------------------------------------------
+
+            await salvarPagamentoPendente(
+                payment,
+                evento,
+                null,
+                null
+            );
+
+            return res.status(200).json({
+
+                sucesso: true,
+
+                processado: false,
+
+                pagamentoRegistrado: true,
+
+                pedidoEncontrado: false,
+
+                pedidoCriado: false,
+
+                erro:
+                    "Pagamento aprovado, mas checkout não encontrado para criação do pedido.",
+            });
+        }
+
+        const checkout =
+            checkoutResultado.checkout;
+
+        console.log(
+            "✅ CHECKOUT ENCONTRADO"
+        );
+
+        console.log(
+            "👤 CLIENTE:",
+            checkout.clienteId
+        );
+
+        console.log(
+            "🍽️ RESTAURANTE:",
+            checkout.restauranteId
+        );
+
+        console.log(
+            "📦 ITENS:",
+            Array.isArray(
+                checkout.itens
+            )
+                ? checkout.itens.length
+                : 0
+        );
+
+        console.log(
+            "💰 TOTAL:",
+            checkout.total
+        );
+
+        // ====================================================
+        // CRIAR PEDIDO
+        // ====================================================
+
+        pedido =
+            await criarPedidoDoCheckout(
+                checkout,
+                payment,
+                evento
+            );
+
+        // ====================================================
+        // VINCULAR PAGAMENTO AO PEDIDO
+        // ====================================================
+
+        await vincularPedidoAoPagamento(
+            normalizarId(
+                payment.id
+            ),
+            normalizarId(
+                payment.externalReference
+            ),
+            pedido.id,
+            checkout,
+            payment,
+            evento
+        );
+
+        // ====================================================
+        // GARANTIR DADOS FINAIS NO PEDIDO
         // ====================================================
 
         pedido =
@@ -1194,21 +2058,35 @@ async function webhook(
             );
 
         // ====================================================
-        // ATUALIZAR REGISTRO ASAAS
+        // SALVAR PAGAMENTO FINAL
         // ====================================================
 
         await salvarPagamentoPendente(
             payment,
             evento,
-            pedido.id
+            pedido.id,
+            checkout
         );
+
+        // ====================================================
+        // SOCKET
+        // ====================================================
+
+        emitirAtualizacao(
+            pedido,
+            evento
+        );
+
+        // ====================================================
+        // FINAL
+        // ====================================================
 
         console.log(
             "========================================"
         );
 
         console.log(
-            "✅ WEBHOOK PROCESSADO"
+            "🎉 WEBHOOK CONCLUÍDO COM SUCESSO"
         );
 
         console.log(
@@ -1222,12 +2100,12 @@ async function webhook(
 
         console.log(
             "🆔 ASAAS:",
-            pedido.pagamentoId
+            payment.id
         );
 
         console.log(
             "🔖 REFERÊNCIA:",
-            pedido.externalReference
+            payment.externalReference
         );
 
         console.log(
@@ -1249,26 +2127,15 @@ async function webhook(
             "========================================"
         );
 
-        // ====================================================
-        // SOCKET
-        // ====================================================
-
-        emitirAtualizacao(
-            pedido,
-            evento
-        );
-
-        // ====================================================
-        // RESPOSTA
-        // ====================================================
-
         return res.status(200).json({
 
             sucesso: true,
 
             processado: true,
 
-            pedidoEncontrado: true,
+            pedidoEncontrado: false,
+
+            pedidoCriadoAgora: true,
 
             pagamentoId:
                 payment.id,
@@ -1281,7 +2148,6 @@ async function webhook(
 
             statusPedido:
                 pedido.status,
-
         });
 
     } catch (error) {
@@ -1303,6 +2169,16 @@ async function webhook(
         );
 
         console.error(
+            "MENSAGEM:",
+            error?.message
+        );
+
+        console.error(
+            "STACK:",
+            error?.stack
+        );
+
+        console.error(
             "========================================"
         );
 
@@ -1314,12 +2190,10 @@ async function webhook(
                 "Erro ao processar webhook.",
 
             detalhes:
-                error.message,
-
+                error?.message ||
+                "Erro desconhecido.",
         });
-
     }
-
 }
 
 // ============================================================
@@ -1333,7 +2207,6 @@ function registrarWebhook(app) {
         throw new Error(
             "Express app não informado."
         );
-
     }
 
     app.post(
@@ -1352,7 +2225,6 @@ function registrarWebhook(app) {
     console.log(
         "========================================"
     );
-
 }
 
 // ============================================================
@@ -1364,5 +2236,5 @@ module.exports = {
     webhook,
 
     registrarWebhook,
-
 };
+
