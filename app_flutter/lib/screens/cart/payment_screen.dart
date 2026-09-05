@@ -44,8 +44,7 @@ class _PaymentScreenState extends State<PaymentScreen> {
   void initState() {
     super.initState();
 
-    formaPagamento =
-        widget.formaPagamento.trim().toUpperCase();
+    formaPagamento = widget.formaPagamento.trim().toUpperCase();
   }
 
   double get totalPedido {
@@ -126,19 +125,19 @@ class PixCheckoutPage extends StatefulWidget {
   });
 
   @override
-  State<PixCheckoutPage> createState() =>
-      _PixCheckoutPageState();
+  State<PixCheckoutPage> createState() => _PixCheckoutPageState();
 }
 
-class _PixCheckoutPageState
-    extends State<PixCheckoutPage> {
+class _PixCheckoutPageState extends State<PixCheckoutPage> {
   bool carregando = false;
   bool pagamentoGerado = false;
 
   String? pagamentoId;
   String? qrCodeBase64;
   String? pixCopiaCola;
+  String? ticketUrl;
   String? mensagem;
+
   DateTime? expiracao;
 
   Timer? timer;
@@ -167,14 +166,17 @@ class _PixCheckoutPageState
   }
 
   Future<String?> obterToken() async {
-    final prefs =
-        await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
     return prefs.getString("token") ??
         prefs.getString("jwt") ??
         prefs.getString("access_token") ??
         prefs.getString("auth_token");
   }
+
+  // ============================================================
+  // GERAR PIX
+  // ============================================================
 
   Future<void> gerarPix() async {
     if (carregando) return;
@@ -209,6 +211,12 @@ class _PixCheckoutPageState
         "itens": prepararItens(),
       };
 
+      debugPrint("========================================");
+      debugPrint("PIX - GERANDO PAGAMENTO");
+      debugPrint("URL: $url");
+      debugPrint("VALOR: $totalPedido");
+      debugPrint("========================================");
+
       final response = await http.post(
         url,
         headers: {
@@ -218,8 +226,15 @@ class _PixCheckoutPageState
         body: jsonEncode(body),
       );
 
-      final dados =
-          jsonDecode(response.body);
+      debugPrint(
+        "PIX - STATUS HTTP: ${response.statusCode}",
+      );
+
+      debugPrint(
+        "PIX - RESPOSTA RECEBIDA",
+      );
+
+      final dados = jsonDecode(response.body);
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300 ||
@@ -231,42 +246,125 @@ class _PixCheckoutPageState
         );
       }
 
-      final pagamento =
-          dados["pagamento"] ?? {};
+      // ==========================================================
+      // IMPORTANTE:
+      //
+      // O BACKEND RETORNA:
+      //
+      // {
+      //   sucesso: true,
+      //   pagamentoId: "...",
+      //   pix: {
+      //      qrCode: "...",
+      //      qrCodeBase64: "...",
+      //      ticketUrl: "...",
+      //      expiracao: "..."
+      //   }
+      // }
+      //
+      // Portanto precisamos acessar dados["pix"].
+      // ==========================================================
+
+      final pix = dados["pix"];
+
+      if (pix == null || pix is! Map) {
+        throw Exception(
+          "O pagamento foi criado, mas os dados do PIX não foram retornados.",
+        );
+      }
+
+      final novoPagamentoId =
+          dados["pagamentoId"]?.toString() ??
+              dados["paymentId"]?.toString();
+
+      final novoQrCodeBase64 =
+          pix["qrCodeBase64"]?.toString() ?? "";
+
+      final novoPixCopiaCola =
+          pix["qrCode"]?.toString() ??
+              pix["payload"]?.toString() ??
+              "";
+
+      final novoTicketUrl =
+          pix["ticketUrl"]?.toString() ?? "";
+
+      final novaExpiracao =
+          pix["expiracao"]?.toString() ??
+              pix["expirationDate"]?.toString() ??
+              "";
+
+      debugPrint(
+        "PIX - PAGAMENTO ID: ${novoPagamentoId ?? "NÃO RETORNADO"}",
+      );
+
+      debugPrint(
+        "PIX - QR CODE BASE64: ${novoQrCodeBase64.isNotEmpty ? "RECEBIDO" : "VAZIO"}",
+      );
+
+      debugPrint(
+        "PIX - COPIA E COLA: ${novoPixCopiaCola.isNotEmpty ? "RECEBIDO" : "VAZIO"}",
+      );
+
+      debugPrint(
+        "PIX - TICKET URL: ${novoTicketUrl.isNotEmpty ? "RECEBIDO" : "VAZIO"}",
+      );
+
+      if (novoPagamentoId == null ||
+          novoPagamentoId.isEmpty) {
+        throw Exception(
+          "O Asaas criou o PIX, mas não retornou o ID do pagamento.",
+        );
+      }
+
+      if (novoQrCodeBase64.isEmpty &&
+          novoPixCopiaCola.isEmpty) {
+        throw Exception(
+          "O PIX foi criado, mas o QR Code não foi retornado pelo servidor.",
+        );
+      }
+
+      if (!mounted) return;
 
       setState(() {
-        pagamentoId =
-            dados["pagamentoId"]?.toString() ??
-                pagamento["id"]?.toString();
+        pagamentoId = novoPagamentoId;
 
         qrCodeBase64 =
-            dados["qrCodeBase64"]?.toString() ??
-                pagamento["qrCodeBase64"]?.toString();
+            novoQrCodeBase64.isNotEmpty
+                ? novoQrCodeBase64
+                : null;
 
         pixCopiaCola =
-            dados["pixCopiaCola"]?.toString() ??
-                dados["payload"]?.toString() ??
-                pagamento["payload"]?.toString();
+            novoPixCopiaCola.isNotEmpty
+                ? novoPixCopiaCola
+                : null;
+
+        ticketUrl =
+            novoTicketUrl.isNotEmpty
+                ? novoTicketUrl
+                : null;
 
         pagamentoGerado = true;
 
-        if (dados["dataExpiracao"] != null) {
+        if (novaExpiracao.isNotEmpty) {
           expiracao = DateTime.tryParse(
-            dados["dataExpiracao"].toString(),
+            novaExpiracao,
           );
         }
       });
 
-      if (pagamentoId != null) {
-        iniciarConsultaPagamento();
-      }
+      // Começa a consultar somente depois que
+      // o QR Code foi carregado.
+      iniciarConsultaPagamento();
     } catch (e) {
+      if (!mounted) return;
+
       setState(() {
-        mensagem =
-            e.toString().replaceFirst(
-                  "Exception: ",
-                  "",
-                );
+        mensagem = e
+            .toString()
+            .replaceFirst(
+              "Exception: ",
+              "",
+            );
       });
     } finally {
       if (mounted) {
@@ -276,6 +374,10 @@ class _PixCheckoutPageState
       }
     }
   }
+
+  // ============================================================
+  // CONSULTAR PAGAMENTO
+  // ============================================================
 
   void iniciarConsultaPagamento() {
     timer?.cancel();
@@ -289,12 +391,17 @@ class _PixCheckoutPageState
   }
 
   Future<void> consultarPagamento() async {
-    if (pagamentoId == null) return;
+    if (pagamentoId == null ||
+        pagamentoId!.isEmpty) {
+      return;
+    }
 
     try {
       final token = await obterToken();
 
-      if (token == null || token.isEmpty) return;
+      if (token == null || token.isEmpty) {
+        return;
+      }
 
       final response = await http.get(
         Uri.parse(
@@ -310,8 +417,7 @@ class _PixCheckoutPageState
         return;
       }
 
-      final dados =
-          jsonDecode(response.body);
+      final dados = jsonDecode(response.body);
 
       final status =
           dados["statusPagamento"]
@@ -320,35 +426,60 @@ class _PixCheckoutPageState
 
       final aprovado =
           dados["pagamentoAprovado"] == true ||
-          status == "APPROVED" ||
-          status == "RECEIVED" ||
-          status == "CONFIRMED";
+              status == "APPROVED" ||
+              status == "RECEIVED" ||
+              status == "CONFIRMED";
 
-      if (!aprovado) return;
+      debugPrint(
+        "PIX - STATUS PAGAMENTO: ${status ?? "DESCONHECIDO"}",
+      );
+
+      if (!aprovado) {
+        return;
+      }
 
       final pedidoId =
           dados["pedidoId"] ??
               dados["orderId"];
 
-      if (pedidoId == null) return;
+      if (pedidoId == null) {
+        debugPrint(
+          "PIX - PAGAMENTO APROVADO, MAS PEDIDO AINDA NÃO FOI LOCALIZADO.",
+        );
+        return;
+      }
 
       timer?.cancel();
 
       if (!mounted) return;
 
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          backgroundColor: Colors.green,
+          content: Text(
+            "Pagamento confirmado!",
+          ),
+        ),
+      );
+
       Navigator.pushReplacement(
         context,
         MaterialPageRoute(
-          builder: (_) =>
-    OrderTrackingScreen(
-  pedidoId: int.parse(pedidoId.toString()),
-),
+          builder: (_) => OrderTrackingScreen(
+            pedidoId: int.parse(
+              pedidoId.toString(),
+            ),
+          ),
         ),
       );
     } catch (_) {
-      // Continua consultando até o pagamento ser aprovado.
+      // Continua consultando.
     }
   }
+
+  // ============================================================
+  // COPIAR PIX
+  // ============================================================
 
   void copiarPix() {
     if (pixCopiaCola == null ||
@@ -362,8 +493,7 @@ class _PixCheckoutPageState
       ),
     );
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
+    ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text(
           "Código PIX copiado!",
@@ -371,6 +501,29 @@ class _PixCheckoutPageState
       ),
     );
   }
+
+  // ============================================================
+  // NORMALIZAR BASE64
+  // ============================================================
+
+  String limparBase64(String valor) {
+    return valor
+        .replaceFirst(
+          RegExp(
+            r'^data:image\/\w+;base64,',
+            caseSensitive: false,
+          ),
+          '',
+        )
+        .replaceAll(
+          RegExp(r'\s+'),
+          '',
+        );
+  }
+
+  // ============================================================
+  // BUILD PIX
+  // ============================================================
 
   @override
   Widget build(BuildContext context) {
@@ -414,13 +567,13 @@ class _PixCheckoutPageState
               padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
                 color: Colors.red.shade50,
-                borderRadius:
-                    BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 mensagem!,
                 style: TextStyle(
                   color: Colors.red.shade700,
+                  fontSize: 14,
                 ),
               ),
             ),
@@ -467,66 +620,265 @@ class _PixCheckoutPageState
             ),
 
           if (pagamentoGerado) ...[
-            if (qrCodeBase64 != null &&
-                qrCodeBase64!.isNotEmpty) ...[
-              const SizedBox(height: 20),
+            const SizedBox(height: 20),
 
+            // ==================================================
+            // QR CODE
+            // ==================================================
+
+            if (qrCodeBase64 != null &&
+                qrCodeBase64!.isNotEmpty)
               Container(
-                padding:
-                    const EdgeInsets.all(15),
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
                   color: Colors.white,
                   borderRadius:
-                      BorderRadius.circular(15),
-                ),
-                child: Image.memory(
-                  base64Decode(
-                    qrCodeBase64!
-                        .replaceFirst(
-                      RegExp(
-                        r'^data:image\/\w+;base64,',
-                      ),
-                      '',
+                      BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black
+                          .withOpacity(0.06),
+                      blurRadius: 10,
+                      offset:
+                          const Offset(0, 3),
                     ),
-                  ),
-                  width: 260,
-                  height: 260,
-                  fit: BoxFit.contain,
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      "Escaneie o QR Code",
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 15),
+
+                    Image.memory(
+                      base64Decode(
+                        limparBase64(
+                          qrCodeBase64!,
+                        ),
+                      ),
+                      width: 260,
+                      height: 260,
+                      fit: BoxFit.contain,
+                      errorBuilder:
+                          (
+                            context,
+                            error,
+                            stackTrace,
+                          ) {
+                        return const Padding(
+                          padding:
+                              EdgeInsets.all(20),
+                          child: Column(
+                            children: [
+                              Icon(
+                                Icons
+                                    .error_outline,
+                                size: 50,
+                                color:
+                                    Colors.red,
+                              ),
+                              SizedBox(
+                                height: 10,
+                              ),
+                              Text(
+                                "Não foi possível carregar o QR Code.",
+                                textAlign:
+                                    TextAlign
+                                        .center,
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
                 ),
               ),
-            ],
+
+            // ==================================================
+            // CASO NÃO TENHA IMAGEM, MAS TENHA COPIA E COLA
+            // ==================================================
+
+            if ((qrCodeBase64 == null ||
+                    qrCodeBase64!.isEmpty) &&
+                pixCopiaCola != null &&
+                pixCopiaCola!.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius:
+                      BorderRadius.circular(16),
+                ),
+                child: const Column(
+                  children: [
+                    Icon(
+                      Icons.qr_code_2,
+                      size: 55,
+                      color: Color(0xFF16A34A),
+                    ),
+                    SizedBox(height: 10),
+                    Text(
+                      "Use o código PIX copia e cola abaixo.",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 15,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
 
             const SizedBox(height: 20),
+
+            // ==================================================
+            // COPIA E COLA
+            // ==================================================
 
             if (pixCopiaCola != null &&
                 pixCopiaCola!.isNotEmpty)
-              SizedBox(
+              Container(
                 width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: copiarPix,
-                  icon: const Icon(
-                    Icons.copy,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius:
+                      BorderRadius.circular(12),
+                  border: Border.all(
+                    color:
+                        Colors.grey.shade300,
                   ),
-                  label: const Text(
-                    "Copiar código PIX",
-                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      "PIX Copia e Cola",
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight:
+                            FontWeight.bold,
+                      ),
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    Text(
+                      pixCopiaCola!,
+                      maxLines: 4,
+                      overflow:
+                          TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors
+                            .grey.shade700,
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    SizedBox(
+                      width: double.infinity,
+                      child:
+                          ElevatedButton.icon(
+                        onPressed: copiarPix,
+                        icon: const Icon(
+                          Icons.copy,
+                        ),
+                        label: const Text(
+                          "Copiar código PIX",
+                        ),
+                        style:
+                            ElevatedButton.styleFrom(
+                          backgroundColor:
+                              const Color(
+                            0xFFF97316,
+                          ),
+                          foregroundColor:
+                              Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
-            const SizedBox(height: 20),
+            const SizedBox(height: 22),
 
-            const Text(
-              "Aguardando confirmação do pagamento...",
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+            // ==================================================
+            // STATUS
+            // ==================================================
+
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius:
+                    BorderRadius.circular(12),
+              ),
+              child: const Row(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
+                children: [
+                  Icon(
+                    Icons
+                        .hourglass_top_rounded,
+                    color:
+                        Color(0xFFF97316),
+                  ),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      "Aguardando confirmação do pagamento. Após pagar o PIX, a confirmação será feita automaticamente.",
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight:
+                            FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
+
+            if (expiracao != null) ...[
+              const SizedBox(height: 10),
+              Text(
+                "Válido até: ${_formatarData(expiracao!)}",
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+            ],
           ],
         ],
       ),
     );
+  }
+
+  String _formatarData(DateTime data) {
+    final dia =
+        data.day.toString().padLeft(2, '0');
+    final mes =
+        data.month.toString().padLeft(2, '0');
+    final hora =
+        data.hour.toString().padLeft(2, '0');
+    final minuto =
+        data.minute.toString().padLeft(2, '0');
+
+    return "$dia/$mes/${data.year} às $hora:$minuto";
   }
 }
 
@@ -704,12 +1056,6 @@ class _CardPaymentPageState
         );
       }
 
-      // IMPORTANTE:
-      // O backend espera:
-      //
-      // cartao.validade = "MM/AA"
-      //
-      // Não enviar mes/ano separados.
       final body = {
         "valor": totalPedido,
         "total": totalPedido,
@@ -721,7 +1067,6 @@ class _CardPaymentPageState
         "itens": prepararItens(),
         "formaPagamento": "CREDITO",
         "pagamento": "CREDITO",
-
         "cartao": {
           "numero": numero,
           "nome": nomeController.text.trim(),
@@ -833,8 +1178,7 @@ class _CardPaymentPageState
             "${Api.baseUrl}/pagamentos/$pagamentoId",
           ),
           headers: {
-            "Authorization":
-                "Bearer $token",
+            "Authorization": "Bearer $token",
           },
         );
 
@@ -853,10 +1197,10 @@ class _CardPaymentPageState
 
         final aprovado =
             dados["pagamentoAprovado"] ==
-                true ||
-            status == "APPROVED" ||
-            status == "RECEIVED" ||
-            status == "CONFIRMED";
+                    true ||
+                status == "APPROVED" ||
+                status == "RECEIVED" ||
+                status == "CONFIRMED";
 
         if (!aprovado) {
           continue;
@@ -876,9 +1220,11 @@ class _CardPaymentPageState
           context,
           MaterialPageRoute(
             builder: (_) =>
-    OrderTrackingScreen(
-  pedidoId: int.parse(pedidoId.toString()),
-),
+                OrderTrackingScreen(
+              pedidoId: int.parse(
+                pedidoId.toString(),
+              ),
+            ),
           ),
         );
 
@@ -941,10 +1287,6 @@ class _CardPaymentPageState
 
             const SizedBox(height: 25),
 
-            // ==================================================
-            // NOME DO TITULAR
-            // ==================================================
-
             campo(
               controller: nomeController,
               label: "Nome no cartão",
@@ -968,10 +1310,6 @@ class _CardPaymentPageState
             ),
 
             const SizedBox(height: 15),
-
-            // ==================================================
-            // NÚMERO
-            // ==================================================
 
             campo(
               controller: numeroController,
@@ -1011,10 +1349,6 @@ class _CardPaymentPageState
             ),
 
             const SizedBox(height: 15),
-
-            // ==================================================
-            // VALIDADE + CVV
-            // ==================================================
 
             Row(
               children: [
@@ -1125,7 +1459,8 @@ class _CardPaymentPageState
                 children: [
                   Icon(
                     Icons.info_outline,
-                    color: Color(0xFFF97316),
+                    color:
+                        Color(0xFFF97316),
                   ),
                   SizedBox(width: 10),
                   Expanded(
@@ -1335,3 +1670,4 @@ class ValidityInputFormatter
     );
   }
 }
+
