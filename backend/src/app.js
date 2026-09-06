@@ -1,18 +1,31 @@
 const express = require("express");
+
 const cors = require("cors");
+
 const path = require("path");
 
 const authRoutes = require("./routes/auth");
+
 const restaurantRoutes = require("./routes/restaurant");
+
 const productRoutes = require("./routes/product");
+
 const orderRoutes = require("./routes/order");
+
 const deliveryRoutes = require("./routes/delivery");
+
 const adminRoutes = require("./routes/admin");
+
 const dashboardRoutes = require("./routes/dashboard");
+
 const supportRoutes = require("./routes/support");
+
 const complaintRoutes = require("./routes/complaint");
+
 const promotionRoutes = require("./routes/promotion");
+
 const couponRoutes = require("./routes/coupon");
+
 const favoriteRoutes = require("./routes/favorite");
 
 const app = express();
@@ -22,35 +35,80 @@ const app = express();
 // ======================================================
 
 app.use(
-    cors({
-        origin: "*",
-        methods: [
-            "GET",
-            "POST",
-            "PUT",
-            "DELETE",
-            "OPTIONS"
-        ],
-        allowedHeaders: [
-            "Content-Type",
-            "Authorization"
-        ]
-    })
+
+cors({
+
+    origin: "*",
+
+    methods: [
+        "GET",
+        "POST",
+        "PUT",
+        "DELETE",
+        "OPTIONS"
+    ],
+
+    allowedHeaders: [
+        "Content-Type",
+        "Authorization"
+    ]
+
+})
+
+
 );
 
 // IMPORTANTE:
 // express.json() precisa vir ANTES das rotas.
-app.use(express.json());
+//
+// O limite foi aumentado para permitir o envio
+// da capa do restaurante em Base64.
+
+app.use(
+
+
+express.json({
+
+    limit: "15mb"
+
+})
+
+
+);
+
+app.use(
+
+
+express.urlencoded({
+
+    extended: true,
+
+    limit: "15mb"
+
+})
+
+
+);
 
 // Arquivos enviados
+
 app.use(
-    "/uploads",
-    express.static(
-        path.join(
-            process.cwd(),
-            "uploads"
-        )
+
+"/uploads",
+
+express.static(
+
+    path.join(
+
+        process.cwd(),
+
+        "uploads"
+
     )
+
+)
+
+
 );
 
 // ======================================================
@@ -58,38 +116,73 @@ app.use(
 // ======================================================
 
 app.use(
-    "/api/auth",
-    authRoutes
+
+
+"/api/auth",
+
+authRoutes
+
+
 );
 
 app.use(
-    "/api/restaurants",
-    restaurantRoutes
+
+
+"/api/restaurants",
+
+restaurantRoutes
+
+
 );
 
 app.use(
-    "/api/products",
-    productRoutes
+
+
+"/api/products",
+
+productRoutes
+
+
 );
 
 app.use(
-    "/api/orders",
-    orderRoutes
+
+
+"/api/orders",
+
+orderRoutes
+
+
 );
 
 app.use(
-    "/api/delivery",
-    deliveryRoutes
+
+
+"/api/delivery",
+
+deliveryRoutes
+
+
 );
 
 app.use(
-    "/api/admin",
-    adminRoutes
+
+
+"/api/admin",
+
+adminRoutes
+
+
 );
 
 app.use(
-    "/api/dashboard",
-    dashboardRoutes
+
+
+"/api/dashboard",
+
+dashboardRoutes
+
+
 );
 
 // ======================================================
@@ -97,13 +190,23 @@ app.use(
 // ======================================================
 
 app.use(
-    "/api/support",
-    supportRoutes
+
+
+"/api/support",
+
+supportRoutes
+
+
 );
 
 app.use(
-    "/api/complaints",
-    complaintRoutes
+
+
+"/api/complaints",
+
+complaintRoutes
+
+
 );
 
 // ======================================================
@@ -111,13 +214,23 @@ app.use(
 // ======================================================
 
 app.use(
-    "/api/coupons",
-    couponRoutes
+
+
+"/api/coupons",
+
+couponRoutes
+
+
 );
 
 app.use(
-    "/api/promotions",
-    promotionRoutes
+
+
+"/api/promotions",
+
+promotionRoutes
+
+
 );
 
 // ======================================================
@@ -125,56 +238,107 @@ app.use(
 // ======================================================
 
 app.use(
-    "/api/favoritos",
-    favoriteRoutes
+
+
+"/api/favoritos",
+
+favoriteRoutes
+
+
 );
 
 console.log(
-    "❤️ ROTA /api/favoritos REGISTRADA"
+
+
+"❤️ ROTA /api/favoritos REGISTRADA"
+
+
 );
 
 console.log(
-    "🏆 ROTA /api/coupons REGISTRADA"
+
+
+"🏆 ROTA /api/coupons REGISTRADA"
+
+
 );
 
 console.log(
-    "🏆 ROTA /api/promotions REGISTRADA"
+
+
+"🏆 ROTA /api/promotions REGISTRADA"
+
+
 );
 
 console.log(
-    "✅ ROTA /api/auth REGISTRADA"
+
+
+"✅ ROTA /api/auth REGISTRADA"
+
+
 );
 
 console.log(
-    "✅ ROTA /api/restaurants REGISTRADA"
+
+
+"✅ ROTA /api/restaurants REGISTRADA"
+
+
 );
 
 console.log(
-    "✅ ROTA /api/products REGISTRADA"
+
+
+"✅ ROTA /api/products REGISTRADA"
+
+
 );
 
 console.log(
-    "✅ ROTA /api/orders REGISTRADA"
+
+
+"✅ ROTA /api/orders REGISTRADA"
+
+
 );
 
 console.log(
-    "✅ ROTA /api/delivery REGISTRADA"
+
+
+"✅ ROTA /api/delivery REGISTRADA"
+
+
 );
 
 console.log(
-    "✅ ROTA /api/admin REGISTRADA"
+
+
+"✅ ROTA /api/admin REGISTRADA"
+
+
 );
 
 console.log(
-    "✅ ROTA /api/dashboard REGISTRADA"
+
+
+"✅ ROTA /api/dashboard REGISTRADA"
+
+
 );
 
 console.log(
-    "✅ ROTA /api/support REGISTRADA"
+
+
+"✅ ROTA /api/support REGISTRADA"
+
 );
 
 console.log(
-    "✅ ROTA /api/complaints REGISTRADA"
+
+
+"✅ ROTA /api/complaints REGISTRADA"
+
 );
 
 // ======================================================
@@ -182,13 +346,23 @@ console.log(
 // ======================================================
 
 app.get(
-    "/",
-    (req, res) => {
-        res.json({
-            app: "FoodJet",
-            status: "online"
-        });
-    }
+
+
+"/",
+
+(req, res) => {
+
+    res.json({
+
+        app: "FoodJet",
+
+        status: "online"
+
+    });
+
+}
+
+
 );
 
 // ======================================================

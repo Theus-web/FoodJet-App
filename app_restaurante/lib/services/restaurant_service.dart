@@ -1,14 +1,18 @@
 import 'dart:convert';
 
 import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class RestaurantService {
   static const String baseUrl =
       'http://192.168.1.101:3000/api';
 
-  static const String _restaurantIdKey = 'restauranteId';
-  static const String _restaurantKey = 'restaurante';
+  static const String _restaurantIdKey =
+      'restauranteId';
+
+  static const String _restaurantKey =
+      'restaurante';
 
   // ============================================================
   // BUSCAR RESTAURANTE
@@ -42,12 +46,15 @@ class RestaurantService {
 
     try {
       if (response.body.trim().isNotEmpty) {
-        final decoded =
-            jsonDecode(response.body);
+        final decoded = jsonDecode(
+          response.body,
+        );
 
         if (decoded is Map) {
           data =
-              Map<String, dynamic>.from(decoded);
+              Map<String, dynamic>.from(
+            decoded,
+          );
         }
       }
     } catch (_) {}
@@ -64,7 +71,6 @@ class RestaurantService {
         restaurante = data;
       }
 
-      // Salva a versão mais recente localmente.
       await _salvarRestauranteLocal(
         restaurante,
       );
@@ -107,10 +113,6 @@ class RestaurantService {
         'Status inválido.',
       );
     }
-
-    // ==========================================================
-    // SINCRONIZA STATUS E ONLINE
-    // ==========================================================
 
     final bool online =
         statusNormalizado == 'ABERTO';
@@ -164,7 +166,9 @@ class RestaurantService {
 
         if (decoded is Map) {
           data =
-              Map<String, dynamic>.from(decoded);
+              Map<String, dynamic>.from(
+            decoded,
+          );
         }
       }
     } catch (_) {}
@@ -196,8 +200,6 @@ class RestaurantService {
         };
       }
 
-      // Garante os valores mesmo se o backend
-      // não devolver algum campo.
       restaurante['status'] =
           restaurante['status'] ??
               statusNormalizado;
@@ -226,6 +228,11 @@ class RestaurantService {
 
   // ============================================================
   // ATUALIZAR RESTAURANTE
+  //
+  // USADO PARA CONFIGURAÇÕES NORMAIS.
+  //
+  // NÃO USAR PARA ENVIAR IMAGEM DE CAPA.
+  // A CAPA USA uploadCapa().
   // ============================================================
 
   Future<bool> atualizarRestaurante(
@@ -264,7 +271,9 @@ class RestaurantService {
 
         if (decoded is Map) {
           data =
-              Map<String, dynamic>.from(decoded);
+              Map<String, dynamic>.from(
+            decoded,
+          );
         }
       }
     } catch (_) {}
@@ -289,6 +298,428 @@ class RestaurantService {
   }
 
   // ============================================================
+  // UPLOAD DA CAPA
+  //
+  // POST /api/restaurants/:id/capa
+  //
+  // Envia a imagem como multipart/form-data.
+  //
+  // BACKEND:
+  // /uploads/capas/
+  //
+  // POSTGRESQL:
+  // guarda somente o caminho da imagem.
+  // ============================================================
+
+  Future<Map<String, dynamic>> uploadCapa(
+    String restauranteId,
+    XFile imagem,
+  ) async {
+    final id = restauranteId.trim();
+
+    if (id.isEmpty) {
+      throw Exception(
+        'ID do restaurante inválido.',
+      );
+    }
+
+    try {
+      print('');
+      print(
+        '========================================',
+      );
+      print(
+        '📤 FOODJET - ENVIANDO CAPA',
+      );
+      print(
+        '🏪 Restaurante: $id',
+      );
+      print(
+        '📁 Arquivo: ${imagem.name}',
+      );
+      print(
+        '📁 Caminho: ${imagem.path}',
+      );
+      print(
+        '========================================',
+      );
+
+      // ========================================================
+      // LER BYTES
+      //
+      // IMPORTANTE:
+      // Funciona no Android, iOS e principalmente WEB.
+      //
+      // NÃO usamos dart:io / File.
+      // ========================================================
+
+      final bytes =
+          await imagem.readAsBytes();
+
+      final tamanhoMB =
+          bytes.length /
+              1024 /
+              1024;
+
+      print(
+        '📦 Tamanho da imagem: '
+        '${tamanhoMB.toStringAsFixed(2)} MB',
+      );
+
+      // ========================================================
+      // LIMITE DE 5 MB
+      // ========================================================
+
+      if (bytes.length >
+          5 * 1024 * 1024) {
+        throw Exception(
+          'A imagem da capa deve ter no máximo 5 MB.',
+        );
+      }
+
+      // ========================================================
+      // CRIAR REQUEST MULTIPART
+      // ========================================================
+
+      final request =
+          http.MultipartRequest(
+        'POST',
+        Uri.parse(
+          '$baseUrl/restaurants/$id/capa',
+        ),
+      );
+
+      // ========================================================
+      // ADICIONAR ARQUIVO
+      // ========================================================
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'capa',
+          bytes,
+          filename:
+              imagem.name.isNotEmpty
+                  ? imagem.name
+                  : 'capa.jpg',
+        ),
+      );
+
+      print(
+        '📤 Enviando Multipart para:',
+      );
+
+      print(
+        '$baseUrl/restaurants/$id/capa',
+      );
+
+      // ========================================================
+      // ENVIAR
+      // ========================================================
+
+      final streamedResponse =
+          await request
+              .send()
+              .timeout(
+                const Duration(
+                  seconds: 60,
+                ),
+              );
+
+      // ========================================================
+      // CONVERTER RESPONSE
+      // ========================================================
+
+      final response =
+          await http.Response.fromStream(
+        streamedResponse,
+      );
+
+      print(
+        '📥 Status HTTP: '
+        '${response.statusCode}',
+      );
+
+      print(
+        '📥 Resposta: ${response.body}',
+      );
+
+      // ========================================================
+      // DECODIFICAR JSON
+      // ========================================================
+
+      Map<String, dynamic> data = {};
+
+      if (response.body
+          .trim()
+          .isNotEmpty) {
+        try {
+          final decoded =
+              jsonDecode(
+            response.body,
+          );
+
+          if (decoded is Map) {
+            data =
+                Map<String, dynamic>.from(
+              decoded,
+            );
+          }
+        } catch (e) {
+          print(
+            '⚠️ Resposta não é JSON válido: $e',
+          );
+        }
+      }
+
+      // ========================================================
+      // SUCESSO
+      // ========================================================
+
+      if (response.statusCode == 200 ||
+          response.statusCode == 201) {
+        final restaurante =
+            data['restaurante'] is Map
+                ? Map<String, dynamic>.from(
+                    data['restaurante'],
+                  )
+                : <String, dynamic>{};
+
+        if (restaurante.isNotEmpty) {
+          await _salvarRestauranteLocal(
+            restaurante,
+          );
+        }
+
+        print(
+          '========================================',
+        );
+
+        print(
+          '✅ CAPA ENVIADA COM SUCESSO',
+        );
+
+        print(
+          '🖼️ Capa: ${data['capa']}',
+        );
+
+        print(
+          '========================================',
+        );
+
+        return {
+          ...data,
+          'restaurante':
+              restaurante,
+        };
+      }
+
+      // ========================================================
+      // ERRO
+      // ========================================================
+
+      final mensagem =
+          (
+            data['erro'] ??
+            data['mensagem'] ??
+            data['message'] ??
+            'Erro ao enviar capa.'
+          ).toString();
+
+      throw Exception(
+        mensagem,
+      );
+    } catch (e) {
+      print(
+        '========================================',
+      );
+
+      print(
+        '❌ ERRO NO UPLOAD DA CAPA',
+      );
+
+      print(
+        e,
+      );
+
+      print(
+        '========================================',
+      );
+
+      rethrow;
+    }
+  }
+
+  // ============================================================
+  // REMOVER CAPA
+  //
+  // DELETE /api/restaurants/:id/capa
+  //
+  // BACKEND:
+  // 1. Remove arquivo de /uploads/capas/
+  // 2. Limpa a referência no PostgreSQL
+  // 3. Retorna restaurante atualizado
+  // ============================================================
+  
+  
+
+
+  Future<Map<String, dynamic>> removerCapa(
+    String restauranteId,
+  ) async {
+    final id = restauranteId.trim();
+
+    if (id.isEmpty) {
+      throw Exception(
+        'ID do restaurante inválido.',
+      );
+    }
+
+    try {
+      print('');
+      print(
+        '========================================',
+      );
+      print(
+        '🗑️ FOODJET - REMOVENDO CAPA',
+      );
+      print(
+        '🏪 Restaurante: $id',
+      );
+      print(
+        '📡 DELETE /restaurants/$id/capa',
+      );
+      print(
+        '========================================',
+      );
+
+      final response =
+          await http
+              .delete(
+                Uri.parse(
+                  '$baseUrl/restaurants/$id/capa',
+                ),
+                headers: {
+                  'Content-Type':
+                      'application/json',
+                },
+              )
+              .timeout(
+                const Duration(
+                  seconds: 30,
+                ),
+              );
+
+      print(
+        '📥 Status HTTP: '
+        '${response.statusCode}',
+      );
+
+      print(
+        '📥 Resposta: ${response.body}',
+      );
+
+      // ========================================================
+      // DECODIFICAR JSON
+      // ========================================================
+
+      Map<String, dynamic> data = {};
+
+      if (response.body
+          .trim()
+          .isNotEmpty) {
+        try {
+          final decoded =
+              jsonDecode(
+            response.body,
+          );
+
+          if (decoded is Map) {
+            data =
+                Map<String, dynamic>.from(
+              decoded,
+            );
+          }
+        } catch (e) {
+          print(
+            '⚠️ Resposta não é JSON válido: $e',
+          );
+        }
+      }
+
+      // ========================================================
+      // SUCESSO
+      // ========================================================
+
+      if (response.statusCode == 200) {
+        final restaurante =
+            data['restaurante'] is Map
+                ? Map<String, dynamic>.from(
+                    data['restaurante'],
+                  )
+                : <String, dynamic>{};
+
+        if (restaurante.isNotEmpty) {
+          await _salvarRestauranteLocal(
+            restaurante,
+          );
+        }
+
+        print(
+          '========================================',
+        );
+
+        print(
+          '✅ CAPA REMOVIDA COM SUCESSO',
+        );
+
+        print(
+          '========================================',
+        );
+
+        return {
+          ...data,
+          'restaurante':
+              restaurante,
+        };
+      }
+
+      // ========================================================
+      // ERRO
+      // ========================================================
+
+      final mensagem =
+          (
+            data['erro'] ??
+            data['mensagem'] ??
+            data['message'] ??
+            'Erro ao remover capa.'
+          ).toString();
+
+      throw Exception(
+        mensagem,
+      );
+    } catch (e) {
+      print(
+        '========================================',
+      );
+
+      print(
+        '❌ ERRO AO REMOVER CAPA',
+      );
+
+      print(
+        e,
+      );
+
+      print(
+        '========================================',
+      );
+
+      rethrow;
+    }
+  }
+
+  // ============================================================
   // OBTER ID DO RESTAURANTE
   // ============================================================
 
@@ -297,7 +728,9 @@ class RestaurantService {
         await SharedPreferences.getInstance();
 
     final idSalvo =
-        prefs.getString(_restaurantIdKey);
+        prefs.getString(
+      _restaurantIdKey,
+    );
 
     if (idSalvo != null &&
         idSalvo.trim().isNotEmpty) {
@@ -305,25 +738,34 @@ class RestaurantService {
     }
 
     final restauranteJson =
-        prefs.getString(_restaurantKey);
+        prefs.getString(
+      _restaurantKey,
+    );
 
     if (restauranteJson != null &&
         restauranteJson.trim().isNotEmpty) {
       try {
         final decoded =
-            jsonDecode(restauranteJson);
+            jsonDecode(
+          restauranteJson,
+        );
 
         if (decoded is Map) {
           final restaurante =
-              Map<String, dynamic>.from(decoded);
+              Map<String, dynamic>.from(
+            decoded,
+          );
 
           final id =
               restaurante['id'] ??
                   restaurante['_id'] ??
-                  restaurante['restauranteId'];
+                  restaurante[
+                      'restauranteId'];
 
           if (id != null &&
-              id.toString().trim().isNotEmpty) {
+              id.toString()
+                  .trim()
+                  .isNotEmpty) {
             final restauranteId =
                 id.toString().trim();
 
@@ -354,10 +796,13 @@ class RestaurantService {
     final id =
         restaurante['id'] ??
             restaurante['_id'] ??
-            restaurante['restauranteId'];
+            restaurante[
+                'restauranteId'];
 
     if (id != null &&
-        id.toString().trim().isNotEmpty) {
+        id.toString()
+            .trim()
+            .isNotEmpty) {
       await prefs.setString(
         _restaurantIdKey,
         id.toString().trim(),
@@ -377,13 +822,16 @@ class RestaurantService {
   Future<bool> excluirConta([
     String? restauranteId,
   ]) async {
-    String? id = restauranteId?.trim();
+    String? id =
+        restauranteId?.trim();
 
-    if (id == null || id.isEmpty) {
+    if (id == null ||
+        id.isEmpty) {
       id = await obterRestauranteId();
     }
 
-    if (id == null || id.trim().isEmpty) {
+    if (id == null ||
+        id.trim().isEmpty) {
       throw Exception(
         'Restaurante não identificado. Faça login novamente.',
       );
@@ -408,7 +856,8 @@ class RestaurantService {
       '==========================================',
     );
 
-    final response = await http.delete(
+    final response =
+        await http.delete(
       Uri.parse(
         '$baseUrl/restaurants/$id',
       ),
@@ -421,19 +870,26 @@ class RestaurantService {
     Map<String, dynamic> data = {};
 
     try {
-      if (response.body.trim().isNotEmpty) {
+      if (response.body
+          .trim()
+          .isNotEmpty) {
         final decoded =
-            jsonDecode(response.body);
+            jsonDecode(
+          response.body,
+        );
 
         if (decoded is Map) {
           data =
-              Map<String, dynamic>.from(decoded);
+              Map<String, dynamic>.from(
+            decoded,
+          );
         }
       }
     } catch (_) {}
 
     print(
-      '📡 Status HTTP: ${response.statusCode}',
+      '📡 Status HTTP: '
+      '${response.statusCode}',
     );
 
     print(
@@ -477,17 +933,44 @@ class RestaurantService {
       _restaurantKey,
     );
 
-    await prefs.remove('token');
-    await prefs.remove('usuario');
-    await prefs.remove('user');
-    await prefs.remove('access_token');
-    await prefs.remove('auth_token');
+    await prefs.remove(
+      'token',
+    );
 
-    await prefs.remove('restaurantId');
-    await prefs.remove('restaurant');
+    await prefs.remove(
+      'usuario',
+    );
 
-    await prefs.remove('usuarioLogado');
-    await prefs.remove('userData');
-    await prefs.remove('restauranteAtual');
+    await prefs.remove(
+      'user',
+    );
+
+    await prefs.remove(
+      'access_token',
+    );
+
+    await prefs.remove(
+      'auth_token',
+    );
+
+    await prefs.remove(
+      'restaurantId',
+    );
+
+    await prefs.remove(
+      'restaurant',
+    );
+
+    await prefs.remove(
+      'usuarioLogado',
+    );
+
+    await prefs.remove(
+      'userData',
+    );
+
+    await prefs.remove(
+      'restauranteAtual',
+    );
   }
 }

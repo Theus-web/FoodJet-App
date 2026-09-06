@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -24,7 +23,8 @@ class _RestaurantSettingsScreenState
   static const Color laranja = Color(0xFFF97316);
 
   final ImagePicker imagePicker = ImagePicker();
-  final RestaurantService restaurantService = RestaurantService();
+  final RestaurantService restaurantService =
+      RestaurantService();
 
   XFile? logoSelecionada;
   Uint8List? logoBytes;
@@ -37,6 +37,12 @@ class _RestaurantSettingsScreenState
 
   bool carregando = false;
   bool carregandoDados = true;
+
+  // ==========================================================
+  // INDICA QUE A CAPA FOI MARCADA PARA REMOÇÃO
+  // ==========================================================
+
+  bool capaFoiRemovida = false;
 
   @override
   void initState() {
@@ -67,7 +73,8 @@ class _RestaurantSettingsScreenState
   // ==========================================================
 
   Future<void> carregarLogo() async {
-    final provider = Provider.of<RestaurantProvider>(
+    final provider =
+        Provider.of<RestaurantProvider>(
       context,
       listen: false,
     );
@@ -76,12 +83,14 @@ class _RestaurantSettingsScreenState
 
     if (imagem.trim().isEmpty) {
       try {
-        final restauranteId = provider.getRestaurantId();
+        final restauranteId =
+            provider.getRestaurantId();
 
         if (restauranteId != null &&
             restauranteId.trim().isNotEmpty) {
           final restaurante =
-              await restaurantService.buscarRestaurante(
+              await restaurantService
+                  .buscarRestaurante(
             restauranteId,
           );
 
@@ -95,9 +104,11 @@ class _RestaurantSettingsScreenState
             provider.setRestaurant(
               id: restauranteId,
               nomeRestaurante:
-                  (restaurante['nome'] ?? '').toString(),
+                  (restaurante['nome'] ?? '')
+                      .toString(),
               telefoneRestaurante:
-                  restaurante['telefone']?.toString(),
+                  restaurante['telefone']
+                      ?.toString(),
               imagemRestaurante: imagem,
               statusAberto:
                   restaurante['aberto'] is bool
@@ -112,12 +123,14 @@ class _RestaurantSettingsScreenState
     if (imagem.trim().isEmpty) {
       try {
         final restauranteId =
-            await restaurantService.obterRestauranteId();
+            await restaurantService
+                .obterRestauranteId();
 
         if (restauranteId != null &&
             restauranteId.trim().isNotEmpty) {
           final restaurante =
-              await restaurantService.buscarRestaurante(
+              await restaurantService
+                  .buscarRestaurante(
             restauranteId,
           );
 
@@ -142,7 +155,8 @@ class _RestaurantSettingsScreenState
   // ==========================================================
 
   Future<void> carregarCapa() async {
-    final provider = Provider.of<RestaurantProvider>(
+    final provider =
+        Provider.of<RestaurantProvider>(
       context,
       listen: false,
     );
@@ -150,12 +164,14 @@ class _RestaurantSettingsScreenState
     String capa = '';
 
     try {
-      final restauranteId = provider.getRestaurantId();
+      final restauranteId =
+          provider.getRestaurantId();
 
       if (restauranteId != null &&
           restauranteId.trim().isNotEmpty) {
         final restaurante =
-            await restaurantService.buscarRestaurante(
+            await restaurantService
+                .buscarRestaurante(
           restauranteId,
         );
 
@@ -176,12 +192,14 @@ class _RestaurantSettingsScreenState
     if (capa.trim().isEmpty) {
       try {
         final restauranteId =
-            await restaurantService.obterRestauranteId();
+            await restaurantService
+                .obterRestauranteId();
 
         if (restauranteId != null &&
             restauranteId.trim().isNotEmpty) {
           final restaurante =
-              await restaurantService.buscarRestaurante(
+              await restaurantService
+                  .buscarRestaurante(
             restauranteId,
           );
 
@@ -204,29 +222,35 @@ class _RestaurantSettingsScreenState
 
     setState(() {
       capaAtual = capa;
+      capaFoiRemovida = false;
     });
   }
 
   // ==========================================================
-  // OBTER ID
+  // OBTER ID DO RESTAURANTE
   // ==========================================================
 
   Future<String?> obterIdRestaurante() async {
-    final provider = Provider.of<RestaurantProvider>(
+    final provider =
+        Provider.of<RestaurantProvider>(
       context,
       listen: false,
     );
 
-    String? id = provider.getRestaurantId();
+    String? id =
+        provider.getRestaurantId();
 
-    if (id != null && id.trim().isNotEmpty) {
+    if (id != null &&
+        id.trim().isNotEmpty) {
       return id.trim();
     }
 
     try {
-      id = await restaurantService.obterRestauranteId();
+      id = await restaurantService
+          .obterRestauranteId();
 
-      if (id != null && id.trim().isNotEmpty) {
+      if (id != null &&
+          id.trim().isNotEmpty) {
         id = id.trim();
 
         provider.setRestaurantId(id);
@@ -237,7 +261,8 @@ class _RestaurantSettingsScreenState
 
     try {
       final prefs =
-          await SharedPreferences.getInstance();
+          await SharedPreferences
+              .getInstance();
 
       final chaves = [
         'restauranteId',
@@ -247,7 +272,8 @@ class _RestaurantSettingsScreenState
       ];
 
       for (final chave in chaves) {
-        final valor = prefs.getString(chave);
+        final valor =
+            prefs.getString(chave);
 
         if (valor != null &&
             valor.trim().isNotEmpty) {
@@ -262,20 +288,26 @@ class _RestaurantSettingsScreenState
       final jsons = [
         prefs.getString('restaurante'),
         prefs.getString('restaurant'),
-        prefs.getString('restauranteAtual'),
+        prefs.getString(
+          'restauranteAtual',
+        ),
       ];
 
       for (final json in jsons) {
-        if (json == null || json.trim().isEmpty) {
+        if (json == null ||
+            json.trim().isEmpty) {
           continue;
         }
 
         try {
-          final decoded = jsonDecode(json);
+          final decoded =
+              jsonDecode(json);
 
           if (decoded is Map) {
             final mapa =
-                Map<String, dynamic>.from(decoded);
+                Map<String, dynamic>.from(
+              decoded,
+            );
 
             final valor =
                 mapa['id'] ??
@@ -284,8 +316,13 @@ class _RestaurantSettingsScreenState
                 mapa['restaurantId'];
 
             if (valor != null &&
-                valor.toString().trim().isNotEmpty) {
-              id = valor.toString().trim();
+                valor
+                    .toString()
+                    .trim()
+                    .isNotEmpty) {
+              id = valor
+                  .toString()
+                  .trim();
 
               await prefs.setString(
                 'restauranteId',
@@ -368,7 +405,7 @@ class _RestaurantSettingsScreenState
   }
 
   // ==========================================================
-  // BASE64
+  // GERAR BASE64 DA LOGO
   // ==========================================================
 
   String? gerarBase64() {
@@ -389,7 +426,8 @@ class _RestaurantSettingsScreenState
       mime = 'image/webp';
     }
 
-    return 'data:$mime;base64,${base64Encode(logoBytes!)}';
+    return 'data:$mime;base64,'
+        '${base64Encode(logoBytes!)}';
   }
 
   // ==========================================================
@@ -399,7 +437,8 @@ class _RestaurantSettingsScreenState
   Future<void> salvarLogo() async {
     if (carregando) return;
 
-    final novaImagem = gerarBase64();
+    final novaImagem =
+        gerarBase64();
 
     if (novaImagem == null &&
         logoAtual.isNotEmpty) {
@@ -438,7 +477,8 @@ class _RestaurantSettingsScreenState
         dados['imagem'] = '';
       }
 
-      await restaurantService.atualizarRestaurante(
+      await restaurantService
+          .atualizarRestaurante(
         restauranteId,
         dados,
       );
@@ -449,7 +489,8 @@ class _RestaurantSettingsScreenState
         listen: false,
       );
 
-      logoAtual = novaImagem ?? '';
+      logoAtual =
+          novaImagem ?? '';
 
       provider.setRestaurant(
         id: restauranteId,
@@ -502,19 +543,23 @@ class _RestaurantSettingsScreenState
         width: double.infinity,
         height: double.infinity,
         errorBuilder:
-            (_, __, ___) => placeholderLogo(),
+            (_, __, ___) =>
+                placeholderLogo(),
       );
     }
 
     if (logoAtual.isNotEmpty) {
-      if (logoAtual.startsWith('data:image')) {
+      if (logoAtual
+          .startsWith('data:image')) {
         try {
           final partes =
               logoAtual.split(',');
 
           if (partes.length == 2) {
             final bytes =
-                base64Decode(partes[1]);
+                base64Decode(
+              partes[1],
+            );
 
             return Image.memory(
               bytes,
@@ -522,7 +567,8 @@ class _RestaurantSettingsScreenState
               width: double.infinity,
               height: double.infinity,
               errorBuilder:
-                  (_, __, ___) => placeholderLogo(),
+                  (_, __, ___) =>
+                      placeholderLogo(),
             );
           }
         } catch (_) {
@@ -530,28 +576,38 @@ class _RestaurantSettingsScreenState
         }
       }
 
-      if (logoAtual.startsWith('http://') ||
-          logoAtual.startsWith('https://')) {
+      if (logoAtual.startsWith(
+            'http://',
+          ) ||
+          logoAtual.startsWith(
+            'https://',
+          )) {
         return Image.network(
           logoAtual,
           fit: BoxFit.cover,
           width: double.infinity,
           height: double.infinity,
           loadingBuilder:
-              (context, child, progress) {
+              (
+            context,
+            child,
+            progress,
+          ) {
             if (progress == null) {
               return child;
             }
 
             return const Center(
-              child: CircularProgressIndicator(
+              child:
+                  CircularProgressIndicator(
                 color: laranja,
                 strokeWidth: 2,
               ),
             );
           },
           errorBuilder:
-              (_, __, ___) => placeholderLogo(),
+              (_, __, ___) =>
+                  placeholderLogo(),
         );
       }
     }
@@ -599,17 +655,32 @@ class _RestaurantSettingsScreenState
         return;
       }
 
+      const limite =
+          5 * 1024 * 1024;
+
+      if (bytes.length > limite) {
+        mostrarMensagem(
+          'A imagem da capa deve ter no máximo 5 MB.',
+          erro: true,
+        );
+        return;
+      }
+
       if (!mounted) return;
 
       setState(() {
         capaSelecionada = imagem;
         capaBytes = bytes;
+
+        // Se o usuário escolheu uma nova capa,
+        // cancela a intenção de remover a anterior.
+        capaFoiRemovida = false;
       });
 
       mostrarMensagem(
         'Nova capa selecionada.',
       );
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
 
       mostrarMensagem(
@@ -628,6 +699,9 @@ class _RestaurantSettingsScreenState
       capaSelecionada = null;
       capaBytes = null;
       capaAtual = '';
+
+      // Marca a capa para exclusão no servidor.
+      capaFoiRemovida = true;
     });
 
     mostrarMensagem(
@@ -636,47 +710,11 @@ class _RestaurantSettingsScreenState
   }
 
   // ==========================================================
-  // BASE64 DA CAPA
-  // ==========================================================
-
-  String? gerarBase64Capa() {
-    if (capaSelecionada == null ||
-        capaBytes == null ||
-        capaBytes!.isEmpty) {
-      return null;
-    }
-
-    String mime = 'image/jpeg';
-
-    final nome =
-        capaSelecionada!.name.toLowerCase();
-
-    if (nome.endsWith('.png')) {
-      mime = 'image/png';
-    } else if (nome.endsWith('.webp')) {
-      mime = 'image/webp';
-    }
-
-    return 'data:$mime;base64,${base64Encode(capaBytes!)}';
-  }
-
-  // ==========================================================
   // SALVAR CAPA
   // ==========================================================
 
   Future<void> salvarCapa() async {
     if (carregando) return;
-
-    final novaCapa = gerarBase64Capa();
-
-    if (novaCapa == null &&
-        capaAtual.isNotEmpty) {
-      mostrarMensagem(
-        'Escolha uma nova imagem ou remova a capa atual.',
-        erro: true,
-      );
-      return;
-    }
 
     final restauranteId =
         await obterIdRestaurante();
@@ -697,27 +735,121 @@ class _RestaurantSettingsScreenState
     });
 
     try {
-      final dados =
-          <String, dynamic>{};
+      // ========================================================
+      // REMOVER CAPA DO SERVIDOR
+      // ========================================================
 
-      if (novaCapa != null) {
-        dados['capa'] = novaCapa;
-      } else {
-        dados['capa'] = '';
+      if (capaFoiRemovida) {
+        print(
+          '🗑️ Removendo capa do restaurante...',
+        );
+
+        await restaurantService
+            .removerCapa(
+          restauranteId,
+        );
+
+        if (!mounted) return;
+
+        setState(() {
+          capaAtual = '';
+          capaSelecionada = null;
+          capaBytes = null;
+          capaFoiRemovida = false;
+        });
+
+        mostrarMensagem(
+          'Capa removida com sucesso!',
+        );
+
+        return;
       }
 
-      await restaurantService.atualizarRestaurante(
-        restauranteId,
-        dados,
+      // ========================================================
+      // NENHUMA NOVA IMAGEM
+      // ========================================================
+
+      if (capaSelecionada == null) {
+        if (capaAtual.isNotEmpty) {
+          mostrarMensagem(
+            'Escolha uma nova imagem ou remova a capa atual.',
+            erro: true,
+          );
+        } else {
+          mostrarMensagem(
+            'Selecione uma imagem para a capa.',
+            erro: true,
+          );
+        }
+
+        return;
+      }
+
+      // ========================================================
+      // UPLOAD MULTIPART
+      // ========================================================
+
+      print(
+        '📤 Enviando nova capa...',
       );
 
-      capaAtual = novaCapa ?? '';
+      final resposta =
+          await restaurantService
+              .uploadCapa(
+        restauranteId,
+        capaSelecionada!,
+      );
+
+      Map<String, dynamic>
+          restaurante = {};
+
+      if (resposta['restaurante']
+          is Map) {
+        restaurante =
+            Map<String, dynamic>.from(
+          resposta['restaurante'],
+        );
+      }
+
+      // ========================================================
+      // LOCALIZAR URL DA CAPA
+      // ========================================================
+
+      String novaCapa = '';
+
+      if (restaurante.isNotEmpty) {
+        novaCapa = (
+          restaurante['capa'] ??
+          restaurante['capaUrl'] ??
+          restaurante['banner'] ??
+          restaurante['bannerUrl'] ??
+          ''
+        ).toString();
+      }
+
+      if (novaCapa.trim().isEmpty) {
+        novaCapa = (
+          resposta['capa'] ??
+          resposta['capaUrl'] ??
+          resposta['banner'] ??
+          resposta['bannerUrl'] ??
+          ''
+        ).toString();
+      }
+
+      if (novaCapa.trim().isEmpty) {
+        throw Exception(
+          'O servidor não retornou o endereço da capa.',
+        );
+      }
 
       if (!mounted) return;
 
       setState(() {
+        capaAtual = novaCapa;
         capaSelecionada = null;
         capaBytes = null;
+        capaFoiRemovida = false;
       });
 
       mostrarMensagem(
@@ -740,10 +872,42 @@ class _RestaurantSettingsScreenState
   }
 
   // ==========================================================
+  // URL DA CAPA
+  // ==========================================================
+
+  String obterUrlCapa(
+    String valor,
+  ) {
+    final capa = valor.trim();
+
+    if (capa.isEmpty) {
+      return '';
+    }
+
+    if (capa.startsWith('http://') ||
+        capa.startsWith('https://')) {
+      return capa;
+    }
+
+    const backendBaseUrl =
+        'http://192.168.1.101:3000';
+
+    if (capa.startsWith('/')) {
+      return '$backendBaseUrl$capa';
+    }
+
+    return '$backendBaseUrl/$capa';
+  }
+
+  // ==========================================================
   // IMAGEM DA CAPA
   // ==========================================================
 
   Widget imagemCapa() {
+    // ========================================================
+    // NOVA IMAGEM SELECIONADA
+    // ========================================================
+
     if (capaBytes != null &&
         capaBytes!.isNotEmpty) {
       return Image.memory(
@@ -752,58 +916,85 @@ class _RestaurantSettingsScreenState
         width: double.infinity,
         height: double.infinity,
         errorBuilder:
-            (_, __, ___) => placeholderCapa(),
+            (_, __, ___) =>
+                placeholderCapa(),
       );
     }
 
-    if (capaAtual.isNotEmpty) {
-      if (capaAtual.startsWith('data:image')) {
-        try {
-          final partes =
-              capaAtual.split(',');
+    // ========================================================
+    // SEM CAPA
+    // ========================================================
 
-          if (partes.length == 2) {
-            final bytes =
-                base64Decode(partes[1]);
+    if (capaAtual.trim().isEmpty) {
+      return placeholderCapa();
+    }
 
-            return Image.memory(
-              bytes,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              errorBuilder:
-                  (_, __, ___) => placeholderCapa(),
-            );
-          }
-        } catch (_) {
-          return placeholderCapa();
+    // ========================================================
+    // BASE64 ANTIGO
+    // ========================================================
+
+    if (capaAtual
+        .startsWith('data:image')) {
+      try {
+        final partes =
+            capaAtual.split(',');
+
+        if (partes.length == 2) {
+          final bytes =
+              base64Decode(
+            partes[1],
+          );
+
+          return Image.memory(
+            bytes,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+            errorBuilder:
+                (_, __, ___) =>
+                    placeholderCapa(),
+          );
         }
+      } catch (_) {
+        return placeholderCapa();
       }
+    }
 
-      if (capaAtual.startsWith('http://') ||
-          capaAtual.startsWith('https://')) {
-        return Image.network(
-          capaAtual,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-          loadingBuilder:
-              (context, child, progress) {
-            if (progress == null) {
-              return child;
-            }
+    // ========================================================
+    // URL
+    // ========================================================
 
-            return const Center(
-              child: CircularProgressIndicator(
-                color: laranja,
-                strokeWidth: 2,
-              ),
-            );
-          },
-          errorBuilder:
-              (_, __, ___) => placeholderCapa(),
-        );
-      }
+    final url =
+        obterUrlCapa(capaAtual);
+
+    if (url.isNotEmpty) {
+      return Image.network(
+        url,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        loadingBuilder:
+            (
+          context,
+          child,
+          progress,
+        ) {
+          if (progress == null) {
+            return child;
+          }
+
+          return const Center(
+            child:
+                CircularProgressIndicator(
+              color: laranja,
+              strokeWidth: 2,
+            ),
+          );
+        },
+        errorBuilder:
+            (_, __, ___) =>
+                placeholderCapa(),
+      );
     }
 
     return placeholderCapa();
@@ -823,7 +1014,7 @@ class _RestaurantSettingsScreenState
   }
 
   // ==========================================================
-  // STATUS RESTAURANTE
+  // ALTERAR STATUS RESTAURANTE
   // ==========================================================
 
   Future<void> alterarStatusRestaurante(
@@ -842,9 +1033,12 @@ class _RestaurantSettingsScreenState
     }
 
     try {
-      await restaurantService.alterarStatus(
+      await restaurantService
+          .alterarStatus(
         restauranteId,
-        aberto ? 'ABERTO' : 'FECHADO',
+        aberto
+            ? 'ABERTO'
+            : 'FECHADO',
       );
 
       if (!mounted) return;
@@ -855,7 +1049,9 @@ class _RestaurantSettingsScreenState
         listen: false,
       );
 
-      provider.definirStatus(aberto);
+      provider.definirStatus(
+        aberto,
+      );
 
       mostrarMensagem(
         aberto
@@ -892,13 +1088,15 @@ class _RestaurantSettingsScreenState
       SnackBar(
         content: Text(mensagem),
         backgroundColor:
-            erro ? Colors.red : Colors.green,
+            erro
+                ? Colors.red
+                : Colors.green,
       ),
     );
   }
 
   // ==========================================================
-  // CARD
+  // CARD DE CONFIGURAÇÃO
   // ==========================================================
 
   Widget cardConfiguracao({
@@ -910,14 +1108,18 @@ class _RestaurantSettingsScreenState
   }) {
     return Container(
       margin:
-          const EdgeInsets.only(bottom: 12),
-      decoration: BoxDecoration(
+          const EdgeInsets.only(
+        bottom: 12,
+      ),
+      decoration:
+          BoxDecoration(
         color: Colors.white,
         borderRadius:
             BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(
+            color:
+                Colors.black.withValues(
               alpha: 0.04,
             ),
             blurRadius: 10,
@@ -926,53 +1128,91 @@ class _RestaurantSettingsScreenState
           ),
         ],
       ),
-      child: ListTile(
-        onTap: onTap,
-        contentPadding:
-            const EdgeInsets.symmetric(
-          horizontal: 18,
-          vertical: 7,
-        ),
-        leading: Container(
-          width: 46,
-          height: 46,
-          decoration: BoxDecoration(
-            color: laranja.withValues(
-              alpha: 0.10,
-            ),
-            borderRadius:
-                BorderRadius.circular(14),
+
+      // ========================================================
+      // MATERIAL REAL PARA O SPLASH DO LISTTILE
+      // CORRIGE:
+      // "ListTile background color or ink splashes may be invisible."
+      // ========================================================
+
+      child: Material(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(18),
+        clipBehavior:
+            Clip.antiAlias,
+        child: ListTile(
+          onTap: onTap,
+
+          // O Material acima é o fundo.
+          // O ListTile fica transparente para o splash
+          // ser desenhado corretamente.
+          tileColor: Colors.transparent,
+
+          contentPadding:
+              const EdgeInsets.symmetric(
+            horizontal: 18,
+            vertical: 7,
           ),
-          child: Icon(
-            icone,
-            color: laranja,
-          ),
-        ),
-        title: Text(
-          titulo,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 15,
-          ),
-        ),
-        subtitle: Padding(
-          padding:
-              const EdgeInsets.only(top: 3),
-          child: Text(
-            descricao,
-            style: TextStyle(
-              fontSize: 12,
+
+          leading: Container(
+            width: 46,
+            height: 46,
+            decoration:
+                BoxDecoration(
               color:
-                  Colors.grey.shade600,
+                  laranja.withValues(
+                alpha: 0.10,
+              ),
+              borderRadius:
+                  BorderRadius.circular(
+                14,
+              ),
+            ),
+            child: Icon(
+              icone,
+              color: laranja,
             ),
           ),
+
+          title: Text(
+            titulo,
+            style:
+                const TextStyle(
+              fontWeight:
+                  FontWeight.bold,
+              fontSize: 15,
+            ),
+          ),
+
+          subtitle: Padding(
+            padding:
+                const EdgeInsets.only(
+              top: 3,
+            ),
+            child: Text(
+              descricao,
+              style: TextStyle(
+                fontSize: 12,
+                color:
+                    Colors.grey.shade600,
+              ),
+            ),
+          ),
+
+          trailing: trailing,
         ),
-        trailing: trailing,
       ),
     );
   }
 
-  Widget tituloSecao(String titulo) {
+  // ==========================================================
+  // TÍTULO SEÇÃO
+  // ==========================================================
+
+  Widget tituloSecao(
+    String titulo,
+  ) {
     return Padding(
       padding:
           const EdgeInsets.only(
@@ -981,12 +1221,14 @@ class _RestaurantSettingsScreenState
         bottom: 10,
       ),
       child: Align(
-        alignment: Alignment.centerLeft,
+        alignment:
+            Alignment.centerLeft,
         child: Text(
           titulo,
           style: TextStyle(
             fontSize: 17,
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
             color:
                 Colors.grey.shade800,
           ),
@@ -1002,7 +1244,8 @@ class _RestaurantSettingsScreenState
   void abrirCentralAjuda() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor:
+          Colors.white,
       isScrollControlled: true,
       shape:
           const RoundedRectangleBorder(
@@ -1051,7 +1294,8 @@ class _RestaurantSettingsScreenState
                 ),
                 const Text(
                   'Central de ajuda',
-                  style: TextStyle(
+                  style:
+                      TextStyle(
                     fontSize: 21,
                     fontWeight:
                         FontWeight.bold,
@@ -1115,10 +1359,13 @@ class _RestaurantSettingsScreenState
   ) {
     return Container(
       margin:
-          const EdgeInsets.only(bottom: 10),
+          const EdgeInsets.only(
+        bottom: 10,
+      ),
       padding:
           const EdgeInsets.all(13),
-      decoration: BoxDecoration(
+      decoration:
+          BoxDecoration(
         color: Colors.grey.shade50,
         borderRadius:
             BorderRadius.circular(14),
@@ -1141,7 +1388,8 @@ class _RestaurantSettingsScreenState
               children: [
                 Text(
                   titulo,
-                  style: const TextStyle(
+                  style:
+                      const TextStyle(
                     fontWeight:
                         FontWeight.bold,
                   ),
@@ -1172,7 +1420,8 @@ class _RestaurantSettingsScreenState
   void abrirSuporte() {
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.white,
+      backgroundColor:
+          Colors.white,
       shape:
           const RoundedRectangleBorder(
         borderRadius:
@@ -1219,9 +1468,11 @@ class _RestaurantSettingsScreenState
                         laranja.withValues(
                       alpha: 0.10,
                     ),
-                    shape: BoxShape.circle,
+                    shape:
+                        BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child:
+                      const Icon(
                     Icons.support_agent,
                     size: 40,
                     color: laranja,
@@ -1232,7 +1483,8 @@ class _RestaurantSettingsScreenState
                 ),
                 const Text(
                   'Falar com suporte',
-                  style: TextStyle(
+                  style:
+                      TextStyle(
                     fontSize: 21,
                     fontWeight:
                         FontWeight.bold,
@@ -1255,22 +1507,29 @@ class _RestaurantSettingsScreenState
                   height: 22,
                 ),
                 SizedBox(
-                  width: double.infinity,
+                  width:
+                      double.infinity,
                   height: 52,
-                  child: ElevatedButton.icon(
+                  child:
+                      ElevatedButton.icon(
                     onPressed: () {
-                      Navigator.pop(context);
+                      Navigator.pop(
+                        context,
+                      );
 
                       mostrarMensagem(
                         'Canal de suporte FoodJet em breve.',
                       );
                     },
-                    icon: const Icon(
+                    icon:
+                        const Icon(
                       Icons.chat_outlined,
                     ),
-                    label: const Text(
+                    label:
+                        const Text(
                       'Entrar em contato',
-                      style: TextStyle(
+                      style:
+                          TextStyle(
                         fontWeight:
                             FontWeight.bold,
                       ),
@@ -1314,11 +1573,14 @@ class _RestaurantSettingsScreenState
                 Icons.lock_outline,
                 color: laranja,
               ),
-              SizedBox(width: 10),
+              SizedBox(
+                width: 10,
+              ),
               Text('Segurança'),
             ],
           ),
-          content: const Text(
+          content:
+              const Text(
             'Mantenha sua senha segura e não '
             'compartilhe seus dados de acesso '
             'com outras pessoas.',
@@ -1326,8 +1588,11 @@ class _RestaurantSettingsScreenState
           actions: [
             TextButton(
               onPressed: () =>
-                  Navigator.pop(context),
-              child: const Text('Fechar'),
+                  Navigator.pop(
+                context,
+              ),
+              child:
+                  const Text('Fechar'),
             ),
           ],
         );
@@ -1345,13 +1610,17 @@ class _RestaurantSettingsScreenState
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text(
+          title:
+              const Text(
             'Sair da conta?',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
+            style:
+                TextStyle(
+              fontWeight:
+                  FontWeight.bold,
             ),
           ),
-          content: const Text(
+          content:
+              const Text(
             'Você será desconectado do '
             'FoodJet Restaurante e voltará '
             'para a tela de login.',
@@ -1359,13 +1628,21 @@ class _RestaurantSettingsScreenState
           actions: [
             TextButton(
               onPressed: () =>
-                  Navigator.pop(context, false),
+                  Navigator.pop(
+                context,
+                false,
+              ),
               child:
-                  const Text('Cancelar'),
+                  const Text(
+                'Cancelar',
+              ),
             ),
             ElevatedButton(
               onPressed: () =>
-                  Navigator.pop(context, true),
+                  Navigator.pop(
+                context,
+                true,
+              ),
               style:
                   ElevatedButton.styleFrom(
                 backgroundColor:
@@ -1385,21 +1662,40 @@ class _RestaurantSettingsScreenState
 
     try {
       final prefs =
-          await SharedPreferences.getInstance();
+          await SharedPreferences
+              .getInstance();
 
       await prefs.remove('token');
       await prefs.remove('usuario');
       await prefs.remove('user');
-      await prefs.remove('access_token');
-      await prefs.remove('auth_token');
+      await prefs.remove(
+        'access_token',
+      );
+      await prefs.remove(
+        'auth_token',
+      );
 
-      await prefs.remove('restauranteId');
-      await prefs.remove('restaurantId');
-      await prefs.remove('restaurante');
-      await prefs.remove('restaurant');
-      await prefs.remove('restauranteAtual');
-      await prefs.remove('usuarioLogado');
-      await prefs.remove('userData');
+      await prefs.remove(
+        'restauranteId',
+      );
+      await prefs.remove(
+        'restaurantId',
+      );
+      await prefs.remove(
+        'restaurante',
+      );
+      await prefs.remove(
+        'restaurant',
+      );
+      await prefs.remove(
+        'restauranteAtual',
+      );
+      await prefs.remove(
+        'usuarioLogado',
+      );
+      await prefs.remove(
+        'userData',
+      );
 
       if (!mounted) return;
 
@@ -1430,22 +1726,27 @@ class _RestaurantSettingsScreenState
   }
 
   // ==========================================================
-  // EXCLUIR CONTA
+  // CONFIRMAR EXCLUSÃO
   // ==========================================================
 
-  Future<void> confirmarExclusaoConta() async {
+  Future<void>
+      confirmarExclusaoConta() async {
     final confirmar =
         await showDialog<bool>(
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text(
+          title:
+              const Text(
             'Excluir conta?',
-            style: TextStyle(
-              fontWeight: FontWeight.bold,
+            style:
+                TextStyle(
+              fontWeight:
+                  FontWeight.bold,
             ),
           ),
-          content: const Text(
+          content:
+              const Text(
             'Essa ação excluirá permanentemente '
             'a conta do restaurante. Essa operação '
             'não poderá ser desfeita.',
@@ -1453,13 +1754,21 @@ class _RestaurantSettingsScreenState
           actions: [
             TextButton(
               onPressed: () =>
-                  Navigator.pop(context, false),
+                  Navigator.pop(
+                context,
+                false,
+              ),
               child:
-                  const Text('Cancelar'),
+                  const Text(
+                'Cancelar',
+              ),
             ),
             ElevatedButton(
               onPressed: () =>
-                  Navigator.pop(context, true),
+                  Navigator.pop(
+                context,
+                true,
+              ),
               style:
                   ElevatedButton.styleFrom(
                 backgroundColor:
@@ -1467,7 +1776,8 @@ class _RestaurantSettingsScreenState
                 foregroundColor:
                     Colors.white,
               ),
-              child: const Text(
+              child:
+                  const Text(
                 'Excluir conta',
               ),
             ),
@@ -1480,6 +1790,10 @@ class _RestaurantSettingsScreenState
 
     await excluirConta();
   }
+
+  // ==========================================================
+  // EXCLUIR CONTA
+  // ==========================================================
 
   Future<void> excluirConta() async {
     try {
@@ -1499,7 +1813,8 @@ class _RestaurantSettingsScreenState
 
       showDialog(
         context: context,
-        barrierDismissible: false,
+        barrierDismissible:
+            false,
         builder: (_) {
           return const Center(
             child:
@@ -1510,7 +1825,8 @@ class _RestaurantSettingsScreenState
         },
       );
 
-      await restaurantService.excluirConta(
+      await restaurantService
+          .excluirConta(
         restauranteId,
       );
 
@@ -1551,14 +1867,17 @@ class _RestaurantSettingsScreenState
   // ==========================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     final provider =
         Provider.of<RestaurantProvider>(
       context,
     );
 
     final nomeRestaurante =
-        provider.nome?.trim().isNotEmpty == true
+        provider.nome?.trim().isNotEmpty ==
+                true
             ? provider.nome!
             : 'Meu restaurante';
 
@@ -1582,20 +1901,28 @@ class _RestaurantSettingsScreenState
       backgroundColor:
           const Color(0xFFF5F5F5),
       appBar: AppBar(
-        title: const Text(
+        title:
+            const Text(
           'Configurações',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
+          style:
+              TextStyle(
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
-        backgroundColor: laranja,
-        foregroundColor: Colors.white,
+        backgroundColor:
+            laranja,
+        foregroundColor:
+            Colors.white,
         elevation: 0,
       ),
       body: SafeArea(
-        child: SingleChildScrollView(
+        child:
+            SingleChildScrollView(
           padding:
-              const EdgeInsets.all(18),
+              const EdgeInsets.all(
+            18,
+          ),
           child: Column(
             children: [
               // ==================================================
@@ -1603,28 +1930,42 @@ class _RestaurantSettingsScreenState
               // ==================================================
 
               Container(
-                width: double.infinity,
+                width:
+                    double.infinity,
                 padding:
-                    const EdgeInsets.all(20),
-                decoration: BoxDecoration(
+                    const EdgeInsets.all(
+                  20,
+                ),
+                decoration:
+                    BoxDecoration(
                   gradient:
                       const LinearGradient(
                     colors: [
-                      Color(0xFFF97316),
-                      Color(0xFFEA580C),
+                      Color(
+                        0xFFF97316,
+                      ),
+                      Color(
+                        0xFFEA580C,
+                      ),
                     ],
                   ),
                   borderRadius:
-                      BorderRadius.circular(22),
+                      BorderRadius.circular(
+                    22,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color:
                           laranja.withValues(
-                        alpha: 0.22,
+                        alpha:
+                            0.22,
                       ),
                       blurRadius: 18,
                       offset:
-                          const Offset(0, 8),
+                          const Offset(
+                        0,
+                        8,
+                      ),
                     ),
                   ],
                 ),
@@ -1635,15 +1976,18 @@ class _RestaurantSettingsScreenState
                       height: 64,
                       decoration:
                           BoxDecoration(
-                        color: Colors.white,
+                        color:
+                            Colors.white,
                         borderRadius:
-                            BorderRadius.circular(
+                            BorderRadius
+                                .circular(
                           18,
                         ),
                       ),
                       clipBehavior:
                           Clip.antiAlias,
-                      child: imagemLogo(),
+                      child:
+                          imagemLogo(),
                     ),
                     const SizedBox(
                       width: 14,
@@ -1651,15 +1995,20 @@ class _RestaurantSettingsScreenState
                     Expanded(
                       child: Column(
                         crossAxisAlignment:
-                            CrossAxisAlignment.start,
+                            CrossAxisAlignment
+                                .start,
                         children: [
                           const Text(
                             'Configurações da loja',
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 18,
+                            style:
+                                TextStyle(
+                              color:
+                                  Colors.white,
+                              fontSize:
+                                  18,
                               fontWeight:
-                                  FontWeight.bold,
+                                  FontWeight
+                                      .bold,
                             ),
                           ),
                           const SizedBox(
@@ -1669,11 +2018,14 @@ class _RestaurantSettingsScreenState
                             nomeRestaurante,
                             maxLines: 1,
                             overflow:
-                                TextOverflow.ellipsis,
+                                TextOverflow
+                                    .ellipsis,
                             style:
                                 const TextStyle(
-                              color: Colors.white,
-                              fontSize: 13,
+                              color:
+                                  Colors.white,
+                              fontSize:
+                                  13,
                             ),
                           ),
                         ],
@@ -1696,26 +2048,40 @@ class _RestaurantSettingsScreenState
               ),
 
               Container(
-                width: double.infinity,
+                width:
+                    double.infinity,
                 padding:
-                    const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
+                    const EdgeInsets.all(
+                  20,
+                ),
+                decoration:
+                    BoxDecoration(
+                  color:
+                      Colors.white,
                   borderRadius:
-                      BorderRadius.circular(20),
+                      BorderRadius.circular(
+                    20,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color:
-                          Colors.black.withValues(
-                        alpha: 0.04,
+                          Colors.black
+                              .withValues(
+                        alpha:
+                            0.04,
                       ),
-                      blurRadius: 12,
+                      blurRadius:
+                          12,
                       offset:
-                          const Offset(0, 4),
+                          const Offset(
+                        0,
+                        4,
+                      ),
                     ),
                   ],
                 ),
-                child: Column(
+                child:
+                    Column(
                   children: [
                     Stack(
                       clipBehavior:
@@ -1726,23 +2092,29 @@ class _RestaurantSettingsScreenState
                           height: 170,
                           decoration:
                               BoxDecoration(
-                            color: Colors.white,
+                            color:
+                                Colors.white,
                             borderRadius:
-                                BorderRadius.circular(
+                                BorderRadius
+                                    .circular(
                               28,
                             ),
                             border:
                                 Border.all(
                               color:
-                                  Colors.grey.shade200,
+                                  Colors.grey
+                                      .shade200,
                             ),
                             boxShadow: [
                               BoxShadow(
-                                color: Colors.black
-                                    .withValues(
-                                  alpha: 0.08,
+                                color:
+                                    Colors.black
+                                        .withValues(
+                                  alpha:
+                                      0.08,
                                 ),
-                                blurRadius: 18,
+                                blurRadius:
+                                    18,
                                 offset:
                                     const Offset(
                                   0,
@@ -1753,17 +2125,22 @@ class _RestaurantSettingsScreenState
                           ),
                           clipBehavior:
                               Clip.antiAlias,
-                          child: imagemLogo(),
+                          child:
+                              imagemLogo(),
                         ),
                         Positioned(
                           right: -8,
                           bottom: -8,
-                          child: Material(
-                            color: laranja,
-                            elevation: 5,
+                          child:
+                              Material(
+                            color:
+                                laranja,
+                            elevation:
+                                5,
                             shape:
                                 const CircleBorder(),
-                            child: InkWell(
+                            child:
+                                InkWell(
                               customBorder:
                                   const CircleBorder(),
                               onTap:
@@ -1776,11 +2153,14 @@ class _RestaurantSettingsScreenState
                                     EdgeInsets.all(
                                   13,
                                 ),
-                                child: Icon(
-                                  Icons.camera_alt,
+                                child:
+                                    Icon(
+                                  Icons
+                                      .camera_alt,
                                   color:
                                       Colors.white,
-                                  size: 25,
+                                  size:
+                                      25,
                                 ),
                               ),
                             ),
@@ -1793,10 +2173,12 @@ class _RestaurantSettingsScreenState
                     ),
                     const Text(
                       'Logo do restaurante',
-                      style: TextStyle(
+                      style:
+                          TextStyle(
                         fontSize: 18,
                         fontWeight:
-                            FontWeight.bold,
+                            FontWeight
+                                .bold,
                       ),
                     ),
                     const SizedBox(
@@ -1807,47 +2189,63 @@ class _RestaurantSettingsScreenState
                       'para seus clientes no FoodJet.',
                       textAlign:
                           TextAlign.center,
-                      style: TextStyle(
+                      style:
+                          TextStyle(
                         color:
-                            Colors.grey.shade600,
-                        fontSize: 13,
+                            Colors.grey
+                                .shade600,
+                        fontSize:
+                            13,
                       ),
                     ),
                     const SizedBox(
                       height: 18,
                     ),
                     SizedBox(
-                      width: double.infinity,
+                      width:
+                          double.infinity,
                       height: 50,
                       child:
-                          OutlinedButton.icon(
+                          OutlinedButton
+                              .icon(
                         onPressed:
                             carregando
                                 ? null
                                 : selecionarLogo,
-                        icon: const Icon(
-                          Icons.photo_library_outlined,
-                          color: laranja,
+                        icon:
+                            const Icon(
+                          Icons
+                              .photo_library_outlined,
+                          color:
+                              laranja,
                         ),
-                        label: const Text(
+                        label:
+                            const Text(
                           'Escolher nova imagem',
-                          style: TextStyle(
-                            color: laranja,
+                          style:
+                              TextStyle(
+                            color:
+                                laranja,
                             fontWeight:
-                                FontWeight.bold,
+                                FontWeight
+                                    .bold,
                           ),
                         ),
                         style:
-                            OutlinedButton.styleFrom(
+                            OutlinedButton
+                                .styleFrom(
                           side:
                               const BorderSide(
-                            color: laranja,
-                            width: 1.5,
+                            color:
+                                laranja,
+                            width:
+                                1.5,
                           ),
                           shape:
                               RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius.circular(
+                                BorderRadius
+                                    .circular(
                               14,
                             ),
                           ),
@@ -1862,16 +2260,23 @@ class _RestaurantSettingsScreenState
                           carregando
                               ? null
                               : removerLogo,
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.red,
+                      icon:
+                          const Icon(
+                        Icons
+                            .delete_outline,
+                        color:
+                            Colors.red,
                       ),
-                      label: const Text(
+                      label:
+                          const Text(
                         'Remover logo',
-                        style: TextStyle(
-                          color: Colors.red,
+                        style:
+                            TextStyle(
+                          color:
+                              Colors.red,
                           fontWeight:
-                              FontWeight.w600,
+                              FontWeight
+                                  .w600,
                         ),
                       ),
                     ),
@@ -1879,15 +2284,18 @@ class _RestaurantSettingsScreenState
                       height: 8,
                     ),
                     SizedBox(
-                      width: double.infinity,
+                      width:
+                          double.infinity,
                       height: 54,
-                      child: ElevatedButton(
+                      child:
+                          ElevatedButton(
                         onPressed:
                             carregando
                                 ? null
                                 : salvarLogo,
                         style:
-                            ElevatedButton.styleFrom(
+                            ElevatedButton
+                                .styleFrom(
                           backgroundColor:
                               laranja,
                           foregroundColor:
@@ -1895,46 +2303,52 @@ class _RestaurantSettingsScreenState
                           shape:
                               RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius.circular(
+                                BorderRadius
+                                    .circular(
                               14,
                             ),
                           ),
                         ),
-                        child: carregando
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child:
-                                    CircularProgressIndicator(
-                                  color:
-                                      Colors.white,
-                                  strokeWidth:
-                                      2.5,
-                                ),
-                              )
-                            : const Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment
-                                        .center,
-                                children: [
-                                  Icon(
-                                    Icons
-                                        .check_circle_outline,
-                                  ),
-                                  SizedBox(
-                                    width: 8,
-                                  ),
-                                  Text(
-                                    'Salvar logo',
-                                    style:
-                                        TextStyle(
-                                      fontWeight:
-                                          FontWeight.bold,
-                                      fontSize: 16,
+                        child:
+                            carregando
+                                ? const SizedBox(
+                                    width:
+                                        24,
+                                    height:
+                                        24,
+                                    child:
+                                        CircularProgressIndicator(
+                                      color:
+                                          Colors.white,
+                                      strokeWidth:
+                                          2.5,
                                     ),
+                                  )
+                                : const Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment
+                                            .center,
+                                    children: [
+                                      Icon(
+                                        Icons
+                                            .check_circle_outline,
+                                      ),
+                                      SizedBox(
+                                        width:
+                                            8,
+                                      ),
+                                      Text(
+                                        'Salvar logo',
+                                        style:
+                                            TextStyle(
+                                          fontWeight:
+                                              FontWeight.bold,
+                                          fontSize:
+                                              16,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
                       ),
                     ),
                   ],
@@ -1942,7 +2356,7 @@ class _RestaurantSettingsScreenState
               ),
 
               // ==================================================
-              // CAPA DA LOJA
+              // CAPA
               // ==================================================
 
               tituloSecao(
@@ -1950,71 +2364,109 @@ class _RestaurantSettingsScreenState
               ),
 
               Container(
-                width: double.infinity,
+                width:
+                    double.infinity,
                 padding:
-                    const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.white,
+                    const EdgeInsets.all(
+                  20,
+                ),
+                decoration:
+                    BoxDecoration(
+                  color:
+                      Colors.white,
                   borderRadius:
-                      BorderRadius.circular(20),
+                      BorderRadius.circular(
+                    20,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color:
-                          Colors.black.withValues(
-                        alpha: 0.04,
+                          Colors.black
+                              .withValues(
+                        alpha:
+                            0.04,
                       ),
-                      blurRadius: 12,
+                      blurRadius:
+                          12,
                       offset:
-                          const Offset(0, 4),
+                          const Offset(
+                        0,
+                        4,
+                      ),
                     ),
                   ],
                 ),
-                child: Column(
+                child:
+                    Column(
                   children: [
                     Container(
-                      width: double.infinity,
+                      width:
+                          double.infinity,
                       height: 180,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade100,
+                      decoration:
+                          BoxDecoration(
+                        color:
+                            Colors.grey
+                                .shade100,
                         borderRadius:
-                            BorderRadius.circular(18),
-                        border: Border.all(
+                            BorderRadius
+                                .circular(
+                          18,
+                        ),
+                        border:
+                            Border.all(
                           color:
-                              Colors.grey.shade200,
+                              Colors.grey
+                                  .shade200,
                         ),
                       ),
                       clipBehavior:
                           Clip.antiAlias,
-                      child: Stack(
-                        fit: StackFit.expand,
+                      child:
+                          Stack(
+                        fit:
+                            StackFit.expand,
                         children: [
                           imagemCapa(),
                           Positioned(
                             left: 12,
                             bottom: 12,
-                            child: Container(
+                            child:
+                                Container(
                               padding:
-                                  const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
+                                  const EdgeInsets
+                                      .symmetric(
+                                horizontal:
+                                    10,
+                                vertical:
+                                    6,
                               ),
-                              decoration: BoxDecoration(
-                                color: Colors.black
-                                    .withValues(
-                                  alpha: 0.55,
+                              decoration:
+                                  BoxDecoration(
+                                color:
+                                    Colors.black
+                                        .withValues(
+                                  alpha:
+                                      0.55,
                                 ),
                                 borderRadius:
-                                    BorderRadius.circular(
+                                    BorderRadius
+                                        .circular(
                                   10,
                                 ),
                               ),
-                              child: const Text(
+                              child:
+                                  const Text(
                                 'Pré-visualização da capa',
-                                style: TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 12,
+                                style:
+                                    TextStyle(
+                                  color:
+                                      Colors.white,
+                                  fontSize:
+                                      12,
                                   fontWeight:
-                                      FontWeight.w600,
+                                      FontWeight
+                                          .w600,
                                 ),
                               ),
                             ),
@@ -2022,92 +2474,134 @@ class _RestaurantSettingsScreenState
                         ],
                       ),
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(
+                      height: 18,
+                    ),
                     const Text(
                       'Capa do restaurante',
-                      style: TextStyle(
+                      style:
+                          TextStyle(
                         fontSize: 18,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight
+                                .bold,
                       ),
                     ),
-                    const SizedBox(height: 6),
+                    const SizedBox(
+                      height: 6,
+                    ),
                     Text(
                       'Essa imagem aparecerá no topo da página '
                       'do seu restaurante para os clientes.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontSize: 13,
+                      textAlign:
+                          TextAlign.center,
+                      style:
+                          TextStyle(
+                        color:
+                            Colors.grey
+                                .shade600,
+                        fontSize:
+                            13,
                       ),
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(
+                      height: 18,
+                    ),
                     SizedBox(
-                      width: double.infinity,
+                      width:
+                          double.infinity,
                       height: 50,
-                      child: OutlinedButton.icon(
+                      child:
+                          OutlinedButton
+                              .icon(
                         onPressed:
                             carregando
                                 ? null
                                 : selecionarCapa,
-                        icon: const Icon(
-                          Icons.photo_library_outlined,
-                          color: laranja,
+                        icon:
+                            const Icon(
+                          Icons
+                              .photo_library_outlined,
+                          color:
+                              laranja,
                         ),
-                        label: const Text(
+                        label:
+                            const Text(
                           'Escolher nova capa',
-                          style: TextStyle(
-                            color: laranja,
+                          style:
+                              TextStyle(
+                            color:
+                                laranja,
                             fontWeight:
-                                FontWeight.bold,
+                                FontWeight
+                                    .bold,
                           ),
                         ),
                         style:
-                            OutlinedButton.styleFrom(
+                            OutlinedButton
+                                .styleFrom(
                           side:
                               const BorderSide(
-                            color: laranja,
-                            width: 1.5,
+                            color:
+                                laranja,
+                            width:
+                                1.5,
                           ),
                           shape:
                               RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius.circular(
+                                BorderRadius
+                                    .circular(
                               14,
                             ),
                           ),
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(
+                      height: 8,
+                    ),
                     TextButton.icon(
                       onPressed:
                           carregando
                               ? null
                               : removerCapa,
-                      icon: const Icon(
-                        Icons.delete_outline,
-                        color: Colors.red,
+                      icon:
+                          const Icon(
+                        Icons
+                            .delete_outline,
+                        color:
+                            Colors.red,
                       ),
-                      label: const Text(
+                      label:
+                          const Text(
                         'Remover capa',
-                        style: TextStyle(
-                          color: Colors.red,
+                        style:
+                            TextStyle(
+                          color:
+                              Colors.red,
                           fontWeight:
-                              FontWeight.w600,
+                              FontWeight
+                                  .w600,
                         ),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(
+                      height: 8,
+                    ),
                     SizedBox(
-                      width: double.infinity,
+                      width:
+                          double.infinity,
                       height: 54,
-                      child: ElevatedButton(
+                      child:
+                          ElevatedButton(
                         onPressed:
                             carregando
                                 ? null
                                 : salvarCapa,
                         style:
-                            ElevatedButton.styleFrom(
+                            ElevatedButton
+                                .styleFrom(
                           backgroundColor:
                               laranja,
                           foregroundColor:
@@ -2115,46 +2609,52 @@ class _RestaurantSettingsScreenState
                           shape:
                               RoundedRectangleBorder(
                             borderRadius:
-                                BorderRadius.circular(
+                                BorderRadius
+                                    .circular(
                               14,
                             ),
                           ),
                         ),
-                        child: carregando
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child:
-                                    CircularProgressIndicator(
-                                  color:
-                                      Colors.white,
-                                  strokeWidth:
-                                      2.5,
-                                ),
-                              )
-                            : const Row(
-                                mainAxisAlignment:
-                                    MainAxisAlignment
-                                        .center,
-                                children: [
-                                  Icon(
-                                    Icons
-                                        .check_circle_outline,
-                                  ),
-                                  SizedBox(
-                                    width: 8,
-                                  ),
-                                  Text(
-                                    'Salvar capa',
-                                    style:
-                                        TextStyle(
-                                      fontWeight:
-                                          FontWeight.bold,
-                                      fontSize: 16,
+                        child:
+                            carregando
+                                ? const SizedBox(
+                                    width:
+                                        24,
+                                    height:
+                                        24,
+                                    child:
+                                        CircularProgressIndicator(
+                                      color:
+                                          Colors.white,
+                                      strokeWidth:
+                                          2.5,
                                     ),
+                                  )
+                                : const Row(
+                                    mainAxisAlignment:
+                                        MainAxisAlignment
+                                            .center,
+                                    children: [
+                                      Icon(
+                                        Icons
+                                            .check_circle_outline,
+                                      ),
+                                      SizedBox(
+                                        width:
+                                            8,
+                                      ),
+                                      Text(
+                                        'Salvar capa',
+                                        style:
+                                            TextStyle(
+                                          fontWeight:
+                                              FontWeight.bold,
+                                          fontSize:
+                                              16,
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                ],
-                              ),
                       ),
                     ),
                   ],
@@ -2179,9 +2679,12 @@ class _RestaurantSettingsScreenState
                 descricao: statusAtual
                     ? 'Sua loja está recebendo pedidos'
                     : 'Sua loja não está recebendo pedidos',
-                trailing: Switch(
-                  value: statusAtual,
-                  activeColor: laranja,
+                trailing:
+                    Switch(
+                  value:
+                      statusAtual,
+                  activeColor:
+                      laranja,
                   onChanged:
                       alterarStatusRestaurante,
                 ),
@@ -2205,7 +2708,8 @@ class _RestaurantSettingsScreenState
                 trailing:
                     const Icon(
                   Icons.chevron_right,
-                  color: Colors.grey,
+                  color:
+                      Colors.grey,
                 ),
                 onTap:
                     abrirCentralAjuda,
@@ -2221,7 +2725,8 @@ class _RestaurantSettingsScreenState
                 trailing:
                     const Icon(
                   Icons.chevron_right,
-                  color: Colors.grey,
+                  color:
+                      Colors.grey,
                 ),
                 onTap:
                     abrirSuporte,
@@ -2245,7 +2750,8 @@ class _RestaurantSettingsScreenState
                 trailing:
                     const Icon(
                   Icons.chevron_right,
-                  color: Colors.grey,
+                  color:
+                      Colors.grey,
                 ),
                 onTap:
                     abrirSeguranca,
@@ -2269,7 +2775,8 @@ class _RestaurantSettingsScreenState
                 trailing:
                     const Icon(
                   Icons.chevron_right,
-                  color: Colors.orange,
+                  color:
+                      Colors.orange,
                 ),
                 onTap:
                     sairDaConta,
@@ -2285,7 +2792,8 @@ class _RestaurantSettingsScreenState
                 trailing:
                     const Icon(
                   Icons.chevron_right,
-                  color: Colors.red,
+                  color:
+                      Colors.red,
                 ),
                 onTap:
                     confirmarExclusaoConta,
@@ -2295,28 +2803,42 @@ class _RestaurantSettingsScreenState
                 height: 20,
               ),
 
+              // ==================================================
+              // AVISO
+              // ==================================================
+
               Container(
-                width: double.infinity,
+                width:
+                    double.infinity,
                 padding:
-                    const EdgeInsets.all(16),
-                decoration: BoxDecoration(
+                    const EdgeInsets.all(
+                  16,
+                ),
+                decoration:
+                    BoxDecoration(
                   color:
                       Colors.orange.shade50,
                   borderRadius:
-                      BorderRadius.circular(16),
-                  border: Border.all(
+                      BorderRadius.circular(
+                    16,
+                  ),
+                  border:
+                      Border.all(
                     color:
                         Colors.orange.shade100,
                   ),
                 ),
-                child: Row(
+                child:
+                    Row(
                   crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                      CrossAxisAlignment
+                          .start,
                   children: [
                     Icon(
                       Icons.info_outline,
                       color:
-                          Colors.orange.shade700,
+                          Colors.orange
+                              .shade700,
                     ),
                     const SizedBox(
                       width: 12,
@@ -2326,10 +2848,13 @@ class _RestaurantSettingsScreenState
                         'As configurações da sua loja '
                         'controlam o funcionamento do '
                         'restaurante no FoodJet.',
-                        style: TextStyle(
+                        style:
+                            TextStyle(
                           color:
-                              Colors.orange.shade900,
-                          fontSize: 13,
+                              Colors.orange
+                                  .shade900,
+                          fontSize:
+                              13,
                         ),
                       ),
                     ),
@@ -2347,4 +2872,3 @@ class _RestaurantSettingsScreenState
     );
   }
 }
-

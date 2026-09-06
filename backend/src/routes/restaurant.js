@@ -1,4 +1,3 @@
-
 const express = require("express");
 
 const router = express.Router();
@@ -60,6 +59,7 @@ router.put(
 // ==================================================
 //
 // LGPD:
+//
 // Permite que o restaurante solicite a exclusão
 // da própria conta.
 //
@@ -70,5 +70,29 @@ router.delete(
     restaurantController.delete
 );
 
-module.exports = router;
+// ==================================================
+// UPLOAD DA CAPA
+// POST /api/restaurants/:id/capa
+// ==================================================
 
+router.post(
+    "/:id/capa",
+    restaurantController.uploadCapa
+);
+
+// ==================================================
+// REMOVER CAPA
+// DELETE /api/restaurants/:id/capa
+// ==================================================
+
+router.delete(
+    "/:id/capa",
+    restaurantController.deleteCapa
+);
+
+router.delete(
+    "/:id",
+    restaurantController.delete
+);
+
+module.exports = router;
