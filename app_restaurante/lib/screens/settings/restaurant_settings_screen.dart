@@ -1,3 +1,4 @@
+
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -28,7 +29,11 @@ class _RestaurantSettingsScreenState
   XFile? logoSelecionada;
   Uint8List? logoBytes;
 
+  XFile? capaSelecionada;
+  Uint8List? capaBytes;
+
   String logoAtual = '';
+  String capaAtual = '';
 
   bool carregando = false;
   bool carregandoDados = true;
@@ -48,6 +53,7 @@ class _RestaurantSettingsScreenState
 
   Future<void> carregarDados() async {
     await carregarLogo();
+    await carregarCapa();
 
     if (!mounted) return;
 
@@ -128,6 +134,76 @@ class _RestaurantSettingsScreenState
 
     setState(() {
       logoAtual = imagem;
+    });
+  }
+
+  // ==========================================================
+  // CARREGAR CAPA
+  // ==========================================================
+
+  Future<void> carregarCapa() async {
+    final provider = Provider.of<RestaurantProvider>(
+      context,
+      listen: false,
+    );
+
+    String capa = '';
+
+    try {
+      final restauranteId = provider.getRestaurantId();
+
+      if (restauranteId != null &&
+          restauranteId.trim().isNotEmpty) {
+        final restaurante =
+            await restaurantService.buscarRestaurante(
+          restauranteId,
+        );
+
+        capa = (
+          restaurante['capa'] ??
+          restaurante['capaUrl'] ??
+          restaurante['banner'] ??
+          restaurante['bannerUrl'] ??
+          restaurante['imagemCapa'] ??
+          restaurante['imagem_capa'] ??
+          restaurante['fotoCapa'] ??
+          restaurante['foto_capa'] ??
+          ''
+        ).toString();
+      }
+    } catch (_) {}
+
+    if (capa.trim().isEmpty) {
+      try {
+        final restauranteId =
+            await restaurantService.obterRestauranteId();
+
+        if (restauranteId != null &&
+            restauranteId.trim().isNotEmpty) {
+          final restaurante =
+              await restaurantService.buscarRestaurante(
+            restauranteId,
+          );
+
+          capa = (
+            restaurante['capa'] ??
+            restaurante['capaUrl'] ??
+            restaurante['banner'] ??
+            restaurante['bannerUrl'] ??
+            restaurante['imagemCapa'] ??
+            restaurante['imagem_capa'] ??
+            restaurante['fotoCapa'] ??
+            restaurante['foto_capa'] ??
+            ''
+          ).toString();
+        }
+      } catch (_) {}
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      capaAtual = capa;
     });
   }
 
@@ -497,6 +573,256 @@ class _RestaurantSettingsScreenState
   }
 
   // ==========================================================
+  // SELECIONAR CAPA
+  // ==========================================================
+
+  Future<void> selecionarCapa() async {
+    try {
+      final imagem =
+          await imagePicker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+        maxWidth: 1600,
+        maxHeight: 900,
+      );
+
+      if (imagem == null) return;
+
+      final bytes =
+          await imagem.readAsBytes();
+
+      if (bytes.isEmpty) {
+        mostrarMensagem(
+          'A imagem selecionada está vazia.',
+          erro: true,
+        );
+        return;
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        capaSelecionada = imagem;
+        capaBytes = bytes;
+      });
+
+      mostrarMensagem(
+        'Nova capa selecionada.',
+      );
+    } catch (_) {
+      if (!mounted) return;
+
+      mostrarMensagem(
+        'Não foi possível selecionar a capa.',
+        erro: true,
+      );
+    }
+  }
+
+  // ==========================================================
+  // REMOVER CAPA
+  // ==========================================================
+
+  void removerCapa() {
+    setState(() {
+      capaSelecionada = null;
+      capaBytes = null;
+      capaAtual = '';
+    });
+
+    mostrarMensagem(
+      'A capa será removida ao salvar.',
+    );
+  }
+
+  // ==========================================================
+  // BASE64 DA CAPA
+  // ==========================================================
+
+  String? gerarBase64Capa() {
+    if (capaSelecionada == null ||
+        capaBytes == null ||
+        capaBytes!.isEmpty) {
+      return null;
+    }
+
+    String mime = 'image/jpeg';
+
+    final nome =
+        capaSelecionada!.name.toLowerCase();
+
+    if (nome.endsWith('.png')) {
+      mime = 'image/png';
+    } else if (nome.endsWith('.webp')) {
+      mime = 'image/webp';
+    }
+
+    return 'data:$mime;base64,${base64Encode(capaBytes!)}';
+  }
+
+  // ==========================================================
+  // SALVAR CAPA
+  // ==========================================================
+
+  Future<void> salvarCapa() async {
+    if (carregando) return;
+
+    final novaCapa = gerarBase64Capa();
+
+    if (novaCapa == null &&
+        capaAtual.isNotEmpty) {
+      mostrarMensagem(
+        'Escolha uma nova imagem ou remova a capa atual.',
+        erro: true,
+      );
+      return;
+    }
+
+    final restauranteId =
+        await obterIdRestaurante();
+
+    if (restauranteId == null ||
+        restauranteId.trim().isEmpty) {
+      mostrarMensagem(
+        'Restaurante não identificado. Faça login novamente.',
+        erro: true,
+      );
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      carregando = true;
+    });
+
+    try {
+      final dados =
+          <String, dynamic>{};
+
+      if (novaCapa != null) {
+        dados['capa'] = novaCapa;
+      } else {
+        dados['capa'] = '';
+      }
+
+      await restaurantService.atualizarRestaurante(
+        restauranteId,
+        dados,
+      );
+
+      capaAtual = novaCapa ?? '';
+
+      if (!mounted) return;
+
+      setState(() {
+        capaSelecionada = null;
+        capaBytes = null;
+      });
+
+      mostrarMensagem(
+        'Capa atualizada com sucesso!',
+      );
+    } catch (e) {
+      if (!mounted) return;
+
+      mostrarMensagem(
+        'Erro ao atualizar capa: $e',
+        erro: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          carregando = false;
+        });
+      }
+    }
+  }
+
+  // ==========================================================
+  // IMAGEM DA CAPA
+  // ==========================================================
+
+  Widget imagemCapa() {
+    if (capaBytes != null &&
+        capaBytes!.isNotEmpty) {
+      return Image.memory(
+        capaBytes!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+        errorBuilder:
+            (_, __, ___) => placeholderCapa(),
+      );
+    }
+
+    if (capaAtual.isNotEmpty) {
+      if (capaAtual.startsWith('data:image')) {
+        try {
+          final partes =
+              capaAtual.split(',');
+
+          if (partes.length == 2) {
+            final bytes =
+                base64Decode(partes[1]);
+
+            return Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
+              errorBuilder:
+                  (_, __, ___) => placeholderCapa(),
+            );
+          }
+        } catch (_) {
+          return placeholderCapa();
+        }
+      }
+
+      if (capaAtual.startsWith('http://') ||
+          capaAtual.startsWith('https://')) {
+        return Image.network(
+          capaAtual,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          loadingBuilder:
+              (context, child, progress) {
+            if (progress == null) {
+              return child;
+            }
+
+            return const Center(
+              child: CircularProgressIndicator(
+                color: laranja,
+                strokeWidth: 2,
+              ),
+            );
+          },
+          errorBuilder:
+              (_, __, ___) => placeholderCapa(),
+        );
+      }
+    }
+
+    return placeholderCapa();
+  }
+
+  Widget placeholderCapa() {
+    return Container(
+      color: Colors.grey.shade100,
+      child: const Center(
+        child: Icon(
+          Icons.image_outlined,
+          size: 55,
+          color: Colors.grey,
+        ),
+      ),
+    );
+  }
+
+  // ==========================================================
   // STATUS RESTAURANTE
   // ==========================================================
 
@@ -755,9 +1081,9 @@ class _RestaurantSettingsScreenState
                 ),
                 _itemAjuda(
                   Icons.image_outlined,
-                  'Alterar a logo',
-                  'Escolha uma imagem na galeria e toque '
-                      'em Salvar logo.',
+                  'Alterar logo ou capa',
+                  'Escolha uma imagem na galeria e salve '
+                      'a logo ou a capa do restaurante.',
                 ),
                 _itemAjuda(
                   Icons.shopping_bag_outlined,
@@ -1592,13 +1918,234 @@ class _RestaurantSettingsScreenState
                                         .center,
                                 children: [
                                   Icon(
-                                    Icons.check_circle_outline,
+                                    Icons
+                                        .check_circle_outline,
                                   ),
                                   SizedBox(
                                     width: 8,
                                   ),
                                   Text(
                                     'Salvar logo',
+                                    style:
+                                        TextStyle(
+                                      fontWeight:
+                                          FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              // ==================================================
+              // CAPA DA LOJA
+              // ==================================================
+
+              tituloSecao(
+                'Capa da loja',
+              ),
+
+              Container(
+                width: double.infinity,
+                padding:
+                    const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius:
+                      BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color:
+                          Colors.black.withValues(
+                        alpha: 0.04,
+                      ),
+                      blurRadius: 12,
+                      offset:
+                          const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      height: 180,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius:
+                            BorderRadius.circular(18),
+                        border: Border.all(
+                          color:
+                              Colors.grey.shade200,
+                        ),
+                      ),
+                      clipBehavior:
+                          Clip.antiAlias,
+                      child: Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          imagemCapa(),
+                          Positioned(
+                            left: 12,
+                            bottom: 12,
+                            child: Container(
+                              padding:
+                                  const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 6,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.black
+                                    .withValues(
+                                  alpha: 0.55,
+                                ),
+                                borderRadius:
+                                    BorderRadius.circular(
+                                  10,
+                                ),
+                              ),
+                              child: const Text(
+                                'Pré-visualização da capa',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight:
+                                      FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Capa do restaurante',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Essa imagem aparecerá no topo da página '
+                      'do seu restaurante para os clientes.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: OutlinedButton.icon(
+                        onPressed:
+                            carregando
+                                ? null
+                                : selecionarCapa,
+                        icon: const Icon(
+                          Icons.photo_library_outlined,
+                          color: laranja,
+                        ),
+                        label: const Text(
+                          'Escolher nova capa',
+                          style: TextStyle(
+                            color: laranja,
+                            fontWeight:
+                                FontWeight.bold,
+                          ),
+                        ),
+                        style:
+                            OutlinedButton.styleFrom(
+                          side:
+                              const BorderSide(
+                            color: laranja,
+                            width: 1.5,
+                          ),
+                          shape:
+                              RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(
+                              14,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed:
+                          carregando
+                              ? null
+                              : removerCapa,
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        color: Colors.red,
+                      ),
+                      label: const Text(
+                        'Remover capa',
+                        style: TextStyle(
+                          color: Colors.red,
+                          fontWeight:
+                              FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: ElevatedButton(
+                        onPressed:
+                            carregando
+                                ? null
+                                : salvarCapa,
+                        style:
+                            ElevatedButton.styleFrom(
+                          backgroundColor:
+                              laranja,
+                          foregroundColor:
+                              Colors.white,
+                          shape:
+                              RoundedRectangleBorder(
+                            borderRadius:
+                                BorderRadius.circular(
+                              14,
+                            ),
+                          ),
+                        ),
+                        child: carregando
+                            ? const SizedBox(
+                                width: 24,
+                                height: 24,
+                                child:
+                                    CircularProgressIndicator(
+                                  color:
+                                      Colors.white,
+                                  strokeWidth:
+                                      2.5,
+                                ),
+                              )
+                            : const Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment
+                                        .center,
+                                children: [
+                                  Icon(
+                                    Icons
+                                        .check_circle_outline,
+                                  ),
+                                  SizedBox(
+                                    width: 8,
+                                  ),
+                                  Text(
+                                    'Salvar capa',
                                     style:
                                         TextStyle(
                                       fontWeight:
@@ -1800,3 +2347,4 @@ class _RestaurantSettingsScreenState
     );
   }
 }
+

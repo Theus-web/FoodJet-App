@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -46,7 +47,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<Map<String, dynamic>> restaurantes = <Map<String, dynamic>>[];
 
-  List<Map<String, dynamic>> restaurantesFiltrados = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> restaurantesFiltrados =
+      <Map<String, dynamic>>[];
 
   // ============================================================
   // PROMOÇÕES
@@ -68,7 +70,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // HISTÓRICO
   // ============================================================
 
-  List<Map<String, dynamic>> historicoRestaurantes = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> historicoRestaurantes =
+      <Map<String, dynamic>>[];
 
   static const String _chaveHistoricoRestaurantes =
       'foodjet_historico_restaurantes';
@@ -756,7 +759,9 @@ class _HomeScreenState extends State<HomeScreen> {
     _bannerTimer = Timer.periodic(
       const Duration(seconds: 15),
       (_) {
-        if (!mounted || !_bannerController.hasClients || banners.isEmpty) {
+        if (!mounted ||
+            !_bannerController.hasClients ||
+            banners.isEmpty) {
           return;
         }
 
@@ -775,7 +780,9 @@ class _HomeScreenState extends State<HomeScreen> {
   void _proximoBanner({
     bool automatico = false,
   }) {
-    if (!mounted || !_bannerController.hasClients || banners.isEmpty) {
+    if (!mounted ||
+        !_bannerController.hasClients ||
+        banners.isEmpty) {
       return;
     }
 
@@ -794,9 +801,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
-  // Clique no banner:
-  // passa para o próximo banner.
   void _clicarBanner() {
     _reiniciarCarrossel();
 
@@ -1000,7 +1004,8 @@ class _HomeScreenState extends State<HomeScreen> {
           resultado,
         );
 
-        restaurantesFiltrados = List<Map<String, dynamic>>.from(
+        restaurantesFiltrados =
+            List<Map<String, dynamic>>.from(
           filtrados,
         );
 
@@ -1097,20 +1102,28 @@ class _HomeScreenState extends State<HomeScreen> {
         restaurante['nomeRestaurante'] ??
         'Restaurante';
 
-    restaurante['categoria'] = restaurante['categoria'] ?? 'Restaurante';
+    restaurante['categoria'] =
+        restaurante['categoria'] ?? 'Restaurante';
 
-    restaurante['descricao'] = restaurante['descricao'] ?? '';
+    restaurante['descricao'] =
+        restaurante['descricao'] ?? '';
 
     restaurante['avaliacao'] =
-        restaurante['avaliacao'] ?? restaurante['nota'] ?? 5.0;
+        restaurante['avaliacao'] ??
+            restaurante['nota'] ??
+            5.0;
 
-    restaurante['tempoEntrega'] = restaurante['tempoEntrega'] ?? '30-45 min';
+    restaurante['tempoEntrega'] =
+        restaurante['tempoEntrega'] ?? '30-45 min';
 
-    restaurante['taxaEntrega'] = restaurante['taxaEntrega'] ?? 0;
+    restaurante['taxaEntrega'] =
+        restaurante['taxaEntrega'] ?? 0;
 
     if (restaurante['status'] == null) {
       restaurante['status'] =
-          restaurante['online'] == true ? 'ABERTO' : 'FECHADO';
+          restaurante['online'] == true
+              ? 'ABERTO'
+              : 'FECHADO';
     }
   }
 
@@ -1123,9 +1136,11 @@ class _HomeScreenState extends State<HomeScreen> {
   ) {
     lista.sort(
       (a, b) {
-        final destaqueA = restauranteDestaque(a) ? 1 : 0;
+        final destaqueA =
+            restauranteDestaque(a) ? 1 : 0;
 
-        final destaqueB = restauranteDestaque(b) ? 1 : 0;
+        final destaqueB =
+            restauranteDestaque(b) ? 1 : 0;
 
         if (destaqueA != destaqueB) {
           return destaqueB.compareTo(
@@ -1133,13 +1148,11 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        final prioridadeA = _numeroInteiro(
-          a['prioridade'],
-        );
+        final prioridadeA =
+            _numeroInteiro(a['prioridade']);
 
-        final prioridadeB = _numeroInteiro(
-          b['prioridade'],
-        );
+        final prioridadeB =
+            _numeroInteiro(b['prioridade']);
 
         if (prioridadeA != prioridadeB) {
           return prioridadeB.compareTo(
@@ -1147,9 +1160,11 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         }
 
-        final abertoA = restauranteAberto(a) ? 1 : 0;
+        final abertoA =
+            restauranteAberto(a) ? 1 : 0;
 
-        final abertoB = restauranteAberto(b) ? 1 : 0;
+        final abertoB =
+            restauranteAberto(b) ? 1 : 0;
 
         return abertoB.compareTo(
           abertoA,
@@ -1173,7 +1188,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     final promocao = restaurante['promocao'];
 
-    if (promocao is Map && promocao['ativa'] == true) {
+    if (promocao is Map &&
+        promocao['ativa'] == true) {
       final expira = promocao['expiraEm'];
 
       if (expira == null) {
@@ -1201,17 +1217,26 @@ class _HomeScreenState extends State<HomeScreen> {
   bool restauranteAberto(
     Map<String, dynamic> restaurante,
   ) {
-    final status = restaurante['status']?.toString().trim().toUpperCase();
+    final status =
+        restaurante['status']
+            ?.toString()
+            .trim()
+            .toUpperCase();
 
-    if (status == 'ABERTO' || status == 'OPEN' || status == 'ONLINE') {
+    if (status == 'ABERTO' ||
+        status == 'OPEN' ||
+        status == 'ONLINE') {
       return true;
     }
 
-    if (status == 'FECHADO' || status == 'CLOSED' || status == 'OFFLINE') {
+    if (status == 'FECHADO' ||
+        status == 'CLOSED' ||
+        status == 'OFFLINE') {
       return false;
     }
 
-    return restaurante['aberto'] == true || restaurante['online'] == true;
+    return restaurante['aberto'] == true ||
+        restaurante['online'] == true;
   }
 
   // ============================================================
@@ -1232,16 +1257,19 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return lista.where(
       (restaurante) {
-        final nome = nomeRestaurante(
-          restaurante,
-        ).toLowerCase();
+        final nome =
+            nomeRestaurante(restaurante)
+                .toLowerCase();
 
-        final categoria = categoriaRestaurante(
-          restaurante,
-        ).toLowerCase();
+        final categoria =
+            categoriaRestaurante(restaurante)
+                .toLowerCase();
 
         final descricao =
-            restaurante['descricao']?.toString().toLowerCase() ?? '';
+            restaurante['descricao']
+                    ?.toString()
+                    .toLowerCase() ??
+                '';
 
         return nome.contains(busca) ||
             categoria.contains(busca) ||
@@ -1257,7 +1285,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _filtrarPorCategoria(
     String categoria,
   ) {
-    final busca = categoria.trim().toLowerCase();
+    final busca =
+        categoria.trim().toLowerCase();
 
     if (busca == 'todos') {
       buscaController.clear();
@@ -1265,7 +1294,8 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       setState(() {
-        restaurantesFiltrados = List<Map<String, dynamic>>.from(
+        restaurantesFiltrados =
+            List<Map<String, dynamic>>.from(
           restaurantes,
         );
       });
@@ -1276,30 +1306,31 @@ class _HomeScreenState extends State<HomeScreen> {
     final resultado = restaurantes.where(
       (restaurante) {
         final categoriaRestaurante =
-            restaurante['categoria']?.toString().trim().toLowerCase() ?? '';
+            restaurante['categoria']
+                    ?.toString()
+                    .trim()
+                    .toLowerCase() ??
+                '';
 
-        final nome = nomeRestaurante(
-          restaurante,
-        ).toLowerCase();
+        final nome =
+            nomeRestaurante(restaurante)
+                .toLowerCase();
 
         final descricao =
-            restaurante['descricao']?.toString().toLowerCase() ?? '';
+            restaurante['descricao']
+                    ?.toString()
+                    .toLowerCase() ??
+                '';
 
-        // ======================================================
-        // NORMALIZAÇÃO DA CATEGORIA
-        // ======================================================
-
-        final categoriaNormalizada = _normalizarTexto(
+        final categoriaNormalizada =
+            _normalizarTexto(
           categoriaRestaurante,
         );
 
-        final buscaNormalizada = _normalizarTexto(
+        final buscaNormalizada =
+            _normalizarTexto(
           busca,
         );
-
-        // ======================================================
-        // COMPARAÇÃO
-        // ======================================================
 
         return categoriaNormalizada.contains(
               buscaNormalizada,
@@ -1314,7 +1345,8 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
 
     setState(() {
-      restaurantesFiltrados = List<Map<String, dynamic>>.from(
+      restaurantesFiltrados =
+          List<Map<String, dynamic>>.from(
         resultado,
       );
     });
@@ -1340,54 +1372,18 @@ class _HomeScreenState extends State<HomeScreen> {
     return texto
         .trim()
         .toLowerCase()
-        .replaceAll(
-          'á',
-          'a',
-        )
-        .replaceAll(
-          'à',
-          'a',
-        )
-        .replaceAll(
-          'ã',
-          'a',
-        )
-        .replaceAll(
-          'â',
-          'a',
-        )
-        .replaceAll(
-          'é',
-          'e',
-        )
-        .replaceAll(
-          'ê',
-          'e',
-        )
-        .replaceAll(
-          'í',
-          'i',
-        )
-        .replaceAll(
-          'ó',
-          'o',
-        )
-        .replaceAll(
-          'ô',
-          'o',
-        )
-        .replaceAll(
-          'õ',
-          'o',
-        )
-        .replaceAll(
-          'ú',
-          'u',
-        )
-        .replaceAll(
-          'ç',
-          'c',
-        );
+        .replaceAll('á', 'a')
+        .replaceAll('à', 'a')
+        .replaceAll('ã', 'a')
+        .replaceAll('â', 'a')
+        .replaceAll('é', 'e')
+        .replaceAll('ê', 'e')
+        .replaceAll('í', 'i')
+        .replaceAll('ó', 'o')
+        .replaceAll('ô', 'o')
+        .replaceAll('õ', 'o')
+        .replaceAll('ú', 'u')
+        .replaceAll('ç', 'c');
   }
 
   // ============================================================
@@ -1449,7 +1445,8 @@ class _HomeScreenState extends State<HomeScreen> {
         restaurante['nomeFantasia'] ??
         restaurante['nomeRestaurante'];
 
-    if (nome == null || nome.toString().trim().isEmpty) {
+    if (nome == null ||
+        nome.toString().trim().isEmpty) {
       return 'Restaurante';
     }
 
@@ -1459,9 +1456,11 @@ class _HomeScreenState extends State<HomeScreen> {
   String categoriaRestaurante(
     Map<String, dynamic> restaurante,
   ) {
-    final categoria = restaurante['categoria'];
+    final categoria =
+        restaurante['categoria'];
 
-    if (categoria == null || categoria.toString().trim().isEmpty) {
+    if (categoria == null ||
+        categoria.toString().trim().isEmpty) {
       return 'Restaurante';
     }
 
@@ -1471,17 +1470,23 @@ class _HomeScreenState extends State<HomeScreen> {
   String avaliacaoRestaurante(
     Map<String, dynamic> restaurante,
   ) {
-    final valor = restaurante['avaliacao'] ?? restaurante['nota'] ?? 5.0;
+    final valor =
+        restaurante['avaliacao'] ??
+            restaurante['nota'] ??
+            5.0;
 
-    return _numero(valor).toStringAsFixed(1);
+    return _numero(valor)
+        .toStringAsFixed(1);
   }
 
   String tempoEntrega(
     Map<String, dynamic> restaurante,
   ) {
-    final tempo = restaurante['tempoEntrega'];
+    final tempo =
+        restaurante['tempoEntrega'];
 
-    if (tempo == null || tempo.toString().trim().isEmpty) {
+    if (tempo == null ||
+        tempo.toString().trim().isEmpty) {
       return '30-45 min';
     }
 
@@ -1505,8 +1510,9 @@ class _HomeScreenState extends State<HomeScreen> {
   String idRestaurante(
     Map<String, dynamic> restaurante,
   ) {
-    final id =
-        restaurante['id'] ?? restaurante['_id'] ?? restaurante['restauranteId'];
+    final id = restaurante['id'] ??
+        restaurante['_id'] ??
+        restaurante['restauranteId'];
 
     return id?.toString() ?? '';
   }
@@ -1520,7 +1526,11 @@ class _HomeScreenState extends State<HomeScreen> {
     BuildContext context,
   ) {
     final nomeUsuario =
-        widget.usuario['nome']?.toString().trim().isNotEmpty == true
+        widget.usuario['nome']
+                    ?.toString()
+                    .trim()
+                    .isNotEmpty ==
+                true
             ? widget.usuario['nome'].toString()
             : 'Usuário';
 
@@ -1536,7 +1546,8 @@ class _HomeScreenState extends State<HomeScreen> {
         elevation: 0,
         automaticallyImplyLeading: false,
         title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             const Text(
               'Entregar em',
@@ -1592,10 +1603,12 @@ class _HomeScreenState extends State<HomeScreen> {
           ]);
         },
         child: SingleChildScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
+          physics:
+              const AlwaysScrollableScrollPhysics(),
           padding: const EdgeInsets.all(16),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               Text(
                 'Olá, $nomeUsuario 🏆',
@@ -1606,9 +1619,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              const SizedBox(
-                height: 5,
-              ),
+              const SizedBox(height: 5),
 
               const Text(
                 'O que você quer pedir hoje?',
@@ -1619,16 +1630,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              const SizedBox(
-                height: 20,
-              ),
+              const SizedBox(height: 20),
 
               // ==================================================
               // BUSCA
               // ==================================================
 
-              ValueListenableBuilder<TextEditingValue>(
-                valueListenable: buscaController,
+              ValueListenableBuilder<
+                  TextEditingValue>(
+                valueListenable:
+                    buscaController,
                 builder: (
                   context,
                   value,
@@ -1637,45 +1648,57 @@ class _HomeScreenState extends State<HomeScreen> {
                   return Column(
                     children: [
                       TextField(
-                        controller: buscaController,
-                        decoration: InputDecoration(
-                          hintText: 'Buscar restaurante ou prato',
-                          hintStyle: const TextStyle(
+                        controller:
+                            buscaController,
+                        decoration:
+                            InputDecoration(
+                          hintText:
+                              'Buscar restaurante ou prato',
+                          hintStyle:
+                              const TextStyle(
                             color: Colors.black,
                             fontSize: 14,
                           ),
-                          prefixIcon: const Icon(
+                          prefixIcon:
+                              const Icon(
                             Icons.search,
                           ),
-                          suffixIcon: value.text.isNotEmpty
-                              ? IconButton(
-                                  onPressed: () {
-                                    buscaController.clear();
-                                  },
-                                  icon: const Icon(
-                                    Icons.close,
-                                  ),
-                                )
-                              : null,
+                          suffixIcon:
+                              value.text.isNotEmpty
+                                  ? IconButton(
+                                      onPressed: () {
+                                        buscaController
+                                            .clear();
+                                      },
+                                      icon:
+                                          const Icon(
+                                        Icons.close,
+                                      ),
+                                    )
+                                  : null,
                           filled: true,
-                          fillColor: Colors.white,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(
+                          fillColor:
+                              Colors.white,
+                          border:
+                              OutlineInputBorder(
+                            borderRadius:
+                                BorderRadius
+                                    .circular(
                               16,
                             ),
-                            borderSide: BorderSide.none,
+                            borderSide:
+                                BorderSide.none,
                           ),
                         ),
                       ),
-                      if (mostrarSugestoesBusca) _painelBuscaRestaurantes(),
+                      if (mostrarSugestoesBusca)
+                        _painelBuscaRestaurantes(),
                     ],
                   );
                 },
               ),
 
-              const SizedBox(
-                height: 20,
-              ),
+              const SizedBox(height: 20),
 
               // ==================================================
               // CARROSSEL
@@ -1683,9 +1706,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               _carrosselBanners(),
 
-              const SizedBox(
-                height: 25,
-              ),
+              const SizedBox(height: 25),
 
               // ==================================================
               // PROMOÇÕES
@@ -1693,9 +1714,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
               _listaPromocoes(),
 
-              const SizedBox(
-                height: 25,
-              ),
+              const SizedBox(height: 25),
 
               // ==================================================
               // CATEGORIAS
@@ -1710,14 +1729,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              const SizedBox(
-                height: 15,
-              ),
+              const SizedBox(height: 15),
 
               SizedBox(
                 height: 105,
                 child: ListView(
-                  scrollDirection: Axis.horizontal,
+                  scrollDirection:
+                      Axis.horizontal,
                   children: [
                     categoria(
                       Icons.apps,
@@ -1787,9 +1805,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              const SizedBox(
-                height: 25,
-              ),
+              const SizedBox(height: 25),
 
               // ==================================================
               // RESTAURANTES
@@ -1807,76 +1823,97 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  if (!carregando && restaurantesFiltrados.isNotEmpty)
+                  if (!carregando &&
+                      restaurantesFiltrados
+                          .isNotEmpty)
                     Text(
                       '${restaurantesFiltrados.length} encontrados',
-                      style: const TextStyle(
-                        color: Color.fromARGB(255, 3, 2, 2),
+                      style:
+                          const TextStyle(
+                        color: Color.fromARGB(
+                          255,
+                          3,
+                          2,
+                          2,
+                        ),
                         fontSize: 12,
                       ),
                     ),
                 ],
               ),
 
-              const SizedBox(
-                height: 15,
-              ),
+              const SizedBox(height: 15),
 
               if (carregando)
                 const Center(
                   child: Padding(
-                    padding: EdgeInsets.all(
-                      30,
-                    ),
-                    child: CircularProgressIndicator(
+                    padding:
+                        EdgeInsets.all(30),
+                    child:
+                        CircularProgressIndicator(
                       color: laranja,
                     ),
                   ),
                 )
-              else if (erro != null && restaurantes.isEmpty)
+              else if (erro != null &&
+                  restaurantes.isEmpty)
                 _erroCard()
-              else if (restaurantesFiltrados.isEmpty)
+              else if (
+                  restaurantesFiltrados
+                      .isEmpty)
                 _nenhumRestaurante()
               else
                 _listaRestaurantes(),
 
-              const SizedBox(
-                height: 30,
-              ),
+              const SizedBox(height: 30),
             ],
           ),
         ),
       ),
 
       // ========================================================
-      // MENU
+      // MENU PRETO
       // ========================================================
 
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: indiceSelecionado,
+      bottomNavigationBar:
+          BottomNavigationBar(
+        currentIndex:
+            indiceSelecionado,
         onTap: selecionarPagina,
-        type: BottomNavigationBarType.fixed,
+        type:
+            BottomNavigationBarType.fixed,
+        backgroundColor: Colors.black,
+        elevation: 10,
         selectedItemColor: laranja,
-        unselectedItemColor: Colors.grey,
+        unselectedItemColor:
+            Colors.white70,
+        selectedLabelStyle:
+            const TextStyle(
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+        ),
+        unselectedLabelStyle:
+            const TextStyle(
+          fontSize: 12,
+        ),
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home),
             label: 'Início',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.receipt_long),
+            icon:
+                Icon(Icons.receipt_long),
             label: 'Pedidos',
           ),
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons.favorite_border,
-            ),
+            icon:
+                Icon(Icons.favorite_border),
             label: 'Favoritos',
           ),
           BottomNavigationBarItem(
-            icon: Icon(
-              Icons.person_outline,
-            ),
+            icon:
+                Icon(Icons.person_outline),
             label: 'Perfil',
           ),
         ],
@@ -1893,87 +1930,85 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         SizedBox(
           height: 185,
-          child: Stack(
-            children: [
-              PageView.builder(
-                controller: _bannerController,
-                itemCount: banners.length,
-                onPageChanged: (index) {
-                  if (!mounted) return;
+          child: ClipRRect(
+            borderRadius:
+                BorderRadius.circular(18),
+            child: PageView.builder(
+              controller:
+                  _bannerController,
+              itemCount: banners.length,
+              onPageChanged: (index) {
+                if (!mounted) return;
 
-                  setState(() {
-                    _bannerAtual = index;
-                  });
+                setState(() {
+                  _bannerAtual = index;
+                });
 
-                  _reiniciarCarrossel();
-                },
-                itemBuilder: (
-                  context,
-                  index,
-                ) {
-                  return GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: _clicarBanner,
-                    child: _bannerCard(
-                      banners[index],
-                      index,
-                    ),
-                  );
-                },
-              ),
+                _reiniciarCarrossel();
+              },
+              itemBuilder: (
+                context,
+                index,
+              ) {
+                final banner =
+                    banners[index];
 
-            
-
-    
-              // ==================================================
-              // AVANÇAR
-              // ==================================================
-
-              Positioned(
-                right: 10,
-                top: 0,
-                bottom: 0,
-                child: Center(
-                  child: _botaoCarrossel(
-                    icone: Icons.chevron_right,
-                    onPressed: () {
-                      _proximoBanner();
-                      _reiniciarCarrossel();
-                    },
+                return GestureDetector(
+                  behavior:
+                      HitTestBehavior.opaque,
+                  onTap: _clicarBanner,
+                  child: _bannerCard(
+                    imagem:
+                        banner['imagem']
+                            .toString(),
+                    titulo:
+                        banner['titulo']
+                            .toString(),
+                    subtitulo:
+                        banner['subtitulo']
+                            .toString(),
                   ),
-                ),
-              ),
-            ],
+                );
+              },
+            ),
           ),
         ),
 
-        const SizedBox(
-          height: 10,
-        ),
+        const SizedBox(height: 10),
 
         // ========================================================
         // INDICADORES
         // ========================================================
 
         Row(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisAlignment:
+              MainAxisAlignment.center,
           children: List.generate(
             banners.length,
             (index) {
-              final ativo = index == _bannerAtual;
+              final ativo =
+                  index == _bannerAtual;
 
               return AnimatedContainer(
-                duration: const Duration(
+                duration:
+                    const Duration(
                   milliseconds: 250,
                 ),
-                width: ativo ? 22 : 7,
+                width:
+                    ativo ? 22 : 7,
                 height: 7,
-                margin: const EdgeInsets.symmetric(
+                margin:
+                    const EdgeInsets
+                        .symmetric(
                   horizontal: 3,
                 ),
-                decoration: BoxDecoration(
-                  color: ativo ? laranja : Colors.grey.shade300,
-                  borderRadius: BorderRadius.circular(
+                decoration:
+                    BoxDecoration(
+                  color: ativo
+                      ? laranja
+                      : Colors.grey.shade300,
+                  borderRadius:
+                      BorderRadius.circular(
                     10,
                   ),
                 ),
@@ -1986,250 +2021,104 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // BOTÃO CARROSSEL
-  // ============================================================
-
-  Widget _botaoCarrossel({
-    required IconData icone,
-    required VoidCallback onPressed,
-  }) {
-    return Material(
-      color: Colors.black.withOpacity(
-        0.35,
-      ),
-      shape: const CircleBorder(),
-      child: InkWell(
-        customBorder: const CircleBorder(),
-        onTap: onPressed,
-        child: SizedBox(
-          width: 38,
-          height: 38,
-          child: Icon(
-            icone,
-            color: Colors.white,
-            size: 28,
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
   // BANNER
   // ============================================================
 
-  Widget _bannerCard(
-    Map<String, dynamic> banner,
-    int index,
-  ) {
-    final titulo = banner['titulo']?.toString() ?? 'FoodJet';
-
-    final subtitulo = banner['subtitulo']?.toString() ?? '';
-
-    final imagem = banner['imagem']?.toString() ?? '';
-
-    final cor1 = banner['cor1'] as Color? ?? laranja;
-
-    final cor2 = banner['cor2'] as Color? ??
-        const Color(
-          0xFFFFB347,
-        );
-
-    return Container(
-      margin: const EdgeInsets.symmetric(
-        horizontal: 2,
-      ),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(
-          22,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 12,
-            offset: Offset(0, 5),
-          ),
-        ],
-      ),
-      clipBehavior: Clip.antiAlias,
+  Widget _bannerCard({
+    required String imagem,
+    required String titulo,
+    required String subtitulo,
+  }) {
+    return ClipRRect(
+      borderRadius:
+          BorderRadius.circular(18),
       child: Stack(
         fit: StackFit.expand,
         children: [
+          // IMAGEM
           Image.network(
             imagem,
             fit: BoxFit.cover,
-            loadingBuilder: (
-              context,
-              child,
-              progress,
-            ) {
-              if (progress == null) {
-                return child;
-              }
-
-              return Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      cor1,
-                      cor2,
-                    ],
-                  ),
-                ),
-                child: const Center(
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                ),
-              );
-            },
             errorBuilder: (
               context,
               error,
               stackTrace,
             ) {
               return Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      cor1,
-                      cor2,
-                    ],
+                color: Colors.grey.shade300,
+                child: const Center(
+                  child: Icon(
+                    Icons
+                        .image_not_supported,
+                    size: 45,
+                    color: Colors.grey,
                   ),
                 ),
               );
             },
           ),
 
-          // ======================================================
-          // SOMBRA
-          // ======================================================
-
+          // ESCURECIMENTO
           Container(
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.centerLeft,
-                end: Alignment.centerRight,
+            decoration:
+                BoxDecoration(
+              gradient:
+                  LinearGradient(
+                begin:
+                    Alignment.topCenter,
+                end: Alignment
+                    .bottomCenter,
                 colors: [
-                  Colors.black.withOpacity(
-                    0.72,
-                  ),
-                  Colors.black.withOpacity(
-                    0.25,
-                  ),
                   Colors.transparent,
+                  Colors.black.withValues(
+                    alpha: 0.75,
+                  ),
                 ],
               ),
             ),
           ),
 
-          // ======================================================
           // TEXTO
-          // ======================================================
-
-          Padding(
-            padding: const EdgeInsets.all(
-              18,
-            ),
+          Positioned(
+            left: 18,
+            right: 18,
+            bottom: 18,
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize:
+                  MainAxisSize.min,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
-                const Spacer(),
                 Text(
                   titulo,
                   maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
+                  overflow:
+                      TextOverflow.ellipsis,
+                  style:
+                      const TextStyle(
                     color: Colors.white,
                     fontSize: 22,
-                    fontWeight: FontWeight.w900,
+                    fontWeight:
+                        FontWeight.w900,
                   ),
                 ),
-                const SizedBox(
-                  height: 4,
-                ),
-                SizedBox(
-                  width: 260,
-                  child: Text(
-                    subtitulo,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 13,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-                const SizedBox(
-                  height: 10,
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 13,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: laranja,
-                    borderRadius: BorderRadius.circular(
-                      20,
-                    ),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Pedir agora',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      SizedBox(
-                        width: 5,
-                      ),
-                      Icon(
-                        Icons.arrow_forward,
-                        color: Colors.white,
-                        size: 15,
-                      ),
-                    ],
+
+                const SizedBox(height: 5),
+
+                Text(
+                  subtitulo,
+                  maxLines: 2,
+                  overflow:
+                      TextOverflow.ellipsis,
+                  style:
+                      const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight:
+                        FontWeight.w500,
                   ),
                 ),
               ],
-            ),
-          ),
-
-          // ======================================================
-          // CONTADOR
-          // ======================================================
-
-          Positioned(
-            top: 14,
-            right: 14,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: 9,
-                vertical: 5,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(
-                  0.35,
-                ),
-                borderRadius: BorderRadius.circular(
-                  15,
-                ),
-              ),
-              child: Text(
-                '${index + 1}/${banners.length}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
             ),
           ),
         ],
@@ -2244,22 +2133,30 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _listaPromocoes() {
     if (carregandoPromocoes) {
       return const Padding(
-        padding: EdgeInsets.symmetric(
+        padding:
+            EdgeInsets.symmetric(
           vertical: 10,
         ),
         child: Center(
-          child: CircularProgressIndicator(
+          child:
+              CircularProgressIndicator(
             color: laranja,
           ),
         ),
       );
     }
 
-    final ativas = promocoes.where(
+    final ativas =
+        promocoes.where(
       (promocao) {
-        final ativa = promocao['ativa'];
+        final ativa =
+            promocao['ativa'];
 
-        return ativa == true || ativa?.toString().toLowerCase() == 'true';
+        return ativa == true ||
+            ativa
+                    ?.toString()
+                    .toLowerCase() ==
+                'true';
       },
     ).toList();
 
@@ -2268,7 +2165,8 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
       children: [
         const Text(
           '🔥 Promoções para você',
@@ -2278,13 +2176,12 @@ class _HomeScreenState extends State<HomeScreen> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        const SizedBox(
-          height: 14,
-        ),
+        const SizedBox(height: 14),
         SizedBox(
           height: 165,
           child: ListView.builder(
-            scrollDirection: Axis.horizontal,
+            scrollDirection:
+                Axis.horizontal,
             itemCount: ativas.length,
             itemBuilder: (
               context,
@@ -2303,31 +2200,43 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _cardPromocao(
     Map<String, dynamic> promocao,
   ) {
-    final titulo = promocao['titulo']?.toString().trim().isNotEmpty == true
-        ? promocao['titulo'].toString()
-        : 'Promoção especial';
+    final titulo =
+        promocao['titulo']
+                    ?.toString()
+                    .trim()
+                    .isNotEmpty ==
+                true
+            ? promocao['titulo'].toString()
+            : 'Promoção especial';
 
     final descricao =
-        promocao['descricao']?.toString().trim().isNotEmpty == true
-            ? promocao['descricao'].toString()
+        promocao['descricao']
+                    ?.toString()
+                    .trim()
+                    .isNotEmpty ==
+                true
+            ? promocao['descricao']
+                .toString()
             : 'Aproveite esta oferta especial do FoodJet.';
 
-    final desconto = _numero(
+    final desconto =
+        _numero(
       promocao['desconto'],
     );
 
-    final precoOriginal = _numero(
+    final precoOriginal =
+        _numero(
       promocao['precoOriginal'],
     );
 
-    final precoPromocional = _numero(
+    final precoPromocional =
+        _numero(
       promocao['precoPromocional'],
     );
 
     return InkWell(
-      borderRadius: BorderRadius.circular(
-        22,
-      ),
+      borderRadius:
+          BorderRadius.circular(22),
       onTap: () {
         _abrirPromocao(
           promocao,
@@ -2335,52 +2244,57 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       child: Container(
         width: 310,
-        margin: const EdgeInsets.only(
+        margin:
+            const EdgeInsets.only(
           right: 14,
         ),
-        padding: const EdgeInsets.all(
-          18,
-        ),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+        padding:
+            const EdgeInsets.all(18),
+        decoration:
+            BoxDecoration(
+          gradient:
+              const LinearGradient(
+            begin:
+                Alignment.topLeft,
+            end:
+                Alignment.bottomRight,
             colors: [
-              Color(
-                0xFFF97316,
-              ),
-              Color(
-                0xFFFFB347,
-              ),
+              Color(0xFFF97316),
+              Color(0xFFFFB347),
             ],
           ),
-          borderRadius: BorderRadius.circular(
+          borderRadius:
+              BorderRadius.circular(
             22,
           ),
-          boxShadow: const [
+          boxShadow:
+              const [
             BoxShadow(
               color: Colors.black12,
               blurRadius: 10,
-              offset: Offset(
-                0,
-                5,
-              ),
+              offset: Offset(0, 5),
             ),
           ],
         ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(
+                  padding:
+                      const EdgeInsets
+                          .symmetric(
                     horizontal: 10,
                     vertical: 6,
                   ),
-                  decoration: BoxDecoration(
+                  decoration:
+                      BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(
+                    borderRadius:
+                        BorderRadius
+                            .circular(
                       20,
                     ),
                   ),
@@ -2388,9 +2302,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     desconto > 0
                         ? '${desconto.toStringAsFixed(0)}% OFF'
                         : 'OFERTA',
-                    style: const TextStyle(
+                    style:
+                        const TextStyle(
                       color: laranja,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                       fontSize: 12,
                     ),
                   ),
@@ -2403,27 +2319,28 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ],
             ),
-            const SizedBox(
-              height: 12,
-            ),
+            const SizedBox(height: 12),
             Text(
               titulo,
               maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              overflow:
+                  TextOverflow.ellipsis,
+              style:
+                  const TextStyle(
                 color: Colors.white,
                 fontSize: 18,
-                fontWeight: FontWeight.bold,
+                fontWeight:
+                    FontWeight.bold,
               ),
             ),
-            const SizedBox(
-              height: 5,
-            ),
+            const SizedBox(height: 5),
             Text(
               descricao,
               maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
+              overflow:
+                  TextOverflow.ellipsis,
+              style:
+                  const TextStyle(
                 color: Colors.white,
                 fontSize: 13,
               ),
@@ -2431,12 +2348,17 @@ class _HomeScreenState extends State<HomeScreen> {
             const Spacer(),
             Row(
               children: [
-                if (precoOriginal > 0 && precoPromocional > 0) ...[
+                if (precoOriginal > 0 &&
+                    precoPromocional > 0) ...[
                   Text(
                     'R\$ ${precoOriginal.toStringAsFixed(2).replaceAll('.', ',')}',
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      decoration: TextDecoration.lineThrough,
+                    style:
+                        const TextStyle(
+                      color:
+                          Colors.white70,
+                      decoration:
+                          TextDecoration
+                              .lineThrough,
                       fontSize: 12,
                     ),
                   ),
@@ -2445,36 +2367,48 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   Text(
                     'R\$ ${precoPromocional.toStringAsFixed(2).replaceAll('.', ',')}',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style:
+                        const TextStyle(
+                      color:
+                          Colors.white,
                       fontSize: 17,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
-                ] else if (desconto > 0) ...[
+                ] else if (desconto >
+                    0) ...[
                   Text(
                     '${desconto.toStringAsFixed(0)}% de desconto',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
+                    style:
+                        const TextStyle(
+                      color:
+                          Colors.white,
+                      fontWeight:
+                          FontWeight.bold,
                       fontSize: 15,
                     ),
                   ),
                 ],
                 const Spacer(),
                 Container(
-                  padding: const EdgeInsets.all(
-                    8,
-                  ),
-                  decoration: BoxDecoration(
+                  padding:
+                      const EdgeInsets
+                          .all(8),
+                  decoration:
+                      BoxDecoration(
                     color: Colors.white24,
-                    borderRadius: BorderRadius.circular(
+                    borderRadius:
+                        BorderRadius
+                            .circular(
                       12,
                     ),
                   ),
-                  child: const Icon(
+                  child:
+                      const Icon(
                     Icons.arrow_forward,
-                    color: Colors.white,
+                    color:
+                        Colors.white,
                     size: 20,
                   ),
                 ),
@@ -2493,7 +2427,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void _abrirPromocao(
     Map<String, dynamic> promocao,
   ) {
-    final restauranteId = promocao['restauranteId']?.toString().trim() ?? '';
+    final restauranteId =
+        promocao['restauranteId']
+                ?.toString()
+                .trim() ??
+            '';
 
     if (restauranteId.isEmpty) {
       ScaffoldMessenger.of(
@@ -2511,10 +2449,17 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => RestaurantScreen(
-          restauranteId: restauranteId,
-          nome: promocao['titulo']?.toString() ?? 'Restaurante',
-          descricao: promocao['descricao']?.toString() ?? '',
+        builder: (_) =>
+            RestaurantScreen(
+          restauranteId:
+              restauranteId,
+          nome: promocao['titulo']
+                  ?.toString() ??
+              'Restaurante',
+          descricao:
+              promocao['descricao']
+                      ?.toString() ??
+                  '',
           avaliacao: '5.0',
         ),
       ),
@@ -2527,13 +2472,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _listaRestaurantes() {
     return Column(
-      children: restaurantesFiltrados
-          .map(
-            (restaurante) => restauranteCard(
-              restaurante,
-            ),
-          )
-          .toList(),
+      children:
+          restaurantesFiltrados
+              .map(
+                (restaurante) =>
+                    restauranteCard(
+                  restaurante,
+                ),
+              )
+              .toList(),
     );
   }
 
@@ -2553,7 +2500,8 @@ class _HomeScreenState extends State<HomeScreen> {
       },
       child: Container(
         width: 90,
-        margin: const EdgeInsets.only(
+        margin:
+            const EdgeInsets.only(
           right: 12,
         ),
         child: Column(
@@ -2561,14 +2509,18 @@ class _HomeScreenState extends State<HomeScreen> {
             Container(
               width: 62,
               height: 62,
-              decoration: BoxDecoration(
+              decoration:
+                  BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(
+                borderRadius:
+                    BorderRadius.circular(
                   35,
                 ),
-                boxShadow: const [
+                boxShadow:
+                    const [
                   BoxShadow(
-                    color: Colors.black12,
+                    color:
+                        Colors.black12,
                     blurRadius: 8,
                   ),
                 ],
@@ -2579,16 +2531,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 size: 30,
               ),
             ),
-            const SizedBox(
-              height: 8,
-            ),
+            const SizedBox(height: 8),
             Text(
               nome,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
+              textAlign:
+                  TextAlign.center,
+              style:
+                  const TextStyle(
                 fontSize: 13,
                 color: Colors.black,
-                fontWeight: FontWeight.w500,
+                fontWeight:
+                    FontWeight.w500,
               ),
             ),
           ],
@@ -2604,40 +2557,45 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget restauranteCard(
     Map<String, dynamic> restaurante,
   ) {
-    final destaque = restauranteDestaque(
+    final destaque =
+        restauranteDestaque(
       restaurante,
     );
 
-    final aberto = restauranteAberto(
+    final aberto =
+        restauranteAberto(
       restaurante,
     );
 
-    final id = idRestaurante(
+    final id =
+        idRestaurante(
       restaurante,
     );
 
     return Container(
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 16,
       ),
-      decoration: BoxDecoration(
+      decoration:
+          BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(
+        borderRadius:
+            BorderRadius.circular(
           22,
         ),
-        boxShadow: const [
+        boxShadow:
+            const [
           BoxShadow(
             color: Colors.black12,
             blurRadius: 12,
-            offset: Offset(
-              0,
-              4,
-            ),
+            offset: Offset(0, 4),
           ),
         ],
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(
+        borderRadius:
+            BorderRadius.circular(
           22,
         ),
         onTap: () {
@@ -2661,16 +2619,22 @@ class _HomeScreenState extends State<HomeScreen> {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => RestaurantScreen(
+              builder: (_) =>
+                  RestaurantScreen(
                 restauranteId: id,
-                nome: nomeRestaurante(
+                nome:
+                    nomeRestaurante(
                   restaurante,
                 ),
-                descricao: restaurante['descricao']?.toString() ??
-                    categoriaRestaurante(
-                      restaurante,
-                    ),
-                avaliacao: avaliacaoRestaurante(
+                descricao:
+                    restaurante[
+                                'descricao']
+                            ?.toString() ??
+                        categoriaRestaurante(
+                          restaurante,
+                        ),
+                avaliacao:
+                    avaliacaoRestaurante(
                   restaurante,
                 ),
               ),
@@ -2678,7 +2642,8 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
         child: Padding(
-          padding: const EdgeInsets.all(
+          padding:
+              const EdgeInsets.all(
             14,
           ),
           child: Row(
@@ -2686,12 +2651,12 @@ class _HomeScreenState extends State<HomeScreen> {
               _imagemRestaurante(
                 restaurante,
               ),
-              const SizedBox(
-                width: 14,
-              ),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
                   children: [
                     Row(
                       children: [
@@ -2701,129 +2666,175 @@ class _HomeScreenState extends State<HomeScreen> {
                               restaurante,
                             ),
                             maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.black,
+                            overflow:
+                                TextOverflow
+                                    .ellipsis,
+                            style:
+                                const TextStyle(
+                              color:
+                                  Colors.black,
                               fontSize: 17,
-                              fontWeight: FontWeight.bold,
+                              fontWeight:
+                                  FontWeight
+                                      .bold,
                             ),
                           ),
                         ),
                         if (destaque)
                           Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
+                            padding:
+                                const EdgeInsets
+                                    .symmetric(
+                              horizontal:
+                                  8,
                               vertical: 4,
                             ),
-                            decoration: BoxDecoration(
-                              color: laranja,
-                              borderRadius: BorderRadius.circular(
+                            decoration:
+                                BoxDecoration(
+                              color:
+                                  laranja,
+                              borderRadius:
+                                  BorderRadius
+                                      .circular(
                                 20,
                               ),
                             ),
-                            child: const Text(
+                            child:
+                                const Text(
                               'DESTAQUE',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
+                              style:
+                                  TextStyle(
+                                color:
+                                    Colors.white,
+                                fontSize:
+                                    10,
+                                fontWeight:
+                                    FontWeight
+                                        .bold,
                               ),
                             ),
                           ),
                       ],
                     ),
-                    const SizedBox(
-                      height: 6,
-                    ),
+                    const SizedBox(height: 6),
                     Text(
                       categoriaRestaurante(
                         restaurante,
                       ),
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: const Color.fromARGB(255, 7, 1, 1),
+                      overflow:
+                          TextOverflow
+                              .ellipsis,
+                      style:
+                          const TextStyle(
+                        color: Color
+                            .fromARGB(
+                          255,
+                          7,
+                          1,
+                          1,
+                        ),
                         fontSize: 13,
                       ),
                     ),
-                    const SizedBox(
-                      height: 8,
-                    ),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         const Icon(
                           Icons.star,
                           size: 16,
-                          color: Colors.orange,
+                          color:
+                              Colors.orange,
                         ),
                         const SizedBox(
-                          width: 3,
-                        ),
+                            width: 3),
                         Text(
                           avaliacaoRestaurante(
                             restaurante,
                           ),
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontWeight: FontWeight.bold,
+                          style:
+                              const TextStyle(
+                            color:
+                                Colors.black,
+                            fontWeight:
+                                FontWeight
+                                    .bold,
                           ),
                         ),
                         const SizedBox(
-                          width: 12,
-                        ),
+                            width: 12),
                         Icon(
-                          aberto ? Icons.check_circle : Icons.schedule,
+                          aberto
+                              ? Icons
+                                  .check_circle
+                              : Icons.schedule,
                           size: 16,
-                          color: aberto ? Colors.green : Colors.red,
+                          color: aberto
+                              ? Colors.green
+                              : Colors.red,
                         ),
                         const SizedBox(
-                          width: 4,
-                        ),
+                            width: 4),
                         Text(
-                          aberto ? 'Aberto' : 'Fechado',
-                          style: TextStyle(
-                            color: aberto ? Colors.green : Colors.red,
-                            fontWeight: FontWeight.bold,
+                          aberto
+                              ? 'Aberto'
+                              : 'Fechado',
+                          style:
+                              TextStyle(
+                            color: aberto
+                                ? Colors.green
+                                : Colors.red,
+                            fontWeight:
+                                FontWeight
+                                    .bold,
                             fontSize: 12,
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(
-                      height: 8,
-                    ),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         const Icon(
-                          Icons.timer_outlined,
+                          Icons
+                              .timer_outlined,
                           size: 15,
                         ),
                         const SizedBox(
-                          width: 3,
-                        ),
+                            width: 3),
                         Flexible(
                           child: Text(
-                            tempoEntrega(restaurante),
+                            tempoEntrega(
+                              restaurante,
+                            ),
                             maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: Colors.black,
+                            overflow:
+                                TextOverflow
+                                    .ellipsis,
+                            style:
+                                const TextStyle(
+                              color:
+                                  Colors.black,
                               fontSize: 13,
-                              
-                              fontWeight: FontWeight.w500,
+                              fontWeight:
+                                  FontWeight
+                                      .w500,
                             ),
                           ),
                         ),
                         const SizedBox(
-                          width: 15,
-                        ),
+                            width: 15),
                         Text(
                           taxaEntrega(
                             restaurante,
                           ),
-                          style: const TextStyle(
-                            color: laranja,
-                            fontWeight: FontWeight.bold,
+                          style:
+                              const TextStyle(
+                            color:
+                                laranja,
+                            fontWeight:
+                                FontWeight
+                                    .bold,
                           ),
                         ),
                       ],
@@ -2845,22 +2856,27 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _imagemRestaurante(
     Map<String, dynamic> restaurante,
   ) {
-    final imagem = restaurante['imagem'] ??
-        restaurante['logo'] ??
-        restaurante['foto'] ??
-        restaurante['imagemUrl'] ??
-        restaurante['logoUrl'];
+    final imagem =
+        restaurante['imagem'] ??
+            restaurante['logo'] ??
+            restaurante['foto'] ??
+            restaurante['imagemUrl'] ??
+            restaurante['logoUrl'];
 
-    if (imagem != null && imagem.toString().trim().isNotEmpty) {
+    if (imagem != null &&
+        imagem.toString().trim().isNotEmpty) {
       return Container(
         width: 90,
         height: 90,
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(
+        decoration:
+            BoxDecoration(
+          borderRadius:
+              BorderRadius.circular(
             18,
           ),
         ),
-        clipBehavior: Clip.antiAlias,
+        clipBehavior:
+            Clip.antiAlias,
         child: Image.network(
           imagem.toString(),
           fit: BoxFit.cover,
@@ -2882,11 +2898,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       width: 90,
       height: 90,
-      decoration: BoxDecoration(
-        color: const Color(
-          0xFFFFEADB,
-        ),
-        borderRadius: BorderRadius.circular(
+      decoration:
+          BoxDecoration(
+        color:
+            const Color(0xFFFFEADB),
+        borderRadius:
+            BorderRadius.circular(
           18,
         ),
       ),
@@ -2903,16 +2920,18 @@ class _HomeScreenState extends State<HomeScreen> {
   // ============================================================
 
   Widget _nenhumRestaurante() {
-    final busca = buscaController.text.trim();
+    final busca =
+        buscaController.text.trim();
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(
-        30,
-      ),
-      decoration: BoxDecoration(
+      padding:
+          const EdgeInsets.all(30),
+      decoration:
+          BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(
+        borderRadius:
+            BorderRadius.circular(
           20,
         ),
       ),
@@ -2920,40 +2939,46 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           Icon(
             busca.isEmpty
-                ? Icons.store_mall_directory_outlined
+                ? Icons
+                    .store_mall_directory_outlined
                 : Icons.search_off,
             size: 55,
             color: Colors.grey,
           ),
-          const SizedBox(
-            height: 12,
-          ),
+          const SizedBox(height: 12),
           Text(
             busca.isEmpty
                 ? 'Nenhum restaurante disponível no momento.'
                 : 'Nenhum restaurante encontrado para "$busca".',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.black54,
-              fontWeight: FontWeight.w600,
+            textAlign:
+                TextAlign.center,
+            style:
+                const TextStyle(
+              color:
+                  Colors.black54,
+              fontWeight:
+                  FontWeight.w600,
             ),
           ),
-          const SizedBox(
-            height: 15,
-          ),
+          const SizedBox(height: 15),
           OutlinedButton.icon(
             onPressed: () {
               if (busca.isEmpty) {
                 carregarRestaurantes();
               } else {
-                buscaController.clear();
+                buscaController
+                    .clear();
               }
             },
             icon: Icon(
-              busca.isEmpty ? Icons.refresh : Icons.close,
+              busca.isEmpty
+                  ? Icons.refresh
+                  : Icons.close,
             ),
             label: Text(
-              busca.isEmpty ? 'Atualizar' : 'Limpar busca',
+              busca.isEmpty
+                  ? 'Atualizar'
+                  : 'Limpar busca',
             ),
           ),
         ],
@@ -2968,12 +2993,13 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _erroCard() {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(
-        25,
-      ),
-      decoration: BoxDecoration(
+      padding:
+          const EdgeInsets.all(25),
+      decoration:
+          BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(
+        borderRadius:
+            BorderRadius.circular(
           20,
         ),
       ),
@@ -2984,30 +3010,35 @@ class _HomeScreenState extends State<HomeScreen> {
             size: 50,
             color: Colors.grey,
           ),
-          const SizedBox(
-            height: 10,
-          ),
+          const SizedBox(height: 10),
           const Text(
             'Não foi possível carregar os restaurantes.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontWeight: FontWeight.w600,
-              color: Colors.black54,
+            textAlign:
+                TextAlign.center,
+            style:
+                TextStyle(
+              fontWeight:
+                  FontWeight.w600,
+              color:
+                  Colors.black54,
             ),
           ),
-          const SizedBox(
-            height: 15,
-          ),
+          const SizedBox(height: 15),
           ElevatedButton.icon(
-            onPressed: carregarRestaurantes,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: laranja,
-              foregroundColor: Colors.white,
+            onPressed:
+                carregarRestaurantes,
+            style:
+                ElevatedButton.styleFrom(
+              backgroundColor:
+                  laranja,
+              foregroundColor:
+                  Colors.white,
             ),
             icon: const Icon(
               Icons.refresh,
             ),
-            label: const Text(
+            label:
+                const Text(
               'Tentar novamente',
             ),
           ),
@@ -3032,7 +3063,9 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return double.tryParse(
-          valor.toString().replaceAll(
+          valor
+              .toString()
+              .replaceAll(
                 ',',
                 '.',
               ),
@@ -3061,3 +3094,4 @@ class _HomeScreenState extends State<HomeScreen> {
         0;
   }
 }
+

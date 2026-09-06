@@ -1,3 +1,4 @@
+
 const Restaurant = require("../models/restaurant");
 
 // ==================================================
@@ -31,6 +32,14 @@ exports.create = async (req, res) => {
 
             tempoEntrega:
                 req.body.tempoEntrega || "",
+
+            // ==================================================
+            // CAPA DO RESTAURANTE
+            // ==================================================
+            // Pode ser uma URL ou caminho da imagem.
+            // Será armazenada dentro do JSONB "dados".
+            capa:
+                req.body.capa || null,
 
             status:
                 "ABERTO",
@@ -951,3 +960,4 @@ async function carregarPromocoes() {
         return promocoes;
     }
 }
+
