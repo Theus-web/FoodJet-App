@@ -57,13 +57,6 @@ router.put(
 // EXCLUIR CONTA
 // DELETE /api/restaurants/:id
 // ==================================================
-//
-// LGPD:
-//
-// Permite que o restaurante solicite a exclusão
-// da própria conta.
-//
-// ==================================================
 
 router.delete(
     "/:id",
@@ -90,9 +83,24 @@ router.delete(
     restaurantController.deleteCapa
 );
 
+// ==================================================
+// UPLOAD DA LOGO
+// POST /api/restaurants/:id/logo
+// ==================================================
+
+router.post(
+    "/:id/logo",
+    restaurantController.uploadLogo
+);
+
+// ==================================================
+// REMOVER LOGO
+// DELETE /api/restaurants/:id/logo
+// ==================================================
+
 router.delete(
-    "/:id",
-    restaurantController.delete
+    "/:id/logo",
+    restaurantController.deleteLogo
 );
 
 module.exports = router;

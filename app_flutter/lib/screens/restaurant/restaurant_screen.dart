@@ -39,7 +39,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   static const Color laranja = Color(0xFFF97316);
   static const Color laranjaEscuro = Color(0xFFEA580C);
   static const Color fundo = Color(0xFFF6F7F9);
-   
 
   final List<CartItem> carrinho = [];
 
@@ -172,16 +171,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         'restauranteId': restauranteId,
         '_id': restauranteId,
         'restaurantId': restauranteId,
-
         'nome': widget.nome,
         'descricao': widget.descricao,
         'avaliacao': widget.avaliacao,
-
         'logo': logoRestaurante,
         'logoBase64': logoBase64,
         'imagem': logoRestaurante,
         'imagemUrl': logoRestaurante,
-
         'tipo': 'restaurante',
         'categoria': 'restaurante',
       };
@@ -285,10 +281,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       return valor != 0;
     }
 
-    final texto = valor
-        .toString()
-        .trim()
-        .toLowerCase();
+    final texto = valor.toString().trim().toLowerCase();
 
     if ([
       'true',
@@ -323,6 +316,73 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
+  // RESTAURANTE DA RESPOSTA DA API
+  // ============================================================
+
+  Map<String, dynamic> _extrairRestaurante(
+    dynamic dados,
+  ) {
+    if (dados is! Map) {
+      return {};
+    }
+
+    Map<String, dynamic> restaurante;
+
+    if (dados['restaurante'] is Map) {
+      restaurante = Map<String, dynamic>.from(
+        dados['restaurante'] as Map,
+      );
+    } else if (dados['restaurant'] is Map) {
+      restaurante = Map<String, dynamic>.from(
+        dados['restaurant'] as Map,
+      );
+    } else if (dados['data'] is Map) {
+      restaurante = Map<String, dynamic>.from(
+        dados['data'] as Map,
+      );
+    } else {
+      restaurante = Map<String, dynamic>.from(
+        dados,
+      );
+    }
+
+    // ----------------------------------------------------------
+    // IMPORTANTE:
+    // Algumas respostas podem devolver:
+    //
+    // {
+    //   "id": "...",
+    //   "dados": {
+    //      "logo": "...",
+    //      "capa": "..."
+    //   }
+    // }
+    //
+    // Copiamos os campos de "dados" para o nível principal,
+    // sem sobrescrever valores que já existam.
+    // ----------------------------------------------------------
+
+    if (restaurante['dados'] is Map) {
+      final dadosInternos = Map<String, dynamic>.from(
+        restaurante['dados'] as Map,
+      );
+
+      for (final entry in dadosInternos.entries) {
+        restaurante.putIfAbsent(
+          entry.key,
+          () => entry.value,
+        );
+      }
+
+      debugPrint(
+        '📦 CAMPOS ENCONTRADOS DENTRO DE "dados"',
+      );
+    }
+
+    return restaurante;
+  }
+
+  // ============================================================
   // STATUS RESTAURANTE + FOTO REAL
   // ============================================================
 
@@ -345,24 +405,31 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         '${Api.baseUrl}/restaurants/$restauranteId',
       );
 
-      final resposta = await http
-          .get(
-            uri,
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-            },
-          )
-          .timeout(
-            const Duration(seconds: 10),
-          );
+      debugPrint('========================================');
+      debugPrint('BUSCANDO RESTAURANTE');
+      debugPrint('URL: $uri');
+      debugPrint('ID: $restauranteId');
+      debugPrint('========================================');
+
+      final resposta = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(
+        const Duration(seconds: 10),
+      );
 
       debugPrint(
         'STATUS RESTAURANTE: ${resposta.statusCode}',
       );
 
-      if (resposta.statusCode < 200 ||
-          resposta.statusCode >= 300) {
+      if (resposta.statusCode < 200 || resposta.statusCode >= 300) {
+        debugPrint(
+          '❌ ERRO HTTP RESTAURANTE: ${resposta.body}',
+        );
+
         if (!mounted) return;
 
         setState(() {
@@ -374,36 +441,23 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
       final dados = jsonDecode(resposta.body);
 
-      if (dados is! Map) {
-        if (!mounted) return;
+      final restaurante = _extrairRestaurante(dados);
 
-        setState(() {
-          restauranteOnline = false;
-          carregandoStatus = false;
-        });
+      debugPrint(
+        '📦 DADOS DO RESTAURANTE RECEBIDOS',
+      );
 
-        return;
-      }
+      debugPrint(
+        'ID API: ${restaurante['id']}',
+      );
 
-      Map<String, dynamic> restaurante;
+      debugPrint(
+        'LOGO API: ${restaurante['logo']}',
+      );
 
-      if (dados['restaurante'] is Map) {
-        restaurante = Map<String, dynamic>.from(
-          dados['restaurante'] as Map,
-        );
-      } else if (dados['restaurant'] is Map) {
-        restaurante = Map<String, dynamic>.from(
-          dados['restaurant'] as Map,
-        );
-      } else if (dados['data'] is Map) {
-        restaurante = Map<String, dynamic>.from(
-          dados['data'] as Map,
-        );
-      } else {
-        restaurante = Map<String, dynamic>.from(
-          dados,
-        );
-      }
+      debugPrint(
+        'CAPA API: ${restaurante['capa']}',
+      );
 
       // ========================================================
       // BUSCAR FOTO REAL DO RESTAURANTE
@@ -411,22 +465,38 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
       String? logo;
 
+      // ========================================================
+// BUSCAR LOGO DO RESTAURANTE (TODOS OS CAMPOS)
+// ========================================================
+
       final possiveisLogos = [
-        restaurante['logo'],
-        restaurante['logoUrl'],
-        restaurante['imagem'],
-        restaurante['imagemUrl'],
-        restaurante['foto'],
-        restaurante['fotoUrl'],
-        restaurante['fotoRestaurante'],
-        restaurante['imagemRestaurante'],
-        restaurante['imagem_restaurante'],
-        restaurante['foto_restaurante'],
-      ];
+  restaurante['logo'],
+  restaurante['logoUrl'],
+  restaurante['logo_url'],
+
+  restaurante['imagem'],
+  restaurante['imagemUrl'],
+  restaurante['imagem_url'],
+
+  restaurante['foto'],
+  restaurante['fotoUrl'],
+  restaurante['foto_url'],
+
+  restaurante['fotoPerfil'],
+  restaurante['foto_perfil'],
+
+  restaurante['imagemPerfil'],
+  restaurante['imagem_perfil'],
+
+  restaurante['fotoRestaurante'],
+  restaurante['foto_restaurante'],
+
+  restaurante['imagemRestaurante'],
+  restaurante['imagem_restaurante'],
+];
 
       for (final valor in possiveisLogos) {
-        if (valor != null &&
-            valor.toString().trim().isNotEmpty) {
+        if (valor != null && valor.toString().trim().isNotEmpty) {
           logo = valor.toString().trim();
 
           debugPrint(
@@ -435,6 +505,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
           break;
         }
+      }
+
+      if (logo == null) {
+        debugPrint(
+          '⚠️ NENHUMA FOTO/LOGO ENCONTRADA NA API',
+        );
       }
 
       // ========================================================
@@ -455,8 +531,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       ];
 
       for (final valor in possiveisCapas) {
-        if (valor != null &&
-            valor.toString().trim().isNotEmpty) {
+        if (valor != null && valor.toString().trim().isNotEmpty) {
           capa = valor.toString().trim();
 
           debugPrint(
@@ -465,6 +540,12 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
           break;
         }
+      }
+
+      if (capa == null) {
+        debugPrint(
+          '⚠️ NENHUMA CAPA ENCONTRADA NA API',
+        );
       }
 
       // ========================================================
@@ -483,8 +564,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       ];
 
       for (final valor in possiveisBase64) {
-        if (valor != null &&
-            valor.toString().trim().isNotEmpty) {
+        if (valor != null && valor.toString().trim().isNotEmpty) {
           base64Logo = valor.toString().trim();
 
           debugPrint(
@@ -496,11 +576,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       }
 
       final status =
-          restaurante['status']
-                  ?.toString()
-                  .trim()
-                  .toUpperCase() ??
-              '';
+          restaurante['status']?.toString().trim().toUpperCase() ?? '';
 
       final online = _converterBooleano(
         restaurante['online'],
@@ -539,17 +615,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         if (statusFechado) {
           disponivel = false;
         } else {
-          disponivel =
-              statusAberto &&
-              online &&
-              aberto &&
-              ativo;
+          disponivel = statusAberto && online && aberto && ativo;
         }
       } else {
-        disponivel =
-            online &&
-            aberto &&
-            ativo;
+        disponivel = online && aberto && ativo;
       }
 
       if (!mounted) return;
@@ -560,22 +629,40 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         restauranteOnline = disponivel;
         carregandoStatus = false;
 
-        if (logo != null) {
-          logoRestaurante = logo;
+        // API tem prioridade
+        if (logo != null && logo.trim().isNotEmpty) {
+          logoRestaurante = logo.trim();
+
+          debugPrint("✅ LOGO SALVA DA API: $logoRestaurante");
         }
 
         if (base64Logo != null) {
           logoBase64 = base64Logo;
         }
 
+        // API tem prioridade
         if (capa != null) {
           capaRestaurante = capa;
         }
       });
 
-      if (estavaOnline &&
-          !disponivel &&
-          carrinho.isNotEmpty) {
+      debugPrint('========================================');
+      debugPrint('IMAGENS ATUALIZADAS NO CLIENTE');
+      debugPrint(
+        'LOGO RESTAURANTE: $logoRestaurante',
+      );
+      debugPrint(
+        'CAPA RESTAURANTE: $capaRestaurante',
+      );
+      debugPrint(
+        'URL LOGO FINAL: ${logoRestaurante != null ? _urlLogo(logoRestaurante!) : 'NENHUMA'}',
+      );
+      debugPrint(
+        'URL CAPA FINAL: ${_urlCapa() ?? 'NENHUMA'}',
+      );
+      debugPrint('========================================');
+
+      if (estavaOnline && !disponivel && carrinho.isNotEmpty) {
         setState(() {
           carrinho.clear();
         });
@@ -612,8 +699,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     });
 
     try {
-      final restauranteId =
-          widget.restauranteId.trim();
+      final restauranteId = widget.restauranteId.trim();
 
       if (restauranteId.isEmpty) {
         throw Exception(
@@ -625,85 +711,69 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         '${Api.baseUrl}/products',
       );
 
-      final resposta = await http
-          .get(
-            uri,
-            headers: {
-              'Accept': 'application/json',
-              'Content-Type': 'application/json',
-            },
-          )
-          .timeout(
-            const Duration(seconds: 15),
-          );
+      final resposta = await http.get(
+        uri,
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
+      ).timeout(
+        const Duration(seconds: 15),
+      );
 
       debugPrint(
         'PRODUTOS STATUS: ${resposta.statusCode}',
       );
 
-      if (resposta.statusCode < 200 ||
-          resposta.statusCode >= 300) {
+      if (resposta.statusCode < 200 || resposta.statusCode >= 300) {
         throw Exception(
           'Erro HTTP ${resposta.statusCode}',
         );
       }
 
-      final resultado =
-          jsonDecode(resposta.body);
+      final resultado = jsonDecode(resposta.body);
 
       List<dynamic> listaProdutos;
 
       if (resultado is List) {
         listaProdutos = resultado;
-      } else if (resultado is Map &&
-          resultado['produtos'] is List) {
-        listaProdutos =
-            resultado['produtos'] as List;
-      } else if (resultado is Map &&
-          resultado['products'] is List) {
-        listaProdutos =
-            resultado['products'] as List;
-      } else if (resultado is Map &&
-          resultado['data'] is List) {
-        listaProdutos =
-            resultado['data'] as List;
+      } else if (resultado is Map && resultado['produtos'] is List) {
+        listaProdutos = resultado['produtos'] as List;
+      } else if (resultado is Map && resultado['products'] is List) {
+        listaProdutos = resultado['products'] as List;
+      } else if (resultado is Map && resultado['data'] is List) {
+        listaProdutos = resultado['data'] as List;
       } else {
         throw Exception(
           'Formato de resposta inválido.',
         );
       }
 
-      final produtosApi =
-          <Map<String, dynamic>>[];
+      final produtosApi = <Map<String, dynamic>>[];
 
       for (final item in listaProdutos) {
         if (item is! Map) continue;
 
-        final produto =
-            Map<String, dynamic>.from(item);
+        final produto = Map<String, dynamic>.from(item);
 
-        final idProduto =
-            produto['restauranteId'] ??
+        final idProduto = produto['restauranteId'] ??
             produto['restaurantId'] ??
             produto['restaurante_id'];
 
         if (idProduto == null) continue;
 
-        if (idProduto.toString().trim() !=
-            restauranteId) {
+        if (idProduto.toString().trim() != restauranteId) {
           continue;
         }
 
-        final disponivel =
-            _converterBooleano(
+        final disponivel = _converterBooleano(
           produto['disponivel'],
           padrao: true,
         );
 
         if (!disponivel) continue;
 
-        produto['restauranteId'] =
-            idProduto.toString();
+        produto['restauranteId'] = idProduto.toString();
 
         produtosApi.add(produto);
       }
@@ -729,8 +799,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
       setState(() {
         carregandoProdutos = false;
-        erroProdutos =
-            'Não foi possível carregar o cardápio.';
+        erroProdutos = 'Não foi possível carregar o cardápio.';
       });
     }
   }
@@ -743,13 +812,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     final conjunto = <String>{};
 
     for (final produto in produtos) {
-      final categoria =
-          produto['categoria']
-              ?.toString()
-              .trim();
+      final categoria = produto['categoria']?.toString().trim();
 
-      if (categoria != null &&
-          categoria.isNotEmpty) {
+      if (categoria != null && categoria.isNotEmpty) {
         conjunto.add(categoria);
       }
     }
@@ -758,8 +823,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
     lista.sort(
       (a, b) => a.toLowerCase().compareTo(
-        b.toLowerCase(),
-      ),
+            b.toLowerCase(),
+          ),
     );
 
     return [
@@ -768,8 +833,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     ];
   }
 
-  List<Map<String, dynamic>>
-      get produtosFiltrados {
+  List<Map<String, dynamic>> get produtosFiltrados {
     if (categoriaSelecionada == 'Todos') {
       return produtos;
     }
@@ -777,13 +841,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return produtos
         .where(
           (produto) =>
-              produto['categoria']
-                  ?.toString()
-                  .trim()
-                  .toLowerCase() ==
-              categoriaSelecionada
-                  .trim()
-                  .toLowerCase(),
+              produto['categoria']?.toString().trim().toLowerCase() ==
+              categoriaSelecionada.trim().toLowerCase(),
         )
         .toList();
   }
@@ -806,8 +865,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       return;
     }
 
-    final restauranteId =
-        widget.restauranteId.trim();
+    final restauranteId = widget.restauranteId.trim();
 
     if (restauranteId.isEmpty) {
       _mensagem(
@@ -818,11 +876,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     }
 
     setState(() {
-      final index =
-          carrinho.indexWhere(
-        (item) =>
-            item.produtoId == produtoId &&
-            produtoId != null,
+      final index = carrinho.indexWhere(
+        (item) => item.produtoId == produtoId && produtoId != null,
       );
 
       if (index >= 0) {
@@ -852,8 +907,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   void _mensagem(
     String texto, {
     bool vermelho = false,
-    Duration duracao =
-        const Duration(seconds: 1),
+    Duration duracao = const Duration(seconds: 1),
   }) {
     if (!mounted) return;
 
@@ -862,18 +916,11 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(texto),
-          backgroundColor:
-              vermelho
-                  ? Colors.redAccent
-                  : laranja,
-          behavior:
-              SnackBarBehavior.floating,
-          margin:
-              const EdgeInsets.all(16),
-          shape:
-              RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(18),
+          backgroundColor: vermelho ? Colors.redAccent : laranja,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
           ),
           duration: duracao,
         ),
@@ -887,19 +934,14 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   double get totalCarrinho {
     return carrinho.fold(
       0,
-      (total, item) =>
-          total +
-          item.preco *
-              item.quantidade,
+      (total, item) => total + item.preco * item.quantidade,
     );
   }
 
   int get quantidadeItens {
     return carrinho.fold(
       0,
-      (total, item) =>
-          total +
-          item.quantidade,
+      (total, item) => total + item.quantidade,
     );
   }
 
@@ -912,8 +954,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       return;
     }
 
-    final restauranteId =
-        widget.restauranteId.trim();
+    final restauranteId = widget.restauranteId.trim();
 
     if (restauranteId.isEmpty) {
       _mensagem(
@@ -928,8 +969,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       MaterialPageRoute(
         builder: (_) => CartScreen(
           itens: carrinho,
-          restauranteId:
-              restauranteId,
+          restauranteId: restauranteId,
         ),
       ),
     ).then((_) {
@@ -948,8 +988,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       return valor.toDouble();
     }
 
-    final texto =
-        valor?.toString().trim() ?? '';
+    final texto = valor?.toString().trim() ?? '';
 
     if (texto.isEmpty) {
       return 0;
@@ -964,9 +1003,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           .replaceAll('.', '')
           .replaceAll(',', '.');
     } else {
-      normalizado = texto
-          .replaceAll('R\$', '')
-          .replaceAll(' ', '');
+      normalizado = texto.replaceAll('R\$', '').replaceAll(' ', '');
     }
 
     return double.tryParse(
@@ -980,40 +1017,19 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
-  // URL IMAGEM
+  // URL IMAGEM PRODUTO
   // ============================================================
 
   String _urlImagemProduto(
     String imagem,
   ) {
-    if (imagem.startsWith('http://') ||
-        imagem.startsWith('https://')) {
-      return imagem;
-    }
-
-    final baseUrl =
-        Api.baseUrl.replaceFirst(
-      RegExp(r'/api/?$'),
-      '',
-    );
-
-    if (imagem.startsWith('/')) {
-      return '$baseUrl$imagem';
-    }
-
-    return '$baseUrl/$imagem';
-  }
-
-  String _urlLogo(String imagem) {
     final valor = imagem.trim();
 
-    if (valor.startsWith('http://') ||
-        valor.startsWith('https://')) {
+    if (valor.startsWith('http://') || valor.startsWith('https://')) {
       return valor;
     }
 
-    final baseUrl =
-        Api.baseUrl.replaceFirst(
+    final baseUrl = Api.baseUrl.replaceFirst(
       RegExp(r'/api/?$'),
       '',
     );
@@ -1025,22 +1041,67 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return '$baseUrl/$valor';
   }
 
-  String? _urlCapa() {
-    final imagemHome = widget.capa?.trim();
-    final imagemApi = capaRestaurante?.trim();
+  // ============================================================
+  // URL LOGO
+  // ============================================================
 
-    final imagemFinal =
-        imagemHome != null && imagemHome.isNotEmpty
-            ? imagemHome
-            : (imagemApi != null && imagemApi.isNotEmpty
-                ? imagemApi
-                : null);
+  String _urlLogo(String imagem) {
+    final valor = imagem.trim();
 
-    if (imagemFinal == null) {
-      return null;
+    if (valor.isEmpty) {
+      return '';
     }
 
-    return _urlLogo(imagemFinal);
+    if (valor.startsWith('http://') || valor.startsWith('https://')) {
+      return valor;
+    }
+
+    final baseUrl = Api.baseUrl.replaceFirst(
+      RegExp(r'/api/?$'),
+      '',
+    );
+
+    if (valor.startsWith('/')) {
+      return '$baseUrl$valor';
+    }
+
+    return '$baseUrl/$valor';
+  }
+
+  // ============================================================
+  // URL CAPA
+  // ============================================================
+
+  String? _urlCapa() {
+    // API primeiro.
+    // Widget somente como fallback.
+
+    final candidatos = <String?>[
+      capaRestaurante,
+      widget.capa,
+    ];
+
+    for (final valor in candidatos) {
+      if (valor == null) continue;
+
+      final texto = valor.trim();
+
+      if (texto.isEmpty) continue;
+
+      final url = _urlLogo(texto);
+
+      debugPrint(
+        '🖼️ CAPA CLIENTE: $url',
+      );
+
+      return url;
+    }
+
+    debugPrint(
+      '🖼️ CAPA CLIENTE: nenhuma capa encontrada',
+    );
+
+    return null;
   }
 
   // ============================================================
@@ -1048,22 +1109,18 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   // ============================================================
 
   Widget? _logoBase64Widget() {
-    if (logoBase64 == null ||
-        logoBase64!.trim().isEmpty) {
+    if (logoBase64 == null || logoBase64!.trim().isEmpty) {
       return null;
     }
 
     try {
-      String base64String =
-          logoBase64!.trim();
+      String base64String = logoBase64!.trim();
 
       if (base64String.contains(',')) {
-        base64String =
-            base64String.split(',').last;
+        base64String = base64String.split(',').last;
       }
 
-      final bytes =
-          base64Decode(base64String);
+      final bytes = base64Decode(base64String);
 
       return Image.memory(
         bytes,
@@ -1087,47 +1144,42 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 // LOGO / FOTO DO RESTAURANTE
 // ============================================================
 
-Widget _logoRestaurante() {
-  // Primeiro usa a imagem que veio do HOME
-  final imagemHome = widget.imagem?.trim();
+  Widget _logoRestaurante() {
+    // A API sempre tem prioridade sobre a imagem da tela anterior.
+    final candidatos = <String?>[
+      logoRestaurante,
+      widget.imagem,
+    ];
 
-  // Depois usa a imagem que veio da API
-  final imagemApi = logoRestaurante?.trim();
+    String? imagemFinal;
 
-  // Prioridade:
-  // 1. Imagem do Home
-  // 2. Imagem carregada da API
-  // 3. Base64
-  // 4. Ícone padrão
+    for (final valor in candidatos) {
+      if (valor == null) continue;
 
-  String? imagemFinal;
+      final texto = valor.trim();
 
-  if (imagemHome != null && imagemHome.isNotEmpty) {
-    imagemFinal = imagemHome;
-  } else if (imagemApi != null && imagemApi.isNotEmpty) {
-    imagemFinal = imagemApi;
-  }
+      if (texto.isEmpty) continue;
 
-  Widget imagem;
+      imagemFinal = texto;
+      break;
+    }
 
-  if (imagemFinal != null) {
-    imagem = Image.network(
-      _urlLogo(imagemFinal),
-      width: 100,
-      height: 100,
-      fit: BoxFit.cover,
-      loadingBuilder: (
-        context,
-        child,
-        loadingProgress,
-      ) {
-        if (loadingProgress == null) {
-          return child;
-        }
+    Widget conteudo;
 
-        return Container(
-          color: Colors.white,
-          child: const Center(
+    if (imagemFinal != null) {
+      final url = _urlLogo(imagemFinal);
+
+      debugPrint("🟠 LOGO CLIENTE: $url");
+
+      conteudo = Image.network(
+        url,
+        fit: BoxFit.cover,
+        width: 100,
+        height: 100,
+        loadingBuilder: (context, child, progress) {
+          if (progress == null) return child;
+
+          return const Center(
             child: SizedBox(
               width: 24,
               height: 24,
@@ -1136,63 +1188,56 @@ Widget _logoRestaurante() {
                 color: laranja,
               ),
             ),
+          );
+        },
+        errorBuilder: (context, error, stackTrace) {
+          debugPrint("❌ ERRO AO CARREGAR LOGO");
+          debugPrint("URL: $url");
+          debugPrint("ERRO: $error");
+
+          // Se a URL falhar, tenta Base64.
+          return _logoBase64Widget() ?? _iconeLogo();
+        },
+      );
+    } else {
+      conteudo = _logoBase64Widget() ?? _iconeLogo();
+    }
+
+    return Container(
+      width: 100,
+      height: 100,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.20),
+            blurRadius: 28,
+            offset: const Offset(0, 12),
           ),
-        );
-      },
-      errorBuilder: (
-        context,
-        error,
-        stackTrace,
-      ) {
-        // Se a imagem do Home falhar,
-        // tenta Base64 antes do ícone.
-        return _logoBase64Widget() ??
-            _iconeLogo();
-      },
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(30),
+        child: conteudo,
+      ),
     );
-  } else {
-    imagem =
-        _logoBase64Widget() ??
-        _iconeLogo();
   }
 
-  return Container(
-    width: 100,
-    height: 100,
-    decoration: BoxDecoration(
+  Widget _iconeLogo() {
+    return Container(
+      width: 100,
+      height: 100,
       color: Colors.white,
-      borderRadius: BorderRadius.circular(30),
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black.withValues(
-            alpha: 0.20,
-          ),
-          blurRadius: 28,
-          offset: const Offset(0, 12),
+      child: const Center(
+        child: Icon(
+          Icons.restaurant_rounded,
+          color: laranja,
+          size: 48,
         ),
-      ],
-    ),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(30),
-      child: imagem,
-    ),
-  );
-}
-
-Widget _iconeLogo() {
-  return Container(
-    width: 100,
-    height: 100,
-    color: Colors.white,
-    child: const Center(
-      child: Icon(
-        Icons.restaurant_rounded,
-        color: laranja,
-        size: 48,
       ),
-    ),
-  );
-}
+    );
+  }
 
   // ============================================================
   // BUILD
@@ -1212,8 +1257,7 @@ Widget _iconeLogo() {
           ]);
         },
         child: CustomScrollView(
-          physics:
-              const AlwaysScrollableScrollPhysics(),
+          physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverAppBar(
               expandedHeight: 410,
@@ -1223,8 +1267,7 @@ Widget _iconeLogo() {
               backgroundColor: laranja,
               foregroundColor: Colors.white,
               leading: _botaoHeader(
-                icon:
-                    Icons.arrow_back_ios_new_rounded,
+                icon: Icons.arrow_back_ios_new_rounded,
                 onPressed: () {
                   Navigator.pop(context);
                 },
@@ -1233,26 +1276,18 @@ Widget _iconeLogo() {
                 _botaoHeaderFavorito(),
                 const SizedBox(width: 8),
               ],
-              flexibleSpace:
-                  FlexibleSpaceBar(
-                collapseMode:
-                    CollapseMode.parallax,
-                background:
-                    _cabecalhoRestaurante(),
+              flexibleSpace: FlexibleSpaceBar(
+                collapseMode: CollapseMode.parallax,
+                background: _cabecalhoRestaurante(),
               ),
             ),
-
-            if (!carregandoStatus &&
-                !restauranteOnline)
+            if (!carregandoStatus && !restauranteOnline)
               SliverToBoxAdapter(
-                child:
-                    _avisoRestauranteOffline(),
+                child: _avisoRestauranteOffline(),
               ),
-
             SliverToBoxAdapter(
               child: Padding(
-                padding:
-                    const EdgeInsets.fromLTRB(
+                padding: const EdgeInsets.fromLTRB(
                   18,
                   24,
                   18,
@@ -1266,37 +1301,29 @@ Widget _iconeLogo() {
                         style: TextStyle(
                           color: Colors.black,
                           fontSize: 25,
-                          fontWeight:
-                              FontWeight.w800,
+                          fontWeight: FontWeight.w800,
                           letterSpacing: -0.5,
                         ),
                       ),
                     ),
-                    if (produtos.isNotEmpty)
-                      _contadorProdutos(),
+                    if (produtos.isNotEmpty) _contadorProdutos(),
                   ],
                 ),
               ),
             ),
-
-            if (!carregandoProdutos &&
-                produtos.isNotEmpty)
+            if (!carregandoProdutos && produtos.isNotEmpty)
               SliverToBoxAdapter(
                 child: _categorias(),
               ),
-
             const SliverToBoxAdapter(
               child: SizedBox(height: 10),
             ),
-
             if (carregandoProdutos)
               const SliverToBoxAdapter(
                 child: Padding(
-                  padding:
-                      EdgeInsets.all(70),
+                  padding: EdgeInsets.all(70),
                   child: Center(
-                    child:
-                        CircularProgressIndicator(
+                    child: CircularProgressIndicator(
                       color: laranja,
                     ),
                   ),
@@ -1304,42 +1331,35 @@ Widget _iconeLogo() {
               )
             else if (erroProdutos != null)
               SliverToBoxAdapter(
-                child:
-                    _estadoErroProdutos(),
+                child: _estadoErroProdutos(),
               )
             else if (produtos.isEmpty)
               SliverToBoxAdapter(
-                child:
-                    _estadoVazioProdutos(),
+                child: _estadoVazioProdutos(),
               )
             else if (produtosFiltrados.isEmpty)
               SliverToBoxAdapter(
-                child:
-                    _estadoVazioCategoria(),
+                child: _estadoVazioCategoria(),
               )
             else
               SliverPadding(
-                padding:
-                    const EdgeInsets.fromLTRB(
+                padding: const EdgeInsets.fromLTRB(
                   16,
                   4,
                   16,
                   140,
                 ),
                 sliver: SliverList(
-                  delegate:
-                      SliverChildBuilderDelegate(
+                  delegate: SliverChildBuilderDelegate(
                     (
                       context,
                       index,
                     ) {
                       return produtoCard(
-                        produto:
-                            produtosFiltrados[index],
+                        produto: produtosFiltrados[index],
                       );
                     },
-                    childCount:
-                        produtosFiltrados.length,
+                    childCount: produtosFiltrados.length,
                   ),
                 ),
               ),
@@ -1347,12 +1367,8 @@ Widget _iconeLogo() {
         ),
       ),
       floatingActionButton:
-          quantidadeItens > 0 &&
-                  restauranteOnline
-              ? _botaoCarrinho()
-              : null,
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.centerFloat,
+          quantidadeItens > 0 && restauranteOnline ? _botaoCarrinho() : null,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
     );
   }
 
@@ -1362,39 +1378,30 @@ Widget _iconeLogo() {
 
   Widget _botaoHeaderFavorito() {
     return Container(
-      margin:
-          const EdgeInsets.symmetric(
+      margin: const EdgeInsets.symmetric(
         vertical: 8,
       ),
-      decoration:
-          BoxDecoration(
-        color:
-            Colors.black.withValues(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(
           alpha: 0.18,
         ),
-        shape:
-            BoxShape.circle,
+        shape: BoxShape.circle,
       ),
       child: Material(
         color: Colors.transparent,
         shape: const CircleBorder(),
         child: InkWell(
-          customBorder:
-              const CircleBorder(),
-          onTap: carregandoFavorito
-              ? null
-              : alternarFavorito,
+          customBorder: const CircleBorder(),
+          onTap: carregandoFavorito ? null : alternarFavorito,
           child: SizedBox(
             width: 48,
             height: 48,
             child: Center(
               child: AnimatedSwitcher(
-                duration:
-                    const Duration(
+                duration: const Duration(
                   milliseconds: 200,
                 ),
-                transitionBuilder:
-                    (
+                transitionBuilder: (
                   child,
                   animation,
                 ) {
@@ -1403,37 +1410,30 @@ Widget _iconeLogo() {
                     child: child,
                   );
                 },
-                child:
-                    carregandoFavorito
-                        ? const SizedBox(
-                            key: ValueKey(
-                              'loading',
-                            ),
-                            width: 20,
-                            height: 20,
-                            child:
-                                CircularProgressIndicator(
-                              strokeWidth: 2.5,
-                              valueColor:
-                                  AlwaysStoppedAnimation<
-                                      Color>(
-                                Colors.white,
-                              ),
-                            ),
-                          )
-                        : Icon(
-                            favorito
-                                ? Icons.favorite_rounded
-                                : Icons
-                                    .favorite_border_rounded,
-                            key: ValueKey(
-                              favorito,
-                            ),
-                            color: favorito
-                                ? Colors.redAccent
-                                : Colors.white,
-                            size: 25,
+                child: carregandoFavorito
+                    ? const SizedBox(
+                        key: ValueKey(
+                          'loading',
+                        ),
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2.5,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
                           ),
+                        ),
+                      )
+                    : Icon(
+                        favorito
+                            ? Icons.favorite_rounded
+                            : Icons.favorite_border_rounded,
+                        key: ValueKey(
+                          favorito,
+                        ),
+                        color: favorito ? Colors.redAccent : Colors.white,
+                        size: 25,
+                      ),
               ),
             ),
           ),
@@ -1467,16 +1467,50 @@ Widget _iconeLogo() {
           // ======================================================
           // CAPA DO RESTAURANTE
           // ======================================================
+
           if (urlCapa != null)
             Image.network(
               urlCapa,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+              loadingBuilder: (
+                context,
+                child,
+                loadingProgress,
+              ) {
+                if (loadingProgress == null) {
+                  return child;
+                }
+
+                return Container(
+                  color: laranja,
+                  child: const Center(
+                    child: CircularProgressIndicator(
+                      color: Colors.white,
+                    ),
+                  ),
+                );
+              },
+              errorBuilder: (
+                context,
+                error,
+                stackTrace,
+              ) {
+                debugPrint(
+                  '❌ ERRO AO CARREGAR CAPA: $urlCapa',
+                );
+
+                debugPrint(
+                  '❌ ERRO CAPA: $error',
+                );
+
+                return const SizedBox.shrink();
+              },
             ),
 
           // ======================================================
-          // GRADIENTE PARA GARANTIR LEITURA DO CONTEÚDO
+          // GRADIENTE PARA GARANTIR LEITURA
           // ======================================================
+
           Positioned.fill(
             child: Container(
               decoration: BoxDecoration(
@@ -1484,121 +1518,101 @@ Widget _iconeLogo() {
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                   colors: [
-                    Colors.black.withValues(alpha: 0.10),
-                    Colors.black.withValues(alpha: 0.18),
-                    Colors.black.withValues(alpha: 0.72),
+                    Colors.black.withValues(
+                      alpha: 0.10,
+                    ),
+                    Colors.black.withValues(
+                      alpha: 0.18,
+                    ),
+                    Colors.black.withValues(
+                      alpha: 0.72,
+                    ),
                   ],
                 ),
               ),
             ),
           ),
+
           Positioned(
             right: -70,
             top: 40,
             child: Container(
               width: 210,
               height: 210,
-              decoration:
-                  BoxDecoration(
-                color:
-                    Colors.white.withValues(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(
                   alpha: 0.08,
                 ),
-                shape:
-                    BoxShape.circle,
+                shape: BoxShape.circle,
               ),
             ),
           ),
+
           Positioned(
             left: -90,
             bottom: -70,
             child: Container(
               width: 230,
               height: 230,
-              decoration:
-                  BoxDecoration(
-                color:
-                    Colors.black.withValues(
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(
                   alpha: 0.07,
                 ),
-                shape:
-                    BoxShape.circle,
+                shape: BoxShape.circle,
               ),
             ),
           ),
+
           Align(
-            alignment:
-                Alignment.bottomCenter,
+            alignment: Alignment.bottomCenter,
             child: Padding(
-              padding:
-                  const EdgeInsets.fromLTRB(
+              padding: const EdgeInsets.fromLTRB(
                 20,
                 78,
                 20,
                 22,
               ),
               child: Column(
-                mainAxisSize:
-                    MainAxisSize.min,
+                mainAxisSize: MainAxisSize.min,
                 children: [
                   _logoRestaurante(),
-
                   const SizedBox(height: 12),
-
                   Text(
                     widget.nome,
-                    textAlign:
-                        TextAlign.center,
+                    textAlign: TextAlign.center,
                     maxLines: 1,
-                    overflow:
-                        TextOverflow.ellipsis,
-                    style:
-                        const TextStyle(
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 25,
-                      fontWeight:
-                          FontWeight.w900,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
-
                   const SizedBox(height: 7),
-
                   _statusPremium(),
-
                   const SizedBox(height: 8),
-
-                  if (widget.descricao
-                      .trim()
-                      .isNotEmpty)
+                  if (widget.descricao.trim().isNotEmpty)
                     Text(
                       widget.descricao,
-                      textAlign:
-                          TextAlign.center,
+                      textAlign: TextAlign.center,
                       maxLines: 1,
-                      overflow:
-                          TextOverflow.ellipsis,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color:
-                            Colors.white.withValues(
+                        color: Colors.white.withValues(
                           alpha: 0.88,
                         ),
                         fontSize: 12,
                       ),
                     ),
-
                   const SizedBox(height: 10),
-
                   Wrap(
-                    alignment:
-                        WrapAlignment.center,
+                    alignment: WrapAlignment.center,
                     spacing: 7,
                     runSpacing: 6,
                     children: [
                       _informacaoHeader(
                         Icons.star_rounded,
-                        widget.avaliacao.isEmpty
-                            ? '5,0'
-                            : widget.avaliacao,
+                        widget.avaliacao.isEmpty ? '5,0' : widget.avaliacao,
                       ),
                       _informacaoHeader(
                         Icons.access_time_rounded,
@@ -1625,35 +1639,28 @@ Widget _iconeLogo() {
 
   Widget _statusPremium() {
     return Container(
-      constraints:
-          const BoxConstraints(
+      constraints: const BoxConstraints(
         maxWidth: 280,
       ),
-      padding:
-          const EdgeInsets.symmetric(
+      padding: const EdgeInsets.symmetric(
         horizontal: 13,
         vertical: 7,
       ),
-      decoration:
-          BoxDecoration(
+      decoration: BoxDecoration(
         color: restauranteOnline
             ? const Color(0xFF16A34A)
             : const Color(0xFFDC2626),
-        borderRadius:
-            BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(30),
       ),
       child: Row(
-        mainAxisSize:
-            MainAxisSize.min,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 8,
             height: 8,
-            decoration:
-                const BoxDecoration(
+            decoration: const BoxDecoration(
               color: Colors.white,
-              shape:
-                  BoxShape.circle,
+              shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 7),
@@ -1663,14 +1670,11 @@ Widget _iconeLogo() {
                   ? 'ONLINE • ACEITANDO PEDIDOS'
                   : 'OFFLINE • PEDIDOS INDISPONÍVEIS',
               maxLines: 1,
-              overflow:
-                  TextOverflow.ellipsis,
-              style:
-                  const TextStyle(
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
                 color: Colors.white,
                 fontSize: 9.5,
-                fontWeight:
-                    FontWeight.w800,
+                fontWeight: FontWeight.w800,
               ),
             ),
           ),
@@ -1684,23 +1688,18 @@ Widget _iconeLogo() {
     String texto,
   ) {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(
+      padding: const EdgeInsets.symmetric(
         horizontal: 10,
         vertical: 7,
       ),
-      decoration:
-          BoxDecoration(
-        color:
-            Colors.white.withValues(
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(
           alpha: 0.14,
         ),
-        borderRadius:
-            BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
-        mainAxisSize:
-            MainAxisSize.min,
+        mainAxisSize: MainAxisSize.min,
         children: [
           Icon(
             icon,
@@ -1710,12 +1709,10 @@ Widget _iconeLogo() {
           const SizedBox(width: 4),
           Text(
             texto,
-            style:
-                const TextStyle(
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 10,
-              fontWeight:
-                  FontWeight.w700,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -1728,18 +1725,14 @@ Widget _iconeLogo() {
     required VoidCallback onPressed,
   }) {
     return Container(
-      margin:
-          const EdgeInsets.symmetric(
+      margin: const EdgeInsets.symmetric(
         vertical: 8,
       ),
-      decoration:
-          BoxDecoration(
-        color:
-            Colors.black.withValues(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(
           alpha: 0.18,
         ),
-        shape:
-            BoxShape.circle,
+        shape: BoxShape.circle,
       ),
       child: IconButton(
         onPressed: onPressed,
@@ -1754,25 +1747,20 @@ Widget _iconeLogo() {
 
   Widget _contadorProdutos() {
     return Container(
-      padding:
-          const EdgeInsets.symmetric(
+      padding: const EdgeInsets.symmetric(
         horizontal: 12,
         vertical: 7,
       ),
-      decoration:
-          BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(30),
+        borderRadius: BorderRadius.circular(30),
       ),
       child: Text(
         '${produtos.length} ${produtos.length == 1 ? 'item' : 'itens'}',
-        style:
-            const TextStyle(
+        style: const TextStyle(
           color: laranja,
           fontSize: 11,
-          fontWeight:
-              FontWeight.w800,
+          fontWeight: FontWeight.w800,
         ),
       ),
     );
@@ -1786,46 +1774,32 @@ Widget _iconeLogo() {
     return SizedBox(
       height: 50,
       child: ListView.separated(
-        padding:
-            const EdgeInsets.symmetric(
+        padding: const EdgeInsets.symmetric(
           horizontal: 16,
         ),
-        scrollDirection:
-            Axis.horizontal,
-        itemCount:
-            categorias.length,
-        separatorBuilder:
-            (_, __) =>
-                const SizedBox(width: 9),
-        itemBuilder:
-            (_, index) {
-          final categoria =
-              categorias[index];
+        scrollDirection: Axis.horizontal,
+        itemCount: categorias.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 9),
+        itemBuilder: (_, index) {
+          final categoria = categorias[index];
 
-          final selecionada =
-              categoria ==
-                  categoriaSelecionada;
+          final selecionada = categoria == categoriaSelecionada;
 
           return GestureDetector(
             onTap: () {
               setState(() {
-                categoriaSelecionada =
-                    categoria;
+                categoriaSelecionada = categoria;
               });
             },
-            child:
-                AnimatedContainer(
-              duration:
-                  const Duration(
+            child: AnimatedContainer(
+              duration: const Duration(
                 milliseconds: 200,
               ),
-              padding:
-                  const EdgeInsets.symmetric(
+              padding: const EdgeInsets.symmetric(
                 horizontal: 18,
                 vertical: 11,
               ),
-              decoration:
-                  BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: selecionada
                     ? const LinearGradient(
                         colors: [
@@ -1834,29 +1808,20 @@ Widget _iconeLogo() {
                         ],
                       )
                     : null,
-                color: selecionada
-                    ? null
-                    : Colors.white,
-                borderRadius:
-                    BorderRadius.circular(
+                color: selecionada ? null : Colors.white,
+                borderRadius: BorderRadius.circular(
                   30,
                 ),
-                border:
-                    Border.all(
-                  color: selecionada
-                      ? Colors.transparent
-                      : Colors.black12,
+                border: Border.all(
+                  color: selecionada ? Colors.transparent : Colors.black12,
                 ),
               ),
               child: Text(
                 categoria,
                 style: TextStyle(
-                  color: selecionada
-                      ? Colors.white
-                      : Colors.black87,
+                  color: selecionada ? Colors.white : Colors.black87,
                   fontSize: 13,
-                  fontWeight:
-                      FontWeight.w700,
+                  fontWeight: FontWeight.w700,
                 ),
               ),
             ),
@@ -1872,24 +1837,18 @@ Widget _iconeLogo() {
 
   Widget _avisoRestauranteOffline() {
     return Container(
-      margin:
-          const EdgeInsets.fromLTRB(
+      margin: const EdgeInsets.fromLTRB(
         16,
         15,
         16,
         0,
       ),
-      padding:
-          const EdgeInsets.all(15),
-      decoration:
-          BoxDecoration(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(20),
-        border:
-            Border.all(
-          color:
-              Colors.red.withValues(
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: Colors.red.withValues(
             alpha: 0.10,
           ),
         ),
@@ -1899,33 +1858,26 @@ Widget _iconeLogo() {
           Container(
             width: 46,
             height: 46,
-            decoration:
-                BoxDecoration(
-              color:
-                  Colors.red.withValues(
+            decoration: BoxDecoration(
+              color: Colors.red.withValues(
                 alpha: 0.10,
               ),
-              shape:
-                  BoxShape.circle,
+              shape: BoxShape.circle,
             ),
-            child:
-                const Icon(
+            child: const Icon(
               Icons.storefront_rounded,
-              color:
-                  Colors.redAccent,
+              color: Colors.redAccent,
             ),
           ),
           const SizedBox(width: 12),
           const Expanded(
             child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Restaurante fechado',
                   style: TextStyle(
-                    fontWeight:
-                        FontWeight.w800,
+                    fontWeight: FontWeight.w800,
                     fontSize: 15,
                     color: Colors.red,
                   ),
@@ -1953,82 +1905,59 @@ Widget _iconeLogo() {
   Widget produtoCard({
     required Map<String, dynamic> produto,
   }) {
-    final nome =
-        produto['nome']
-                    ?.toString()
-                    .trim()
-                    .isNotEmpty ==
-                true
-            ? produto['nome'].toString()
-            : 'Produto';
+    final nome = produto['nome']?.toString().trim().isNotEmpty == true
+        ? produto['nome'].toString()
+        : 'Produto';
 
-    final descricao =
-        produto['descricao']?.toString() ?? '';
+    final descricao = produto['descricao']?.toString() ?? '';
 
-    final preco =
-        _precoProduto(
+    final preco = _precoProduto(
       produto['preco'],
     );
 
-    final imagem =
-        produto['imagem']?.toString();
+    final imagem = produto['imagem']?.toString();
 
     final produtoId =
-        (produto['id'] ??
-                produto['_id'] ??
-                produto['produtoId'])
-            ?.toString();
+        (produto['id'] ?? produto['_id'] ?? produto['produtoId'])?.toString();
 
     return Container(
       width: double.infinity,
-      margin:
-          const EdgeInsets.only(
+      margin: const EdgeInsets.only(
         bottom: 14,
       ),
-      decoration:
-          BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(24),
-        border:
-            Border.all(
-          color:
-              Colors.black.withValues(
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: Colors.black.withValues(
             alpha: 0.035,
           ),
         ),
         boxShadow: [
           BoxShadow(
-            color:
-                Colors.black.withValues(
+            color: Colors.black.withValues(
               alpha: 0.055,
             ),
             blurRadius: 20,
-            offset:
-                const Offset(0, 8),
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: Padding(
-        padding:
-            const EdgeInsets.all(10),
+        padding: const EdgeInsets.all(10),
         child: Row(
-          crossAxisAlignment:
-              CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             SizedBox(
               width: 105,
               height: 105,
               child: Hero(
-                tag:
-                    'produto_${produtoId ?? nome}',
+                tag: 'produto_${produtoId ?? nome}',
                 child: ClipRRect(
-                  borderRadius:
-                      BorderRadius.circular(
+                  borderRadius: BorderRadius.circular(
                     20,
                   ),
-                  child:
-                      _imagemProduto(
+                  child: _imagemProduto(
                     imagem,
                     tamanho: 105,
                   ),
@@ -2038,37 +1967,28 @@ Widget _iconeLogo() {
             const SizedBox(width: 12),
             Expanded(
               child: Column(
-                mainAxisSize:
-                    MainAxisSize.min,
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     nome,
                     maxLines: 2,
-                    overflow:
-                        TextOverflow.ellipsis,
-                    style:
-                        const TextStyle(
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
                       color: Colors.black,
                       fontSize: 16,
                       height: 1.15,
-                      fontWeight:
-                          FontWeight.w800,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  if (descricao
-                      .trim()
-                      .isNotEmpty) ...[
+                  if (descricao.trim().isNotEmpty) ...[
                     const SizedBox(height: 7),
                     Text(
                       descricao,
                       maxLines: 2,
-                      overflow:
-                          TextOverflow.ellipsis,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        color:
-                            Colors.grey.shade600,
+                        color: Colors.grey.shade600,
                         fontSize: 12,
                         height: 1.3,
                       ),
@@ -2076,8 +1996,7 @@ Widget _iconeLogo() {
                   ],
                   const SizedBox(height: 10),
                   Row(
-                    crossAxisAlignment:
-                        CrossAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
                       Expanded(
                         child: Text(
@@ -2085,14 +2004,11 @@ Widget _iconeLogo() {
                             preco,
                           ),
                           maxLines: 1,
-                          overflow:
-                              TextOverflow.ellipsis,
-                          style:
-                              const TextStyle(
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
                             color: laranja,
                             fontSize: 17,
-                            fontWeight:
-                                FontWeight.w900,
+                            fontWeight: FontWeight.w900,
                           ),
                         ),
                       ),
@@ -2101,8 +2017,7 @@ Widget _iconeLogo() {
                         nome: nome,
                         preco: preco,
                         imagem: imagem,
-                        produtoId:
-                            produtoId,
+                        produtoId: produtoId,
                       ),
                     ],
                   ),
@@ -2122,8 +2037,7 @@ Widget _iconeLogo() {
     String? produtoId,
   }) {
     return GestureDetector(
-      behavior:
-          HitTestBehavior.opaque,
+      behavior: HitTestBehavior.opaque,
       onTap: () {
         adicionarProduto(
           nome: nome,
@@ -2133,14 +2047,12 @@ Widget _iconeLogo() {
         );
       },
       child: AnimatedContainer(
-        duration:
-            const Duration(
+        duration: const Duration(
           milliseconds: 180,
         ),
         width: 44,
         height: 44,
-        decoration:
-            BoxDecoration(
+        decoration: BoxDecoration(
           gradient: restauranteOnline
               ? const LinearGradient(
                   colors: [
@@ -2149,33 +2061,25 @@ Widget _iconeLogo() {
                   ],
                 )
               : null,
-          color: restauranteOnline
-              ? null
-              : Colors.grey.shade400,
-          shape:
-              BoxShape.circle,
-          boxShadow:
-              restauranteOnline
-                  ? [
-                      BoxShadow(
-                        color:
-                            laranja.withValues(
-                          alpha: 0.30,
-                        ),
-                        blurRadius: 12,
-                        offset:
-                            const Offset(
-                          0,
-                          5,
-                        ),
-                      ),
-                    ]
-                  : null,
+          color: restauranteOnline ? null : Colors.grey.shade400,
+          shape: BoxShape.circle,
+          boxShadow: restauranteOnline
+              ? [
+                  BoxShadow(
+                    color: laranja.withValues(
+                      alpha: 0.30,
+                    ),
+                    blurRadius: 12,
+                    offset: const Offset(
+                      0,
+                      5,
+                    ),
+                  ),
+                ]
+              : null,
         ),
         child: Icon(
-          restauranteOnline
-              ? Icons.add_rounded
-              : Icons.lock_outline_rounded,
+          restauranteOnline ? Icons.add_rounded : Icons.lock_outline_rounded,
           color: Colors.white,
           size: 25,
         ),
@@ -2187,8 +2091,7 @@ Widget _iconeLogo() {
     String? imagem, {
     double tamanho = 105,
   }) {
-    if (imagem == null ||
-        imagem.trim().isEmpty) {
+    if (imagem == null || imagem.trim().isEmpty) {
       return _placeholderImagem(
         tamanho,
       );
@@ -2201,8 +2104,7 @@ Widget _iconeLogo() {
       width: tamanho,
       height: tamanho,
       fit: BoxFit.cover,
-      errorBuilder:
-          (
+      errorBuilder: (
         context,
         error,
         stackTrace,
@@ -2220,10 +2122,8 @@ Widget _iconeLogo() {
     return Container(
       width: tamanho,
       height: tamanho,
-      decoration:
-          const BoxDecoration(
-        gradient:
-            LinearGradient(
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
           colors: [
             Color(0xFFFFEAD9),
             Color(0xFFFFD5B5),
@@ -2247,34 +2147,27 @@ Widget _iconeLogo() {
       onTap: abrirCarrinho,
       child: Container(
         height: 64,
-        margin:
-            const EdgeInsets.symmetric(
+        margin: const EdgeInsets.symmetric(
           horizontal: 16,
         ),
-        padding:
-            const EdgeInsets.symmetric(
+        padding: const EdgeInsets.symmetric(
           horizontal: 14,
         ),
-        decoration:
-            BoxDecoration(
-          gradient:
-              const LinearGradient(
+        decoration: BoxDecoration(
+          gradient: const LinearGradient(
             colors: [
               Color(0xFFF97316),
               Color(0xFFEA580C),
             ],
           ),
-          borderRadius:
-              BorderRadius.circular(22),
+          borderRadius: BorderRadius.circular(22),
           boxShadow: [
             BoxShadow(
-              color:
-                  laranja.withValues(
+              color: laranja.withValues(
                 alpha: 0.38,
               ),
               blurRadius: 24,
-              offset:
-                  const Offset(0, 10),
+              offset: const Offset(0, 10),
             ),
           ],
         ),
@@ -2283,14 +2176,11 @@ Widget _iconeLogo() {
             Container(
               width: 43,
               height: 43,
-              decoration:
-                  BoxDecoration(
-                color:
-                    Colors.white.withValues(
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(
                   alpha: 0.18,
                 ),
-                shape:
-                    BoxShape.circle,
+                shape: BoxShape.circle,
               ),
               child: const Icon(
                 Icons.shopping_bag_rounded,
@@ -2301,16 +2191,13 @@ Widget _iconeLogo() {
             const SizedBox(width: 11),
             Expanded(
               child: Column(
-                mainAxisAlignment:
-                    MainAxisAlignment.center,
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '$quantidadeItens ${quantidadeItens == 1 ? 'item' : 'itens'}',
                     style: TextStyle(
-                      color:
-                          Colors.white.withValues(
+                      color: Colors.white.withValues(
                         alpha: 0.85,
                       ),
                       fontSize: 11,
@@ -2320,12 +2207,10 @@ Widget _iconeLogo() {
                     _formatarPreco(
                       totalCarrinho,
                     ),
-                    style:
-                        const TextStyle(
+                    style: const TextStyle(
                       color: Colors.white,
                       fontSize: 17,
-                      fontWeight:
-                          FontWeight.w900,
+                      fontWeight: FontWeight.w900,
                     ),
                   ),
                 ],
@@ -2333,12 +2218,10 @@ Widget _iconeLogo() {
             ),
             const Text(
               'Ver carrinho',
-              style:
-                  TextStyle(
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 14,
-                fontWeight:
-                    FontWeight.w800,
+                fontWeight: FontWeight.w800,
               ),
             ),
             const SizedBox(width: 7),
@@ -2358,40 +2241,27 @@ Widget _iconeLogo() {
 
   Widget _estadoErroProdutos() {
     return _estadoBase(
-      icon:
-          Icons.cloud_off_rounded,
-      titulo:
-          'Não foi possível carregar o cardápio',
-      descricao:
-          'Verifique a conexão com o servidor e tente novamente.',
-      botao:
-          ElevatedButton.icon(
-        onPressed:
-            _carregarProdutos,
-        icon:
-            const Icon(
+      icon: Icons.cloud_off_rounded,
+      titulo: 'Não foi possível carregar o cardápio',
+      descricao: 'Verifique a conexão com o servidor e tente novamente.',
+      botao: ElevatedButton.icon(
+        onPressed: _carregarProdutos,
+        icon: const Icon(
           Icons.refresh_rounded,
         ),
-        label:
-            const Text(
+        label: const Text(
           'Tentar novamente',
         ),
-        style:
-            ElevatedButton.styleFrom(
-          backgroundColor:
-              laranja,
-          foregroundColor:
-              Colors.white,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: laranja,
+          foregroundColor: Colors.white,
           elevation: 0,
-          padding:
-              const EdgeInsets.symmetric(
+          padding: const EdgeInsets.symmetric(
             horizontal: 20,
             vertical: 13,
           ),
-          shape:
-              RoundedRectangleBorder(
-            borderRadius:
-                BorderRadius.circular(14),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
           ),
         ),
       ),
@@ -2400,21 +2270,16 @@ Widget _iconeLogo() {
 
   Widget _estadoVazioProdutos() {
     return _estadoBase(
-      icon:
-          Icons.restaurant_menu_rounded,
-      titulo:
-          'Nenhum produto disponível',
-      descricao:
-          'Este restaurante ainda não possui produtos disponíveis.',
+      icon: Icons.restaurant_menu_rounded,
+      titulo: 'Nenhum produto disponível',
+      descricao: 'Este restaurante ainda não possui produtos disponíveis.',
     );
   }
 
   Widget _estadoVazioCategoria() {
     return _estadoBase(
-      icon:
-          Icons.search_off_rounded,
-      titulo:
-          'Nenhum produto nesta categoria',
+      icon: Icons.search_off_rounded,
+      titulo: 'Nenhum produto nesta categoria',
     );
   }
 
@@ -2425,29 +2290,22 @@ Widget _iconeLogo() {
     Widget? botao,
   }) {
     return Container(
-      margin:
-          const EdgeInsets.all(16),
-      padding:
-          const EdgeInsets.all(30),
-      decoration:
-          BoxDecoration(
+      margin: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(30),
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
         children: [
           Container(
             width: 76,
             height: 76,
-            decoration:
-                BoxDecoration(
-              color:
-                  laranja.withValues(
+            decoration: BoxDecoration(
+              color: laranja.withValues(
                 alpha: 0.10,
               ),
-              shape:
-                  BoxShape.circle,
+              shape: BoxShape.circle,
             ),
             child: Icon(
               icon,
@@ -2458,23 +2316,18 @@ Widget _iconeLogo() {
           const SizedBox(height: 17),
           Text(
             titulo,
-            textAlign:
-                TextAlign.center,
-            style:
-                const TextStyle(
+            textAlign: TextAlign.center,
+            style: const TextStyle(
               fontSize: 17,
-              fontWeight:
-                  FontWeight.w800,
+              fontWeight: FontWeight.w800,
             ),
           ),
           if (descricao != null) ...[
             const SizedBox(height: 8),
             Text(
               descricao,
-              textAlign:
-                  TextAlign.center,
-              style:
-                  const TextStyle(
+              textAlign: TextAlign.center,
+              style: const TextStyle(
                 color: Colors.black54,
                 height: 1.4,
               ),
