@@ -20,9 +20,8 @@ class RestaurantSettingsScreen extends StatefulWidget {
 
 class _RestaurantSettingsScreenState
     extends State<RestaurantSettingsScreen> {
-  static const Color laranja = Color(0xFFF97316);
-
   final ImagePicker imagePicker = ImagePicker();
+
   final RestaurantService restaurantService =
       RestaurantService();
 
@@ -37,40 +36,146 @@ class _RestaurantSettingsScreenState
 
   bool carregando = false;
   bool carregandoDados = true;
-
-  // ==========================================================
-  // INDICA QUE A CAPA FOI MARCADA PARA REMOÇÃO
-  // ==========================================================
-
   bool capaFoiRemovida = false;
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
     super.initState();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      carregarDados();
-    });
+    carregarDados();
   }
 
-  // ==========================================================
+  // ============================================================
   // CARREGAR DADOS
-  // ==========================================================
+  // ============================================================
 
   Future<void> carregarDados() async {
-    await carregarLogo();
-    await carregarCapa();
-
-    if (!mounted) return;
-
-    setState(() {
-      carregandoDados = false;
-    });
+    try {
+      await carregarLogo();
+      await carregarCapa();
+    } catch (e) {
+      print(
+        '❌ Erro ao carregar configurações: $e',
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          carregandoDados = false;
+        });
+      }
+    }
   }
 
-  // ==========================================================
+  // ============================================================
+  // OBTER ID RESTAURANTE
+  // ============================================================
+
+  Future<String?> obterIdRestaurante() async {
+    try {
+      final provider =
+          Provider.of<RestaurantProvider>(
+        context,
+        listen: false,
+      );
+
+      final idProvider =
+          provider.getRestaurantId();
+
+      if (idProvider != null &&
+          idProvider.trim().isNotEmpty) {
+        return idProvider.trim();
+      }
+    } catch (e) {
+      print(
+        '⚠️ Erro ao obter ID pelo Provider: $e',
+      );
+    }
+
+    try {
+      final idService =
+          await restaurantService.obterRestauranteId();
+
+      if (idService != null &&
+          idService.trim().isNotEmpty) {
+        return idService.trim();
+      }
+    } catch (e) {
+      print(
+        '⚠️ Erro ao obter ID pelo Service: $e',
+      );
+    }
+
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    final chavesId = [
+      'restauranteId',
+      'restaurantId',
+      'restaurante_id',
+      'restaurant_id',
+    ];
+
+    for (final chave in chavesId) {
+      final valor =
+          prefs.getString(chave);
+
+      if (valor != null &&
+          valor.trim().isNotEmpty) {
+        return valor.trim();
+      }
+    }
+
+    final chavesJson = [
+      'restaurante',
+      'restaurant',
+      'restauranteAtual',
+    ];
+
+    for (final chave in chavesJson) {
+      final json =
+          prefs.getString(chave);
+
+      if (json == null ||
+          json.trim().isEmpty) {
+        continue;
+      }
+
+      try {
+        final decoded =
+            jsonDecode(json);
+
+        if (decoded is Map) {
+          final mapa =
+              Map<String, dynamic>.from(
+            decoded,
+          );
+
+          final id =
+              mapa['id'] ??
+                  mapa['_id'] ??
+                  mapa['restauranteId'] ??
+                  mapa['restaurantId'];
+
+          if (id != null &&
+              id.toString()
+                  .trim()
+                  .isNotEmpty) {
+            return id.toString().trim();
+          }
+        }
+      } catch (_) {}
+    }
+
+    return null;
+  }
+
+  // ============================================================
   // CARREGAR LOGO
-  // ==========================================================
+  // ============================================================
 
   Future<void> carregarLogo() async {
     final provider =
@@ -79,290 +184,183 @@ class _RestaurantSettingsScreenState
       listen: false,
     );
 
-    String imagem = provider.imagem ?? '';
+    String logo = '';
 
-    if (imagem.trim().isEmpty) {
+    try {
+      final imagemProvider =
+          provider.imagem;
+
+      if (imagemProvider != null &&
+          imagemProvider.trim().isNotEmpty) {
+        logo = imagemProvider.trim();
+      }
+    } catch (_) {}
+
+    if (logo.isEmpty) {
       try {
         final restauranteId =
-            provider.getRestaurantId();
+            await obterIdRestaurante();
 
         if (restauranteId != null &&
-            restauranteId.trim().isNotEmpty) {
+            restauranteId.isNotEmpty) {
           final restaurante =
               await restaurantService
                   .buscarRestaurante(
             restauranteId,
           );
 
-          imagem = (
-            restaurante['imagem'] ??
-            restaurante['logo'] ??
-            ''
-          ).toString();
-
-          if (restaurante.isNotEmpty) {
-            provider.setRestaurant(
-              id: restauranteId,
-              nomeRestaurante:
-                  (restaurante['nome'] ?? '')
-                      .toString(),
-              telefoneRestaurante:
-                  restaurante['telefone']
-                      ?.toString(),
-              imagemRestaurante: imagem,
-              statusAberto:
-                  restaurante['aberto'] is bool
-                      ? restaurante['aberto'] as bool
-                      : null,
-            );
-          }
+          logo =
+              (
+                restaurante['logo'] ??
+                restaurante['logoUrl'] ??
+                restaurante['imagem'] ??
+                restaurante['imagemUrl'] ??
+                ''
+              ).toString();
         }
-      } catch (_) {}
-    }
-
-    if (imagem.trim().isEmpty) {
-      try {
-        final restauranteId =
-            await restaurantService
-                .obterRestauranteId();
-
-        if (restauranteId != null &&
-            restauranteId.trim().isNotEmpty) {
-          final restaurante =
-              await restaurantService
-                  .buscarRestaurante(
-            restauranteId,
-          );
-
-          imagem = (
-            restaurante['imagem'] ??
-            restaurante['logo'] ??
-            ''
-          ).toString();
-        }
-      } catch (_) {}
+      } catch (e) {
+        print(
+          '⚠️ Erro ao buscar logo do servidor: $e',
+        );
+      }
     }
 
     if (!mounted) return;
 
     setState(() {
-      logoAtual = imagem;
+      logoAtual = logo.trim();
     });
+
+    if (logoAtual.isNotEmpty) {
+      try {
+        provider.setRestaurant(
+          id: provider.getRestaurantId() ?? '',
+          nomeRestaurante:
+              provider.nome ?? '',
+          telefoneRestaurante:
+              provider.telefone,
+          imagemRestaurante:
+              logoAtual,
+          statusAberto:
+              provider.aberto,
+        );
+      } catch (_) {}
+    }
   }
 
-  // ==========================================================
+  // ============================================================
   // CARREGAR CAPA
-  // ==========================================================
+  // ============================================================
 
   Future<void> carregarCapa() async {
-    final provider =
-        Provider.of<RestaurantProvider>(
-      context,
-      listen: false,
-    );
-
     String capa = '';
 
     try {
       final restauranteId =
-          provider.getRestaurantId();
+          await obterIdRestaurante();
 
       if (restauranteId != null &&
-          restauranteId.trim().isNotEmpty) {
+          restauranteId.isNotEmpty) {
         final restaurante =
             await restaurantService
                 .buscarRestaurante(
           restauranteId,
         );
 
-        capa = (
-          restaurante['capa'] ??
-          restaurante['capaUrl'] ??
-          restaurante['banner'] ??
-          restaurante['bannerUrl'] ??
-          restaurante['imagemCapa'] ??
-          restaurante['imagem_capa'] ??
-          restaurante['fotoCapa'] ??
-          restaurante['foto_capa'] ??
-          ''
-        ).toString();
+        capa =
+            (
+              restaurante['capa'] ??
+              restaurante['capaUrl'] ??
+              restaurante['banner'] ??
+              restaurante['bannerUrl'] ??
+              ''
+            ).toString();
       }
-    } catch (_) {}
-
-    if (capa.trim().isEmpty) {
-      try {
-        final restauranteId =
-            await restaurantService
-                .obterRestauranteId();
-
-        if (restauranteId != null &&
-            restauranteId.trim().isNotEmpty) {
-          final restaurante =
-              await restaurantService
-                  .buscarRestaurante(
-            restauranteId,
-          );
-
-          capa = (
-            restaurante['capa'] ??
-            restaurante['capaUrl'] ??
-            restaurante['banner'] ??
-            restaurante['bannerUrl'] ??
-            restaurante['imagemCapa'] ??
-            restaurante['imagem_capa'] ??
-            restaurante['fotoCapa'] ??
-            restaurante['foto_capa'] ??
-            ''
-          ).toString();
-        }
-      } catch (_) {}
+    } catch (e) {
+      print(
+        '⚠️ Erro ao carregar capa: $e',
+      );
     }
 
     if (!mounted) return;
 
     setState(() {
-      capaAtual = capa;
-      capaFoiRemovida = false;
+      capaAtual = capa.trim();
     });
   }
 
-  // ==========================================================
-  // OBTER ID DO RESTAURANTE
-  // ==========================================================
+  // ============================================================
+  // URL DA IMAGEM
+  // ============================================================
 
-  Future<String?> obterIdRestaurante() async {
-    final provider =
-        Provider.of<RestaurantProvider>(
-      context,
-      listen: false,
-    );
-
-    String? id =
-        provider.getRestaurantId();
-
-    if (id != null &&
-        id.trim().isNotEmpty) {
-      return id.trim();
+  String obterUrlImagem(
+    String caminho,
+  ) {
+    if (caminho.trim().isEmpty) {
+      return '';
     }
 
-    try {
-      id = await restaurantService
-          .obterRestauranteId();
+    final valor =
+        caminho.trim();
 
-      if (id != null &&
-          id.trim().isNotEmpty) {
-        id = id.trim();
+    if (valor.startsWith(
+          'http://',
+        ) ||
+        valor.startsWith(
+          'https://',
+        )) {
+      return valor;
+    }
 
-        provider.setRestaurantId(id);
+    String base =
+        RestaurantService.baseUrl;
 
-        return id;
-      }
-    } catch (_) {}
+    if (base.endsWith('/api')) {
+      base = base.substring(
+        0,
+        base.length - 4,
+      );
+    }
 
-    try {
-      final prefs =
-          await SharedPreferences
-              .getInstance();
+    if (base.endsWith('/')) {
+      base = base.substring(
+        0,
+        base.length - 1,
+      );
+    }
 
-      final chaves = [
-        'restauranteId',
-        'restaurantId',
-        'restaurante_id',
-        'restaurant_id',
-      ];
+    if (valor.startsWith('/')) {
+      return '$base$valor';
+    }
 
-      for (final chave in chaves) {
-        final valor =
-            prefs.getString(chave);
-
-        if (valor != null &&
-            valor.trim().isNotEmpty) {
-          id = valor.trim();
-
-          provider.setRestaurantId(id);
-
-          return id;
-        }
-      }
-
-      final jsons = [
-        prefs.getString('restaurante'),
-        prefs.getString('restaurant'),
-        prefs.getString(
-          'restauranteAtual',
-        ),
-      ];
-
-      for (final json in jsons) {
-        if (json == null ||
-            json.trim().isEmpty) {
-          continue;
-        }
-
-        try {
-          final decoded =
-              jsonDecode(json);
-
-          if (decoded is Map) {
-            final mapa =
-                Map<String, dynamic>.from(
-              decoded,
-            );
-
-            final valor =
-                mapa['id'] ??
-                mapa['_id'] ??
-                mapa['restauranteId'] ??
-                mapa['restaurantId'];
-
-            if (valor != null &&
-                valor
-                    .toString()
-                    .trim()
-                    .isNotEmpty) {
-              id = valor
-                  .toString()
-                  .trim();
-
-              await prefs.setString(
-                'restauranteId',
-                id,
-              );
-
-              provider.setRestaurantId(id);
-
-              return id;
-            }
-          }
-        } catch (_) {}
-      }
-    } catch (_) {}
-
-    return null;
+    return '$base/$valor';
   }
 
-  // ==========================================================
+  // ============================================================
   // SELECIONAR LOGO
-  // ==========================================================
+  // ============================================================
 
   Future<void> selecionarLogo() async {
     try {
       final imagem =
           await imagePicker.pickImage(
-        source: ImageSource.gallery,
+        source:
+            ImageSource.gallery,
         imageQuality: 85,
         maxWidth: 1200,
         maxHeight: 1200,
       );
 
-      if (imagem == null) return;
+      if (imagem == null) {
+        return;
+      }
 
       final bytes =
           await imagem.readAsBytes();
 
       if (bytes.isEmpty) {
         mostrarMensagem(
-          'A imagem selecionada está vazia.',
+          'Não foi possível ler a imagem.',
           erro: true,
         );
         return;
@@ -374,23 +372,17 @@ class _RestaurantSettingsScreenState
         logoSelecionada = imagem;
         logoBytes = bytes;
       });
-
+    } catch (e) {
       mostrarMensagem(
-        'Nova logo selecionada.',
-      );
-    } catch (_) {
-      if (!mounted) return;
-
-      mostrarMensagem(
-        'Não foi possível selecionar a imagem.',
+        'Erro ao selecionar logo: $e',
         erro: true,
       );
     }
   }
 
-  // ==========================================================
-  // REMOVER LOGO
-  // ==========================================================
+  // ============================================================
+  // REMOVER LOGO LOCALMENTE
+  // ============================================================
 
   void removerLogo() {
     setState(() {
@@ -404,48 +396,18 @@ class _RestaurantSettingsScreenState
     );
   }
 
-  // ==========================================================
-  // GERAR BASE64 DA LOGO
-  // ==========================================================
-
-  String? gerarBase64() {
-    if (logoSelecionada == null ||
-        logoBytes == null ||
-        logoBytes!.isEmpty) {
-      return null;
-    }
-
-    String mime = 'image/jpeg';
-
-    final nome =
-        logoSelecionada!.name.toLowerCase();
-
-    if (nome.endsWith('.png')) {
-      mime = 'image/png';
-    } else if (nome.endsWith('.webp')) {
-      mime = 'image/webp';
-    }
-
-    return 'data:$mime;base64,'
-        '${base64Encode(logoBytes!)}';
-  }
-
-  // ==========================================================
+  // ============================================================
   // SALVAR LOGO
-  // ==========================================================
+  //
+  // AGORA USA:
+  //
+  // restaurantService.uploadLogo()
+  //
+  // NÃO USA MAIS BASE64.
+  // ============================================================
 
   Future<void> salvarLogo() async {
-    if (carregando) return;
-
-    final novaImagem =
-        gerarBase64();
-
-    if (novaImagem == null &&
-        logoAtual.isNotEmpty) {
-      mostrarMensagem(
-        'Escolha uma nova imagem ou remova a logo atual.',
-        erro: true,
-      );
+    if (carregando) {
       return;
     }
 
@@ -461,27 +423,155 @@ class _RestaurantSettingsScreenState
       return;
     }
 
-    if (!mounted) return;
+    final bool existeLogoAtual =
+        logoAtual.trim().isNotEmpty;
+
+    final bool selecionouNovaLogo =
+        logoSelecionada != null &&
+            logoBytes != null &&
+            logoBytes!.isNotEmpty;
+
+    // ==========================================================
+    // REMOVER LOGO
+    // ==========================================================
+
+    if (!selecionouNovaLogo &&
+        !existeLogoAtual) {
+      mostrarMensagem(
+        'Nenhuma logo para salvar.',
+        erro: true,
+      );
+      return;
+    }
+
+    if (!selecionouNovaLogo &&
+        existeLogoAtual) {
+      mostrarMensagem(
+        'Escolha uma nova imagem ou remova a logo atual.',
+        erro: true,
+      );
+      return;
+    }
 
     setState(() {
       carregando = true;
     });
 
     try {
-      final dados =
-          <String, dynamic>{};
+      print('');
+      print(
+        '========================================',
+      );
+      print(
+        '📤 FOODJET - SALVANDO LOGO',
+      );
+      print(
+        '🏪 Restaurante: $restauranteId',
+      );
+      print(
+        '========================================',
+      );
 
-      if (novaImagem != null) {
-        dados['imagem'] = novaImagem;
-      } else {
-        dados['imagem'] = '';
+      // ========================================================
+      // UPLOAD REAL DA LOGO
+      // ========================================================
+
+      final resposta =
+          await restaurantService.uploadLogo(
+        restauranteId,
+        logoSelecionada!,
+      );
+
+      print(
+        '📦 Resposta do upload da logo:',
+      );
+
+      print(resposta);
+
+      // ========================================================
+      // OBTER RESTAURANTE ATUALIZADO
+      // ========================================================
+
+      Map<String, dynamic> restaurante = {};
+
+      if (resposta['restaurante'] is Map) {
+        restaurante =
+            Map<String, dynamic>.from(
+          resposta['restaurante'],
+        );
       }
 
-      await restaurantService
-          .atualizarRestaurante(
-        restauranteId,
-        dados,
+      // ========================================================
+      // OBTER URL/CAMINHO DA LOGO
+      // ========================================================
+
+      String novaLogo =
+          (
+            restaurante['logo'] ??
+            restaurante['logoUrl'] ??
+            restaurante['imagem'] ??
+            restaurante['imagemUrl'] ??
+            resposta['logo'] ??
+            resposta['logoUrl'] ??
+            resposta['imagem'] ??
+            resposta['imagemUrl'] ??
+            ''
+          ).toString().trim();
+
+      // ========================================================
+      // CASO O BACKEND NÃO DEVOLVA NO JSON,
+      // BUSCAR NOVAMENTE
+      // ========================================================
+
+      if (novaLogo.isEmpty) {
+        try {
+          final atualizado =
+              await restaurantService
+                  .buscarRestaurante(
+            restauranteId,
+          );
+
+          novaLogo =
+              (
+                atualizado['logo'] ??
+                atualizado['logoUrl'] ??
+                atualizado['imagem'] ??
+                atualizado['imagemUrl'] ??
+                ''
+              ).toString().trim();
+        } catch (e) {
+          print(
+            '⚠️ Não foi possível buscar logo atualizada: $e',
+          );
+        }
+      }
+
+      if (novaLogo.isEmpty) {
+        throw Exception(
+          'O servidor não retornou a localização da nova logo.',
+        );
+      }
+
+      print(
+        '🖼️ Nova logo: $novaLogo',
       );
+
+      // ========================================================
+      // ATUALIZAR ESTADO
+      // ========================================================
+
+      if (!mounted) return;
+
+      setState(() {
+        logoAtual = novaLogo;
+
+        logoSelecionada = null;
+        logoBytes = null;
+      });
+
+      // ========================================================
+      // ATUALIZAR PROVIDER
+      // ========================================================
 
       final provider =
           Provider.of<RestaurantProvider>(
@@ -489,38 +579,75 @@ class _RestaurantSettingsScreenState
         listen: false,
       );
 
-      logoAtual =
-          novaImagem ?? '';
-
       provider.setRestaurant(
         id: restauranteId,
         nomeRestaurante:
-            provider.nome ?? '',
+            restaurante['nome'] ??
+                provider.nome ??
+                '',
         telefoneRestaurante:
-            provider.telefone,
+            restaurante['telefone'] ??
+                provider.telefone,
         imagemRestaurante:
-            logoAtual,
+            novaLogo,
         statusAberto:
-            provider.aberto,
+            restaurante['aberto'] ??
+                restaurante['online'] ??
+                provider.aberto,
       );
 
-      if (!mounted) return;
+      // ========================================================
+      // LIMPAR CACHE LOCAL DA IMAGEM
+      // ========================================================
 
-      setState(() {
-        logoSelecionada = null;
-        logoBytes = null;
-      });
+      try {
+        final url =
+            obterUrlImagem(novaLogo);
+
+        if (url.isNotEmpty) {
+          await NetworkImage(url)
+              .evict();
+        }
+      } catch (_) {}
+
+      print(
+        '========================================',
+      );
+      print(
+        '✅ LOGO SALVA COM SUCESSO',
+      );
+      print(
+        '🖼️ Caminho: $novaLogo',
+      );
+      print(
+        '🌐 URL: ${obterUrlImagem(novaLogo)}',
+      );
+      print(
+        '========================================',
+      );
 
       mostrarMensagem(
         'Logo atualizada com sucesso!',
       );
     } catch (e) {
-      if (!mounted) return;
-
-      mostrarMensagem(
-        'Erro ao atualizar logo: $e',
-        erro: true,
+      print('');
+      print(
+        '========================================',
       );
+      print(
+        '❌ ERRO AO SALVAR LOGO',
+      );
+      print(e);
+      print(
+        '========================================',
+      );
+
+      if (mounted) {
+        mostrarMensagem(
+          'Erro ao atualizar a logo: $e',
+          erro: true,
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -530,137 +657,125 @@ class _RestaurantSettingsScreenState
     }
   }
 
-  // ==========================================================
-  // IMAGEM DA LOGO
-  // ==========================================================
+  // ============================================================
+  // CONFIRMAR REMOÇÃO DA LOGO
+  // ============================================================
 
-  Widget imagemLogo() {
-    if (logoBytes != null &&
-        logoBytes!.isNotEmpty) {
-      return Image.memory(
-        logoBytes!,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        errorBuilder:
-            (_, __, ___) =>
-                placeholderLogo(),
-      );
+  Future<void> excluirLogoServidor() async {
+    if (carregando) {
+      return;
     }
 
-    if (logoAtual.isNotEmpty) {
-      if (logoAtual
-          .startsWith('data:image')) {
-        try {
-          final partes =
-              logoAtual.split(',');
+    final restauranteId =
+        await obterIdRestaurante();
 
-          if (partes.length == 2) {
-            final bytes =
-                base64Decode(
-              partes[1],
-            );
+    if (restauranteId == null ||
+        restauranteId.trim().isEmpty) {
+      mostrarMensagem(
+        'Restaurante não identificado.',
+        erro: true,
+      );
+      return;
+    }
 
-            return Image.memory(
-              bytes,
-              fit: BoxFit.cover,
-              width: double.infinity,
-              height: double.infinity,
-              errorBuilder:
-                  (_, __, ___) =>
-                      placeholderLogo(),
-            );
-          }
-        } catch (_) {
-          return placeholderLogo();
-        }
-      }
+    setState(() {
+      carregando = true;
+    });
 
-      if (logoAtual.startsWith(
-            'http://',
-          ) ||
-          logoAtual.startsWith(
-            'https://',
-          )) {
-        return Image.network(
-          logoAtual,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-          loadingBuilder:
-              (
-            context,
-            child,
-            progress,
-          ) {
-            if (progress == null) {
-              return child;
-            }
+    try {
+      print('');
+      print(
+        '========================================',
+      );
+      print(
+        '🗑️ FOODJET - EXCLUINDO LOGO',
+      );
+      print(
+        '🏪 Restaurante: $restauranteId',
+      );
+      print(
+        '========================================',
+      );
 
-            return const Center(
-              child:
-                  CircularProgressIndicator(
-                color: laranja,
-                strokeWidth: 2,
-              ),
-            );
-          },
-          errorBuilder:
-              (_, __, ___) =>
-                  placeholderLogo(),
+      await restaurantService
+          .removerLogo(
+        restauranteId,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        logoAtual = '';
+        logoSelecionada = null;
+        logoBytes = null;
+      });
+
+      final provider =
+          Provider.of<RestaurantProvider>(
+        context,
+        listen: false,
+      );
+
+      provider.setRestaurant(
+        id: restauranteId,
+        nomeRestaurante:
+            provider.nome ?? '',
+        telefoneRestaurante:
+            provider.telefone,
+        imagemRestaurante:
+            '',
+        statusAberto:
+            provider.aberto,
+      );
+
+      mostrarMensagem(
+        'Logo removida com sucesso!',
+      );
+    } catch (e) {
+      print(
+        '❌ Erro ao remover logo: $e',
+      );
+
+      if (mounted) {
+        mostrarMensagem(
+          'Erro ao remover logo: $e',
+          erro: true,
         );
       }
+    } finally {
+      if (mounted) {
+        setState(() {
+          carregando = false;
+        });
+      }
     }
-
-    return placeholderLogo();
   }
 
-  Widget placeholderLogo() {
-    return Container(
-      color: Colors.grey.shade100,
-      child: const Center(
-        child: Icon(
-          Icons.restaurant,
-          size: 60,
-          color: Colors.grey,
-        ),
-      ),
-    );
-  }
-
-  // ==========================================================
+  // ============================================================
   // SELECIONAR CAPA
-  // ==========================================================
+  // ============================================================
 
   Future<void> selecionarCapa() async {
     try {
       final imagem =
           await imagePicker.pickImage(
-        source: ImageSource.gallery,
+        source:
+            ImageSource.gallery,
         imageQuality: 85,
-        maxWidth: 1600,
-        maxHeight: 900,
+        maxWidth: 1800,
+        maxHeight: 1000,
       );
 
-      if (imagem == null) return;
+      if (imagem == null) {
+        return;
+      }
 
       final bytes =
           await imagem.readAsBytes();
 
       if (bytes.isEmpty) {
         mostrarMensagem(
-          'A imagem selecionada está vazia.',
-          erro: true,
-        );
-        return;
-      }
-
-      const limite =
-          5 * 1024 * 1024;
-
-      if (bytes.length > limite) {
-        mostrarMensagem(
-          'A imagem da capa deve ter no máximo 5 MB.',
+          'Não foi possível ler a imagem da capa.',
           erro: true,
         );
         return;
@@ -671,36 +786,25 @@ class _RestaurantSettingsScreenState
       setState(() {
         capaSelecionada = imagem;
         capaBytes = bytes;
-
-        // Se o usuário escolheu uma nova capa,
-        // cancela a intenção de remover a anterior.
         capaFoiRemovida = false;
       });
-
-      mostrarMensagem(
-        'Nova capa selecionada.',
-      );
     } catch (e) {
-      if (!mounted) return;
-
       mostrarMensagem(
-        'Não foi possível selecionar a capa.',
+        'Erro ao selecionar capa: $e',
         erro: true,
       );
     }
   }
 
-  // ==========================================================
+  // ============================================================
   // REMOVER CAPA
-  // ==========================================================
+  // ============================================================
 
   void removerCapa() {
     setState(() {
       capaSelecionada = null;
       capaBytes = null;
       capaAtual = '';
-
-      // Marca a capa para exclusão no servidor.
       capaFoiRemovida = true;
     });
 
@@ -709,12 +813,14 @@ class _RestaurantSettingsScreenState
     );
   }
 
-  // ==========================================================
+  // ============================================================
   // SALVAR CAPA
-  // ==========================================================
+  // ============================================================
 
   Future<void> salvarCapa() async {
-    if (carregando) return;
+    if (carregando) {
+      return;
+    }
 
     final restauranteId =
         await obterIdRestaurante();
@@ -722,13 +828,11 @@ class _RestaurantSettingsScreenState
     if (restauranteId == null ||
         restauranteId.trim().isEmpty) {
       mostrarMensagem(
-        'Restaurante não identificado. Faça login novamente.',
+        'Restaurante não identificado.',
         erro: true,
       );
       return;
     }
-
-    if (!mounted) return;
 
     setState(() {
       carregando = true;
@@ -736,14 +840,11 @@ class _RestaurantSettingsScreenState
 
     try {
       // ========================================================
-      // REMOVER CAPA DO SERVIDOR
+      // REMOVER CAPA
       // ========================================================
 
-      if (capaFoiRemovida) {
-        print(
-          '🗑️ Removendo capa do restaurante...',
-        );
-
+      if (capaFoiRemovida &&
+          capaSelecionada == null) {
         await restaurantService
             .removerCapa(
           restauranteId,
@@ -753,8 +854,6 @@ class _RestaurantSettingsScreenState
 
         setState(() {
           capaAtual = '';
-          capaSelecionada = null;
-          capaBytes = null;
           capaFoiRemovida = false;
         });
 
@@ -766,89 +865,77 @@ class _RestaurantSettingsScreenState
       }
 
       // ========================================================
-      // NENHUMA NOVA IMAGEM
+      // NENHUMA NOVA CAPA
       // ========================================================
 
       if (capaSelecionada == null) {
-        if (capaAtual.isNotEmpty) {
-          mostrarMensagem(
-            'Escolha uma nova imagem ou remova a capa atual.',
-            erro: true,
-          );
-        } else {
-          mostrarMensagem(
-            'Selecione uma imagem para a capa.',
-            erro: true,
-          );
-        }
-
+        mostrarMensagem(
+          'Escolha uma imagem para a capa.',
+          erro: true,
+        );
         return;
       }
 
       // ========================================================
-      // UPLOAD MULTIPART
+      // UPLOAD
       // ========================================================
 
-      print(
-        '📤 Enviando nova capa...',
-      );
-
       final resposta =
-          await restaurantService
-              .uploadCapa(
+          await restaurantService.uploadCapa(
         restauranteId,
         capaSelecionada!,
       );
 
-      Map<String, dynamic>
-          restaurante = {};
+      Map<String, dynamic> restaurante =
+          {};
 
-      if (resposta['restaurante']
-          is Map) {
+      if (resposta['restaurante'] is Map) {
         restaurante =
             Map<String, dynamic>.from(
           resposta['restaurante'],
         );
       }
 
-      // ========================================================
-      // LOCALIZAR URL DA CAPA
-      // ========================================================
+      String novaCapa =
+          (
+            restaurante['capa'] ??
+            restaurante['capaUrl'] ??
+            restaurante['banner'] ??
+            restaurante['bannerUrl'] ??
+            resposta['capa'] ??
+            resposta['capaUrl'] ??
+            resposta['banner'] ??
+            resposta['bannerUrl'] ??
+            ''
+          ).toString().trim();
 
-      String novaCapa = '';
+      if (novaCapa.isEmpty) {
+        try {
+          final atualizado =
+              await restaurantService
+                  .buscarRestaurante(
+            restauranteId,
+          );
 
-      if (restaurante.isNotEmpty) {
-        novaCapa = (
-          restaurante['capa'] ??
-          restaurante['capaUrl'] ??
-          restaurante['banner'] ??
-          restaurante['bannerUrl'] ??
-          ''
-        ).toString();
-      }
-
-      if (novaCapa.trim().isEmpty) {
-        novaCapa = (
-          resposta['capa'] ??
-          resposta['capaUrl'] ??
-          resposta['banner'] ??
-          resposta['bannerUrl'] ??
-          ''
-        ).toString();
-      }
-
-      if (novaCapa.trim().isEmpty) {
-        throw Exception(
-          'O servidor não retornou o endereço da capa.',
-        );
+          novaCapa =
+              (
+                atualizado['capa'] ??
+                atualizado['capaUrl'] ??
+                atualizado['banner'] ??
+                atualizado['bannerUrl'] ??
+                ''
+              ).toString().trim();
+        } catch (_) {}
       }
 
       if (!mounted) return;
 
       setState(() {
         capaAtual = novaCapa;
+
         capaSelecionada = null;
         capaBytes = null;
+
         capaFoiRemovida = false;
       });
 
@@ -856,12 +943,12 @@ class _RestaurantSettingsScreenState
         'Capa atualizada com sucesso!',
       );
     } catch (e) {
-      if (!mounted) return;
-
-      mostrarMensagem(
-        'Erro ao atualizar capa: $e',
-        erro: true,
-      );
+      if (mounted) {
+        mostrarMensagem(
+          'Erro ao atualizar capa: $e',
+          erro: true,
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -871,214 +958,17 @@ class _RestaurantSettingsScreenState
     }
   }
 
-  // ==========================================================
-  // URL DA CAPA
-  // ==========================================================
-
-  String obterUrlCapa(
-    String valor,
-  ) {
-    final capa = valor.trim();
-
-    if (capa.isEmpty) {
-      return '';
-    }
-
-    if (capa.startsWith('http://') ||
-        capa.startsWith('https://')) {
-      return capa;
-    }
-
-    const backendBaseUrl =
-        'http://192.168.1.101:3000';
-
-    if (capa.startsWith('/')) {
-      return '$backendBaseUrl$capa';
-    }
-
-    return '$backendBaseUrl/$capa';
-  }
-
-  // ==========================================================
-  // IMAGEM DA CAPA
-  // ==========================================================
-
-  Widget imagemCapa() {
-    // ========================================================
-    // NOVA IMAGEM SELECIONADA
-    // ========================================================
-
-    if (capaBytes != null &&
-        capaBytes!.isNotEmpty) {
-      return Image.memory(
-        capaBytes!,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        errorBuilder:
-            (_, __, ___) =>
-                placeholderCapa(),
-      );
-    }
-
-    // ========================================================
-    // SEM CAPA
-    // ========================================================
-
-    if (capaAtual.trim().isEmpty) {
-      return placeholderCapa();
-    }
-
-    // ========================================================
-    // BASE64 ANTIGO
-    // ========================================================
-
-    if (capaAtual
-        .startsWith('data:image')) {
-      try {
-        final partes =
-            capaAtual.split(',');
-
-        if (partes.length == 2) {
-          final bytes =
-              base64Decode(
-            partes[1],
-          );
-
-          return Image.memory(
-            bytes,
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: double.infinity,
-            errorBuilder:
-                (_, __, ___) =>
-                    placeholderCapa(),
-          );
-        }
-      } catch (_) {
-        return placeholderCapa();
-      }
-    }
-
-    // ========================================================
-    // URL
-    // ========================================================
-
-    final url =
-        obterUrlCapa(capaAtual);
-
-    if (url.isNotEmpty) {
-      return Image.network(
-        url,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-        loadingBuilder:
-            (
-          context,
-          child,
-          progress,
-        ) {
-          if (progress == null) {
-            return child;
-          }
-
-          return const Center(
-            child:
-                CircularProgressIndicator(
-              color: laranja,
-              strokeWidth: 2,
-            ),
-          );
-        },
-        errorBuilder:
-            (_, __, ___) =>
-                placeholderCapa(),
-      );
-    }
-
-    return placeholderCapa();
-  }
-
-  Widget placeholderCapa() {
-    return Container(
-      color: Colors.grey.shade100,
-      child: const Center(
-        child: Icon(
-          Icons.image_outlined,
-          size: 55,
-          color: Colors.grey,
-        ),
-      ),
-    );
-  }
-
-  // ==========================================================
-  // ALTERAR STATUS RESTAURANTE
-  // ==========================================================
-
-  Future<void> alterarStatusRestaurante(
-    bool aberto,
-  ) async {
-    final restauranteId =
-        await obterIdRestaurante();
-
-    if (restauranteId == null ||
-        restauranteId.isEmpty) {
-      mostrarMensagem(
-        'Restaurante não identificado.',
-        erro: true,
-      );
-      return;
-    }
-
-    try {
-      await restaurantService
-          .alterarStatus(
-        restauranteId,
-        aberto
-            ? 'ABERTO'
-            : 'FECHADO',
-      );
-
-      if (!mounted) return;
-
-      final provider =
-          Provider.of<RestaurantProvider>(
-        context,
-        listen: false,
-      );
-
-      provider.definirStatus(
-        aberto,
-      );
-
-      mostrarMensagem(
-        aberto
-            ? 'Restaurante aberto para pedidos.'
-            : 'Restaurante fechado para pedidos.',
-      );
-
-      setState(() {});
-    } catch (e) {
-      if (!mounted) return;
-
-      mostrarMensagem(
-        'Não foi possível alterar o status: $e',
-        erro: true,
-      );
-    }
-  }
-
-  // ==========================================================
+  // ============================================================
   // MENSAGEM
-  // ==========================================================
+  // ============================================================
 
   void mostrarMensagem(
     String mensagem, {
     bool erro = false,
   }) {
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     ScaffoldMessenger.of(context)
         .hideCurrentSnackBar();
@@ -1086,7 +976,9 @@ class _RestaurantSettingsScreenState
     ScaffoldMessenger.of(context)
         .showSnackBar(
       SnackBar(
-        content: Text(mensagem),
+        content: Text(
+          mensagem,
+        ),
         backgroundColor:
             erro
                 ? Colors.red
@@ -1095,1780 +987,556 @@ class _RestaurantSettingsScreenState
     );
   }
 
-  // ==========================================================
-  // CARD DE CONFIGURAÇÃO
-  // ==========================================================
+  // ============================================================
+  // WIDGET LOGO
+  // ============================================================
 
-  Widget cardConfiguracao({
-    required IconData icone,
-    required String titulo,
-    required String descricao,
-    required Widget trailing,
-    VoidCallback? onTap,
-  }) {
-    return Container(
-      margin:
-          const EdgeInsets.only(
-        bottom: 12,
-      ),
-      decoration:
-          BoxDecoration(
-        color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(18),
-        boxShadow: [
-          BoxShadow(
-            color:
-                Colors.black.withValues(
-              alpha: 0.04,
-            ),
-            blurRadius: 10,
-            offset:
-                const Offset(0, 4),
-          ),
-        ],
-      ),
+  Widget imagemLogo() {
+    // ==========================================================
+    // NOVA IMAGEM SELECIONADA
+    // ==========================================================
 
-      // ========================================================
-      // MATERIAL REAL PARA O SPLASH DO LISTTILE
-      // CORRIGE:
-      // "ListTile background color or ink splashes may be invisible."
-      // ========================================================
-
-      child: Material(
-        color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(18),
-        clipBehavior:
-            Clip.antiAlias,
-        child: ListTile(
-          onTap: onTap,
-
-          // O Material acima é o fundo.
-          // O ListTile fica transparente para o splash
-          // ser desenhado corretamente.
-          tileColor: Colors.transparent,
-
-          contentPadding:
-              const EdgeInsets.symmetric(
-            horizontal: 18,
-            vertical: 7,
-          ),
-
-          leading: Container(
-            width: 46,
-            height: 46,
-            decoration:
-                BoxDecoration(
-              color:
-                  laranja.withValues(
-                alpha: 0.10,
-              ),
-              borderRadius:
-                  BorderRadius.circular(
-                14,
-              ),
-            ),
-            child: Icon(
-              icone,
-              color: laranja,
-            ),
-          ),
-
-          title: Text(
-            titulo,
-            style:
-                const TextStyle(
-              fontWeight:
-                  FontWeight.bold,
-              fontSize: 15,
-            ),
-          ),
-
-          subtitle: Padding(
-            padding:
-                const EdgeInsets.only(
-              top: 3,
-            ),
-            child: Text(
-              descricao,
-              style: TextStyle(
-                fontSize: 12,
-                color:
-                    Colors.grey.shade600,
-              ),
-            ),
-          ),
-
-          trailing: trailing,
-        ),
-      ),
-    );
-  }
-
-  // ==========================================================
-  // TÍTULO SEÇÃO
-  // ==========================================================
-
-  Widget tituloSecao(
-    String titulo,
-  ) {
-    return Padding(
-      padding:
-          const EdgeInsets.only(
-        left: 4,
-        top: 14,
-        bottom: 10,
-      ),
-      child: Align(
-        alignment:
-            Alignment.centerLeft,
-        child: Text(
-          titulo,
-          style: TextStyle(
-            fontSize: 17,
-            fontWeight:
-                FontWeight.bold,
-            color:
-                Colors.grey.shade800,
-          ),
-        ),
-      ),
-    );
-  }
-
-  // ==========================================================
-  // CENTRAL DE AJUDA
-  // ==========================================================
-
-  void abrirCentralAjuda() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor:
-          Colors.white,
-      isScrollControlled: true,
-      shape:
-          const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(
-          top: Radius.circular(25),
-        ),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding:
-                const EdgeInsets.fromLTRB(
-              22,
-              15,
-              22,
-              25,
-            ),
-            child: Column(
-              mainAxisSize:
-                  MainAxisSize.min,
-              children: [
-                Container(
-                  width: 45,
-                  height: 5,
-                  decoration:
-                      BoxDecoration(
-                    color:
-                        Colors.grey.shade300,
-                    borderRadius:
-                        BorderRadius.circular(
-                      10,
-                    ),
-                  ),
-                ),
-                const SizedBox(
-                  height: 22,
-                ),
-                const Icon(
-                  Icons.help_outline,
-                  size: 55,
-                  color: laranja,
-                ),
-                const SizedBox(
-                  height: 12,
-                ),
-                const Text(
-                  'Central de ajuda',
-                  style:
-                      TextStyle(
-                    fontSize: 21,
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(
-                  height: 8,
-                ),
-                Text(
-                  'Encontre orientações para utilizar '
-                  'o FoodJet Restaurante.',
-                  textAlign:
-                      TextAlign.center,
-                  style: TextStyle(
-                    color:
-                        Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(
-                  height: 20,
-                ),
-                _itemAjuda(
-                  Icons.storefront_outlined,
-                  'Como abrir ou fechar a loja',
-                  'Use o botão de status para controlar '
-                      'quando seu restaurante aceita pedidos.',
-                ),
-                _itemAjuda(
-                  Icons.image_outlined,
-                  'Alterar logo ou capa',
-                  'Escolha uma imagem na galeria e salve '
-                      'a logo ou a capa do restaurante.',
-                ),
-                _itemAjuda(
-                  Icons.shopping_bag_outlined,
-                  'Pedidos',
-                  'Os novos pedidos aparecem na área '
-                      'de pedidos do restaurante.',
-                ),
-                _itemAjuda(
-                  Icons.support_agent_outlined,
-                  'Precisa de ajuda?',
-                  'Use Falar com suporte para entrar em '
-                      'contato com a equipe FoodJet.',
-                ),
-                const SizedBox(
-                  height: 10,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _itemAjuda(
-    IconData icon,
-    String titulo,
-    String descricao,
-  ) {
-    return Container(
-      margin:
-          const EdgeInsets.only(
-        bottom: 10,
-      ),
-      padding:
-          const EdgeInsets.all(13),
-      decoration:
-          BoxDecoration(
-        color: Colors.grey.shade50,
-        borderRadius:
-            BorderRadius.circular(14),
-      ),
-      child: Row(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-        children: [
-          Icon(
-            icon,
-            color: laranja,
-          ),
-          const SizedBox(
-            width: 12,
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titulo,
-                  style:
-                      const TextStyle(
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(
-                  height: 3,
-                ),
-                Text(
-                  descricao,
-                  style: TextStyle(
-                    fontSize: 12,
-                    color:
-                        Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ==========================================================
-  // SUPORTE
-  // ==========================================================
-
-  void abrirSuporte() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor:
-          Colors.white,
-      shape:
-          const RoundedRectangleBorder(
-        borderRadius:
-            BorderRadius.vertical(
-          top: Radius.circular(25),
-        ),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding:
-                const EdgeInsets.fromLTRB(
-              22,
-              18,
-              22,
-              30,
-            ),
-            child: Column(
-              mainAxisSize:
-                  MainAxisSize.min,
-              children: [
-                Container(
-                  width: 45,
-                  height: 5,
-                  decoration:
-                      BoxDecoration(
-                    color:
-                        Colors.grey.shade300,
-                    borderRadius:
-                        BorderRadius.circular(
-                      10,
-                    ),
-                  ),
-                ),
-                const SizedBox(
-                  height: 22,
-                ),
-                Container(
-                  width: 70,
-                  height: 70,
-                  decoration:
-                      BoxDecoration(
-                    color:
-                        laranja.withValues(
-                      alpha: 0.10,
-                    ),
-                    shape:
-                        BoxShape.circle,
-                  ),
-                  child:
-                      const Icon(
-                    Icons.support_agent,
-                    size: 40,
-                    color: laranja,
-                  ),
-                ),
-                const SizedBox(
-                  height: 15,
-                ),
-                const Text(
-                  'Falar com suporte',
-                  style:
-                      TextStyle(
-                    fontSize: 21,
-                    fontWeight:
-                        FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(
-                  height: 8,
-                ),
-                Text(
-                  'Entre em contato com a equipe '
-                  'FoodJet para receber ajuda.',
-                  textAlign:
-                      TextAlign.center,
-                  style: TextStyle(
-                    color:
-                        Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(
-                  height: 22,
-                ),
-                SizedBox(
-                  width:
-                      double.infinity,
-                  height: 52,
-                  child:
-                      ElevatedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(
-                        context,
-                      );
-
-                      mostrarMensagem(
-                        'Canal de suporte FoodJet em breve.',
-                      );
-                    },
-                    icon:
-                        const Icon(
-                      Icons.chat_outlined,
-                    ),
-                    label:
-                        const Text(
-                      'Entrar em contato',
-                      style:
-                          TextStyle(
-                        fontWeight:
-                            FontWeight.bold,
-                      ),
-                    ),
-                    style:
-                        ElevatedButton.styleFrom(
-                      backgroundColor:
-                          laranja,
-                      foregroundColor:
-                          Colors.white,
-                      shape:
-                          RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(
-                          14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  // ==========================================================
-  // SEGURANÇA
-  // ==========================================================
-
-  void abrirSeguranca() {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Row(
-            children: [
-              Icon(
-                Icons.lock_outline,
-                color: laranja,
-              ),
-              SizedBox(
-                width: 10,
-              ),
-              Text('Segurança'),
-            ],
-          ),
-          content:
-              const Text(
-            'Mantenha sua senha segura e não '
-            'compartilhe seus dados de acesso '
-            'com outras pessoas.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(
-                context,
-              ),
-              child:
-                  const Text('Fechar'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  // ==========================================================
-  // SAIR DA CONTA
-  // ==========================================================
-
-  Future<void> sairDaConta() async {
-    final confirmar =
-        await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title:
-              const Text(
-            'Sair da conta?',
-            style:
-                TextStyle(
-              fontWeight:
-                  FontWeight.bold,
-            ),
-          ),
-          content:
-              const Text(
-            'Você será desconectado do '
-            'FoodJet Restaurante e voltará '
-            'para a tela de login.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(
-                context,
-                false,
-              ),
-              child:
-                  const Text(
-                'Cancelar',
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () =>
-                  Navigator.pop(
-                context,
-                true,
-              ),
-              style:
-                  ElevatedButton.styleFrom(
-                backgroundColor:
-                    Colors.red,
-                foregroundColor:
-                    Colors.white,
-              ),
-              child:
-                  const Text('Sair'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmar != true) return;
-
-    try {
-      final prefs =
-          await SharedPreferences
-              .getInstance();
-
-      await prefs.remove('token');
-      await prefs.remove('usuario');
-      await prefs.remove('user');
-      await prefs.remove(
-        'access_token',
-      );
-      await prefs.remove(
-        'auth_token',
-      );
-
-      await prefs.remove(
-        'restauranteId',
-      );
-      await prefs.remove(
-        'restaurantId',
-      );
-      await prefs.remove(
-        'restaurante',
-      );
-      await prefs.remove(
-        'restaurant',
-      );
-      await prefs.remove(
-        'restauranteAtual',
-      );
-      await prefs.remove(
-        'usuarioLogado',
-      );
-      await prefs.remove(
-        'userData',
-      );
-
-      if (!mounted) return;
-
-      final provider =
-          Provider.of<RestaurantProvider>(
-        context,
-        listen: false,
-      );
-
-      provider.logout();
-
-      Navigator.of(context)
-          .pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) =>
-              const LoginScreen(),
-        ),
-        (route) => false,
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      mostrarMensagem(
-        'Não foi possível sair da conta: $e',
-        erro: true,
+    if (logoBytes != null &&
+        logoBytes!.isNotEmpty) {
+      return Image.memory(
+        logoBytes!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
       );
     }
-  }
 
-  // ==========================================================
-  // CONFIRMAR EXCLUSÃO
-  // ==========================================================
+    // ==========================================================
+    // LOGO ATUAL
+    // ==========================================================
 
-  Future<void>
-      confirmarExclusaoConta() async {
-    final confirmar =
-        await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title:
-              const Text(
-            'Excluir conta?',
-            style:
-                TextStyle(
-              fontWeight:
-                  FontWeight.bold,
-            ),
-          ),
-          content:
-              const Text(
-            'Essa ação excluirá permanentemente '
-            'a conta do restaurante. Essa operação '
-            'não poderá ser desfeita.',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () =>
-                  Navigator.pop(
-                context,
-                false,
-              ),
-              child:
-                  const Text(
-                'Cancelar',
-              ),
-            ),
-            ElevatedButton(
-              onPressed: () =>
-                  Navigator.pop(
-                context,
-                true,
-              ),
-              style:
-                  ElevatedButton.styleFrom(
-                backgroundColor:
-                    Colors.red,
-                foregroundColor:
-                    Colors.white,
-              ),
-              child:
-                  const Text(
-                'Excluir conta',
-              ),
-            ),
-          ],
-        );
-      },
-    );
+    if (logoAtual.trim().isNotEmpty) {
+      final valor =
+          logoAtual.trim();
 
-    if (confirmar != true) return;
+      // ========================================================
+      // BASE64 ANTIGO
+      //
+      // Mantido apenas para compatibilidade
+      // com logos antigas.
+      // ========================================================
 
-    await excluirConta();
-  }
+      if (valor.startsWith(
+        'data:image',
+      )) {
+        try {
+          final partes =
+              valor.split(',');
 
-  // ==========================================================
-  // EXCLUIR CONTA
-  // ==========================================================
+          if (partes.length == 2) {
+            final bytes =
+                base64Decode(
+              partes[1],
+            );
 
-  Future<void> excluirConta() async {
-    try {
-      final restauranteId =
-          await obterIdRestaurante();
-
-      if (restauranteId == null ||
-          restauranteId.isEmpty) {
-        mostrarMensagem(
-          'Restaurante não identificado.',
-          erro: true,
-        );
-        return;
+            return Image.memory(
+              bytes,
+              fit: BoxFit.cover,
+              width:
+                  double.infinity,
+              height:
+                  double.infinity,
+            );
+          }
+        } catch (_) {}
       }
 
-      if (!mounted) return;
+      // ========================================================
+      // URL
+      // ========================================================
 
-      showDialog(
-        context: context,
-        barrierDismissible:
-            false,
-        builder: (_) {
-          return const Center(
-            child:
-                CircularProgressIndicator(
-              color: laranja,
-            ),
-          );
-        },
-      );
+      final url =
+          obterUrlImagem(valor);
 
-      await restaurantService
-          .excluirConta(
-        restauranteId,
-      );
+      if (url.isNotEmpty) {
+        return Image.network(
+          url,
+          fit: BoxFit.cover,
+          width:
+              double.infinity,
+          height:
+              double.infinity,
+          cacheWidth: 800,
+          errorBuilder:
+              (
+                context,
+                error,
+                stackTrace,
+              ) {
+            print(
+              '❌ Erro ao carregar logo:',
+            );
+            print(
+              '🌐 URL: $url',
+            );
+            print(error);
 
-      if (!mounted) return;
-
-      Navigator.of(context).pop();
-
-      final provider =
-          Provider.of<RestaurantProvider>(
-        context,
-        listen: false,
-      );
-
-      provider.logout();
-
-      Navigator.of(context)
-          .pushAndRemoveUntil(
-        MaterialPageRoute(
-          builder: (_) =>
-              const LoginScreen(),
-        ),
-        (route) => false,
-      );
-    } catch (e) {
-      if (!mounted) return;
-
-      Navigator.of(context).pop();
-
-      mostrarMensagem(
-        'Erro ao excluir conta: $e',
-        erro: true,
-      );
+            return const Icon(
+              Icons.restaurant,
+              size: 60,
+              color: Colors.grey,
+            );
+          },
+        );
+      }
     }
+
+    // ==========================================================
+    // PLACEHOLDER
+    // ==========================================================
+
+    return const Icon(
+      Icons.restaurant,
+      size: 60,
+      color: Colors.grey,
+    );
   }
 
-  // ==========================================================
-  // INTERFACE
-  // ==========================================================
+  // ============================================================
+  // WIDGET CAPA
+  // ============================================================
+
+  Widget imagemCapa() {
+    if (capaBytes != null &&
+        capaBytes!.isNotEmpty) {
+      return Image.memory(
+        capaBytes!,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    }
+
+    if (capaAtual.trim().isNotEmpty) {
+      final url =
+          obterUrlImagem(
+        capaAtual,
+      );
+
+      if (url.isNotEmpty) {
+        return Image.network(
+          url,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+          errorBuilder:
+              (
+                context,
+                error,
+                stackTrace,
+              ) {
+            print(
+              '❌ Erro ao carregar capa:',
+            );
+            print(
+              '🌐 URL: $url',
+            );
+
+            return const Icon(
+              Icons.image,
+              size: 60,
+              color: Colors.grey,
+            );
+          },
+        );
+      }
+    }
+
+    return const Icon(
+      Icons.image,
+      size: 60,
+      color: Colors.grey,
+    );
+  }
+
+  // ============================================================
+  // LOGOUT
+  // ============================================================
+
+  Future<void> sair() async {
+    final prefs =
+        await SharedPreferences.getInstance();
+
+    await prefs.remove('token');
+    await prefs.remove('access_token');
+    await prefs.remove('auth_token');
+
+    if (!mounted) return;
+
+    Navigator.of(context)
+        .pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) =>
+            const LoginScreen(),
+      ),
+      (route) => false,
+    );
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
 
   @override
   Widget build(
     BuildContext context,
   ) {
-    final provider =
-        Provider.of<RestaurantProvider>(
-      context,
-    );
-
-    final nomeRestaurante =
-        provider.nome?.trim().isNotEmpty ==
-                true
-            ? provider.nome!
-            : 'Meu restaurante';
-
-    final statusAtual =
-        provider.aberto;
-
-    if (carregandoDados) {
-      return const Scaffold(
-        backgroundColor:
-            Color(0xFFF5F5F5),
-        body: Center(
-          child:
-              CircularProgressIndicator(
-            color: laranja,
-          ),
-        ),
-      );
-    }
-
     return Scaffold(
       backgroundColor:
           const Color(0xFFF5F5F5),
       appBar: AppBar(
-        title:
-            const Text(
+        title: const Text(
           'Configurações',
-          style:
-              TextStyle(
-            fontWeight:
-                FontWeight.bold,
-          ),
         ),
         backgroundColor:
-            laranja,
+            const Color(0xFFF97316),
         foregroundColor:
             Colors.white,
         elevation: 0,
       ),
-      body: SafeArea(
-        child:
-            SingleChildScrollView(
-          padding:
-              const EdgeInsets.all(
-            18,
-          ),
-          child: Column(
-            children: [
-              // ==================================================
-              // CABEÇALHO
-              // ==================================================
+      body:
+          carregandoDados
+              ? const Center(
+                  child:
+                      CircularProgressIndicator(),
+                )
+              : SingleChildScrollView(
+                  padding:
+                      const EdgeInsets.all(
+                    16,
+                  ),
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment
+                            .stretch,
+                    children: [
+                      // ==================================================
+                      // LOGO
+                      // ==================================================
 
-              Container(
-                width:
-                    double.infinity,
-                padding:
-                    const EdgeInsets.all(
-                  20,
-                ),
-                decoration:
-                    BoxDecoration(
-                  gradient:
-                      const LinearGradient(
-                    colors: [
-                      Color(
-                        0xFFF97316,
-                      ),
-                      Color(
-                        0xFFEA580C,
-                      ),
-                    ],
-                  ),
-                  borderRadius:
-                      BorderRadius.circular(
-                    22,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          laranja.withValues(
-                        alpha:
-                            0.22,
-                      ),
-                      blurRadius: 18,
-                      offset:
-                          const Offset(
-                        0,
-                        8,
-                      ),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 64,
-                      height: 64,
-                      decoration:
-                          BoxDecoration(
-                        color:
-                            Colors.white,
-                        borderRadius:
-                            BorderRadius
-                                .circular(
-                          18,
+                      const Text(
+                        'Logo do restaurante',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight:
+                              FontWeight.bold,
                         ),
                       ),
-                      clipBehavior:
-                          Clip.antiAlias,
-                      child:
-                          imagemLogo(),
-                    ),
-                    const SizedBox(
-                      width: 14,
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment
-                                .start,
+
+                      const SizedBox(
+                        height: 12,
+                      ),
+
+                      Container(
+                        height: 180,
+                        width:
+                            double.infinity,
+                        decoration:
+                            BoxDecoration(
+                          color:
+                              Colors.white,
+                          borderRadius:
+                              BorderRadius
+                                  .circular(
+                            16,
+                          ),
+                          border:
+                              Border.all(
+                            color:
+                                Colors.grey.shade300,
+                          ),
+                        ),
+                        clipBehavior:
+                            Clip.antiAlias,
+                        child:
+                            imagemLogo(),
+                      ),
+
+                      const SizedBox(
+                        height: 12,
+                      ),
+
+                      Row(
                         children: [
-                          const Text(
-                            'Configurações da loja',
-                            style:
-                                TextStyle(
-                              color:
-                                  Colors.white,
-                              fontSize:
-                                  18,
-                              fontWeight:
-                                  FontWeight
-                                      .bold,
-                            ),
-                          ),
-                          const SizedBox(
-                            height: 4,
-                          ),
-                          Text(
-                            nomeRestaurante,
-                            maxLines: 1,
-                            overflow:
-                                TextOverflow
-                                    .ellipsis,
-                            style:
-                                const TextStyle(
-                              color:
-                                  Colors.white,
-                              fontSize:
-                                  13,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(
-                height: 20,
-              ),
-
-              // ==================================================
-              // IDENTIDADE
-              // ==================================================
-
-              tituloSecao(
-                'Identidade da loja',
-              ),
-
-              Container(
-                width:
-                    double.infinity,
-                padding:
-                    const EdgeInsets.all(
-                  20,
-                ),
-                decoration:
-                    BoxDecoration(
-                  color:
-                      Colors.white,
-                  borderRadius:
-                      BorderRadius.circular(
-                    20,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          Colors.black
-                              .withValues(
-                        alpha:
-                            0.04,
-                      ),
-                      blurRadius:
-                          12,
-                      offset:
-                          const Offset(
-                        0,
-                        4,
-                      ),
-                    ),
-                  ],
-                ),
-                child:
-                    Column(
-                  children: [
-                    Stack(
-                      clipBehavior:
-                          Clip.none,
-                      children: [
-                        Container(
-                          width: 170,
-                          height: 170,
-                          decoration:
-                              BoxDecoration(
-                            color:
-                                Colors.white,
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              28,
-                            ),
-                            border:
-                                Border.all(
-                              color:
-                                  Colors.grey
-                                      .shade200,
-                            ),
-                            boxShadow: [
-                              BoxShadow(
-                                color:
-                                    Colors.black
-                                        .withValues(
-                                  alpha:
-                                      0.08,
-                                ),
-                                blurRadius:
-                                    18,
-                                offset:
-                                    const Offset(
-                                  0,
-                                  7,
-                                ),
-                              ),
-                            ],
-                          ),
-                          clipBehavior:
-                              Clip.antiAlias,
-                          child:
-                              imagemLogo(),
-                        ),
-                        Positioned(
-                          right: -8,
-                          bottom: -8,
-                          child:
-                              Material(
-                            color:
-                                laranja,
-                            elevation:
-                                5,
-                            shape:
-                                const CircleBorder(),
+                          Expanded(
                             child:
-                                InkWell(
-                              customBorder:
-                                  const CircleBorder(),
-                              onTap:
+                                OutlinedButton.icon(
+                              onPressed:
                                   carregando
                                       ? null
                                       : selecionarLogo,
-                              child:
-                                  const Padding(
-                                padding:
-                                    EdgeInsets.all(
-                                  13,
-                                ),
-                                child:
-                                    Icon(
-                                  Icons
-                                      .camera_alt,
-                                  color:
-                                      Colors.white,
-                                  size:
-                                      25,
-                                ),
+                              icon:
+                                  const Icon(
+                                Icons
+                                    .photo_library,
                               ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(
-                      height: 25,
-                    ),
-                    const Text(
-                      'Logo do restaurante',
-                      style:
-                          TextStyle(
-                        fontSize: 18,
-                        fontWeight:
-                            FontWeight
-                                .bold,
-                      ),
-                    ),
-                    const SizedBox(
-                      height: 6,
-                    ),
-                    Text(
-                      'Essa imagem será exibida '
-                      'para seus clientes no FoodJet.',
-                      textAlign:
-                          TextAlign.center,
-                      style:
-                          TextStyle(
-                        color:
-                            Colors.grey
-                                .shade600,
-                        fontSize:
-                            13,
-                      ),
-                    ),
-                    const SizedBox(
-                      height: 18,
-                    ),
-                    SizedBox(
-                      width:
-                          double.infinity,
-                      height: 50,
-                      child:
-                          OutlinedButton
-                              .icon(
-                        onPressed:
-                            carregando
-                                ? null
-                                : selecionarLogo,
-                        icon:
-                            const Icon(
-                          Icons
-                              .photo_library_outlined,
-                          color:
-                              laranja,
-                        ),
-                        label:
-                            const Text(
-                          'Escolher nova imagem',
-                          style:
-                              TextStyle(
-                            color:
-                                laranja,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
-                          ),
-                        ),
-                        style:
-                            OutlinedButton
-                                .styleFrom(
-                          side:
-                              const BorderSide(
-                            color:
-                                laranja,
-                            width:
-                                1.5,
-                          ),
-                          shape:
-                              RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              14,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(
-                      height: 8,
-                    ),
-                    TextButton.icon(
-                      onPressed:
-                          carregando
-                              ? null
-                              : removerLogo,
-                      icon:
-                          const Icon(
-                        Icons
-                            .delete_outline,
-                        color:
-                            Colors.red,
-                      ),
-                      label:
-                          const Text(
-                        'Remover logo',
-                        style:
-                            TextStyle(
-                          color:
-                              Colors.red,
-                          fontWeight:
-                              FontWeight
-                                  .w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(
-                      height: 8,
-                    ),
-                    SizedBox(
-                      width:
-                          double.infinity,
-                      height: 54,
-                      child:
-                          ElevatedButton(
-                        onPressed:
-                            carregando
-                                ? null
-                                : salvarLogo,
-                        style:
-                            ElevatedButton
-                                .styleFrom(
-                          backgroundColor:
-                              laranja,
-                          foregroundColor:
-                              Colors.white,
-                          shape:
-                              RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              14,
-                            ),
-                          ),
-                        ),
-                        child:
-                            carregando
-                                ? const SizedBox(
-                                    width:
-                                        24,
-                                    height:
-                                        24,
-                                    child:
-                                        CircularProgressIndicator(
-                                      color:
-                                          Colors.white,
-                                      strokeWidth:
-                                          2.5,
-                                    ),
-                                  )
-                                : const Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment
-                                            .center,
-                                    children: [
-                                      Icon(
-                                        Icons
-                                            .check_circle_outline,
-                                      ),
-                                      SizedBox(
-                                        width:
-                                            8,
-                                      ),
-                                      Text(
-                                        'Salvar logo',
-                                        style:
-                                            TextStyle(
-                                          fontWeight:
-                                              FontWeight.bold,
-                                          fontSize:
-                                              16,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // ==================================================
-              // CAPA
-              // ==================================================
-
-              tituloSecao(
-                'Capa da loja',
-              ),
-
-              Container(
-                width:
-                    double.infinity,
-                padding:
-                    const EdgeInsets.all(
-                  20,
-                ),
-                decoration:
-                    BoxDecoration(
-                  color:
-                      Colors.white,
-                  borderRadius:
-                      BorderRadius.circular(
-                    20,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          Colors.black
-                              .withValues(
-                        alpha:
-                            0.04,
-                      ),
-                      blurRadius:
-                          12,
-                      offset:
-                          const Offset(
-                        0,
-                        4,
-                      ),
-                    ),
-                  ],
-                ),
-                child:
-                    Column(
-                  children: [
-                    Container(
-                      width:
-                          double.infinity,
-                      height: 180,
-                      decoration:
-                          BoxDecoration(
-                        color:
-                            Colors.grey
-                                .shade100,
-                        borderRadius:
-                            BorderRadius
-                                .circular(
-                          18,
-                        ),
-                        border:
-                            Border.all(
-                          color:
-                              Colors.grey
-                                  .shade200,
-                        ),
-                      ),
-                      clipBehavior:
-                          Clip.antiAlias,
-                      child:
-                          Stack(
-                        fit:
-                            StackFit.expand,
-                        children: [
-                          imagemCapa(),
-                          Positioned(
-                            left: 12,
-                            bottom: 12,
-                            child:
-                                Container(
-                              padding:
-                                  const EdgeInsets
-                                      .symmetric(
-                                horizontal:
-                                    10,
-                                vertical:
-                                    6,
-                              ),
-                              decoration:
-                                  BoxDecoration(
-                                color:
-                                    Colors.black
-                                        .withValues(
-                                  alpha:
-                                      0.55,
-                                ),
-                                borderRadius:
-                                    BorderRadius
-                                        .circular(
-                                  10,
-                                ),
-                              ),
-                              child:
+                              label:
                                   const Text(
-                                'Pré-visualização da capa',
-                                style:
-                                    TextStyle(
-                                  color:
-                                      Colors.white,
-                                  fontSize:
-                                      12,
-                                  fontWeight:
-                                      FontWeight
-                                          .w600,
-                                ),
+                                'Escolher logo',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(
+                            width: 8,
+                          ),
+                          Expanded(
+                            child:
+                                OutlinedButton.icon(
+                              onPressed:
+                                  carregando ||
+                                          logoAtual
+                                              .isEmpty
+                                      ? null
+                                      : excluirLogoServidor,
+                              icon:
+                                  const Icon(
+                                Icons
+                                    .delete_outline,
+                              ),
+                              label:
+                                  const Text(
+                                'Remover',
                               ),
                             ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(
-                      height: 18,
-                    ),
-                    const Text(
-                      'Capa do restaurante',
-                      style:
-                          TextStyle(
-                        fontSize: 18,
-                        fontWeight:
-                            FontWeight
-                                .bold,
+
+                      const SizedBox(
+                        height: 8,
                       ),
-                    ),
-                    const SizedBox(
-                      height: 6,
-                    ),
-                    Text(
-                      'Essa imagem aparecerá no topo da página '
-                      'do seu restaurante para os clientes.',
-                      textAlign:
-                          TextAlign.center,
-                      style:
-                          TextStyle(
-                        color:
-                            Colors.grey
-                                .shade600,
-                        fontSize:
-                            13,
+
+                      SizedBox(
+                        width:
+                            double.infinity,
+                        child:
+                            ElevatedButton.icon(
+                          onPressed:
+                              carregando
+                                  ? null
+                                  : salvarLogo,
+                          icon:
+                              carregando
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child:
+                                          CircularProgressIndicator(
+                                        strokeWidth:
+                                            2,
+                                        color:
+                                            Colors.white,
+                                      ),
+                                    )
+                                  : const Icon(
+                                      Icons
+                                          .cloud_upload,
+                                    ),
+                          label:
+                              Text(
+                            carregando
+                                ? 'Enviando...'
+                                : 'Salvar logo',
+                          ),
+                          style:
+                              ElevatedButton
+                                  .styleFrom(
+                            backgroundColor:
+                                const Color(
+                              0xFFF97316,
+                            ),
+                            foregroundColor:
+                                Colors.white,
+                            padding:
+                                const EdgeInsets
+                                    .symmetric(
+                              vertical: 14,
+                            ),
+                          ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(
-                      height: 18,
-                    ),
-                    SizedBox(
-                      width:
-                          double.infinity,
-                      height: 50,
-                      child:
-                          OutlinedButton
-                              .icon(
+
+                      const SizedBox(
+                        height: 32,
+                      ),
+
+                      // ==================================================
+                      // CAPA
+                      // ==================================================
+
+                      const Text(
+                        'Capa do restaurante',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight:
+                              FontWeight.bold,
+                        ),
+                      ),
+
+                      const SizedBox(
+                        height: 12,
+                      ),
+
+                      Container(
+                        height: 200,
+                        width:
+                            double.infinity,
+                        decoration:
+                            BoxDecoration(
+                          color:
+                              Colors.white,
+                          borderRadius:
+                              BorderRadius
+                                  .circular(
+                            16,
+                          ),
+                          border:
+                              Border.all(
+                            color:
+                                Colors.grey.shade300,
+                          ),
+                        ),
+                        clipBehavior:
+                            Clip.antiAlias,
+                        child:
+                            imagemCapa(),
+                      ),
+
+                      const SizedBox(
+                        height: 12,
+                      ),
+
+                      Row(
+                        children: [
+                          Expanded(
+                            child:
+                                OutlinedButton.icon(
+                              onPressed:
+                                  carregando
+                                      ? null
+                                      : selecionarCapa,
+                              icon:
+                                  const Icon(
+                                Icons
+                                    .photo_library,
+                              ),
+                              label:
+                                  const Text(
+                                'Escolher capa',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(
+                            width: 8,
+                          ),
+                          Expanded(
+                            child:
+                                OutlinedButton.icon(
+                              onPressed:
+                                  carregando ||
+                                          capaAtual
+                                              .isEmpty
+                                      ? null
+                                      : removerCapa,
+                              icon:
+                                  const Icon(
+                                Icons
+                                    .delete_outline,
+                              ),
+                              label:
+                                  const Text(
+                                'Remover',
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(
+                        height: 8,
+                      ),
+
+                      SizedBox(
+                        width:
+                            double.infinity,
+                        child:
+                            ElevatedButton.icon(
+                          onPressed:
+                              carregando
+                                  ? null
+                                  : salvarCapa,
+                          icon:
+                              const Icon(
+                            Icons
+                                .cloud_upload,
+                          ),
+                          label:
+                              const Text(
+                            'Salvar capa',
+                          ),
+                          style:
+                              ElevatedButton
+                                  .styleFrom(
+                            backgroundColor:
+                                const Color(
+                              0xFFF97316,
+                            ),
+                            foregroundColor:
+                                Colors.white,
+                            padding:
+                                const EdgeInsets
+                                    .symmetric(
+                              vertical: 14,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(
+                        height: 32,
+                      ),
+
+                      // ==================================================
+                      // SAIR
+                      // ==================================================
+
+                      OutlinedButton.icon(
                         onPressed:
                             carregando
                                 ? null
-                                : selecionarCapa,
+                                : sair,
                         icon:
                             const Icon(
-                          Icons
-                              .photo_library_outlined,
-                          color:
-                              laranja,
+                          Icons.logout,
                         ),
                         label:
                             const Text(
-                          'Escolher nova capa',
-                          style:
-                              TextStyle(
-                            color:
-                                laranja,
-                            fontWeight:
-                                FontWeight
-                                    .bold,
-                          ),
+                          'Sair',
                         ),
                         style:
                             OutlinedButton
                                 .styleFrom(
-                          side:
-                              const BorderSide(
-                            color:
-                                laranja,
-                            width:
-                                1.5,
-                          ),
-                          shape:
-                              RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              14,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(
-                      height: 8,
-                    ),
-                    TextButton.icon(
-                      onPressed:
-                          carregando
-                              ? null
-                              : removerCapa,
-                      icon:
-                          const Icon(
-                        Icons
-                            .delete_outline,
-                        color:
-                            Colors.red,
-                      ),
-                      label:
-                          const Text(
-                        'Remover capa',
-                        style:
-                            TextStyle(
-                          color:
-                              Colors.red,
-                          fontWeight:
-                              FontWeight
-                                  .w600,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(
-                      height: 8,
-                    ),
-                    SizedBox(
-                      width:
-                          double.infinity,
-                      height: 54,
-                      child:
-                          ElevatedButton(
-                        onPressed:
-                            carregando
-                                ? null
-                                : salvarCapa,
-                        style:
-                            ElevatedButton
-                                .styleFrom(
-                          backgroundColor:
-                              laranja,
                           foregroundColor:
-                              Colors.white,
-                          shape:
-                              RoundedRectangleBorder(
-                            borderRadius:
-                                BorderRadius
-                                    .circular(
-                              14,
-                            ),
+                              Colors.red,
+                          padding:
+                              const EdgeInsets
+                                  .symmetric(
+                            vertical: 14,
                           ),
                         ),
-                        child:
-                            carregando
-                                ? const SizedBox(
-                                    width:
-                                        24,
-                                    height:
-                                        24,
-                                    child:
-                                        CircularProgressIndicator(
-                                      color:
-                                          Colors.white,
-                                      strokeWidth:
-                                          2.5,
-                                    ),
-                                  )
-                                : const Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment
-                                            .center,
-                                    children: [
-                                      Icon(
-                                        Icons
-                                            .check_circle_outline,
-                                      ),
-                                      SizedBox(
-                                        width:
-                                            8,
-                                      ),
-                                      Text(
-                                        'Salvar capa',
-                                        style:
-                                            TextStyle(
-                                          fontWeight:
-                                              FontWeight.bold,
-                                          fontSize:
-                                              16,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
 
-              // ==================================================
-              // FUNCIONAMENTO
-              // ==================================================
-
-              tituloSecao(
-                'Funcionamento',
-              ),
-
-              cardConfiguracao(
-                icone: statusAtual
-                    ? Icons.storefront
-                    : Icons.storefront_outlined,
-                titulo: statusAtual
-                    ? 'Restaurante aberto'
-                    : 'Restaurante fechado',
-                descricao: statusAtual
-                    ? 'Sua loja está recebendo pedidos'
-                    : 'Sua loja não está recebendo pedidos',
-                trailing:
-                    Switch(
-                  value:
-                      statusAtual,
-                  activeColor:
-                      laranja,
-                  onChanged:
-                      alterarStatusRestaurante,
-                ),
-              ),
-
-              // ==================================================
-              // AJUDA
-              // ==================================================
-
-              tituloSecao(
-                'Ajuda e suporte',
-              ),
-
-              cardConfiguracao(
-                icone:
-                    Icons.help_outline,
-                titulo:
-                    'Central de ajuda',
-                descricao:
-                    'Veja orientações para utilizar o FoodJet',
-                trailing:
-                    const Icon(
-                  Icons.chevron_right,
-                  color:
-                      Colors.grey,
-                ),
-                onTap:
-                    abrirCentralAjuda,
-              ),
-
-              cardConfiguracao(
-                icone:
-                    Icons.support_agent_outlined,
-                titulo:
-                    'Falar com suporte',
-                descricao:
-                    'Entre em contato com a equipe FoodJet',
-                trailing:
-                    const Icon(
-                  Icons.chevron_right,
-                  color:
-                      Colors.grey,
-                ),
-                onTap:
-                    abrirSuporte,
-              ),
-
-              // ==================================================
-              // SEGURANÇA
-              // ==================================================
-
-              tituloSecao(
-                'Segurança',
-              ),
-
-              cardConfiguracao(
-                icone:
-                    Icons.lock_outline,
-                titulo:
-                    'Segurança da conta',
-                descricao:
-                    'Informações para proteger seu acesso',
-                trailing:
-                    const Icon(
-                  Icons.chevron_right,
-                  color:
-                      Colors.grey,
-                ),
-                onTap:
-                    abrirSeguranca,
-              ),
-
-              // ==================================================
-              // CONTA
-              // ==================================================
-
-              tituloSecao(
-                'Conta',
-              ),
-
-              cardConfiguracao(
-                icone:
-                    Icons.logout,
-                titulo:
-                    'Sair da conta',
-                descricao:
-                    'Sair do restaurante e voltar para o login',
-                trailing:
-                    const Icon(
-                  Icons.chevron_right,
-                  color:
-                      Colors.orange,
-                ),
-                onTap:
-                    sairDaConta,
-              ),
-
-              cardConfiguracao(
-                icone:
-                    Icons.delete_forever_outlined,
-                titulo:
-                    'Excluir conta',
-                descricao:
-                    'Excluir permanentemente o restaurante',
-                trailing:
-                    const Icon(
-                  Icons.chevron_right,
-                  color:
-                      Colors.red,
-                ),
-                onTap:
-                    confirmarExclusaoConta,
-              ),
-
-              const SizedBox(
-                height: 20,
-              ),
-
-              // ==================================================
-              // AVISO
-              // ==================================================
-
-              Container(
-                width:
-                    double.infinity,
-                padding:
-                    const EdgeInsets.all(
-                  16,
-                ),
-                decoration:
-                    BoxDecoration(
-                  color:
-                      Colors.orange.shade50,
-                  borderRadius:
-                      BorderRadius.circular(
-                    16,
-                  ),
-                  border:
-                      Border.all(
-                    color:
-                        Colors.orange.shade100,
+                      const SizedBox(
+                        height: 30,
+                      ),
+                    ],
                   ),
                 ),
-                child:
-                    Row(
-                  crossAxisAlignment:
-                      CrossAxisAlignment
-                          .start,
-                  children: [
-                    Icon(
-                      Icons.info_outline,
-                      color:
-                          Colors.orange
-                              .shade700,
-                    ),
-                    const SizedBox(
-                      width: 12,
-                    ),
-                    Expanded(
-                      child: Text(
-                        'As configurações da sua loja '
-                        'controlam o funcionamento do '
-                        'restaurante no FoodJet.',
-                        style:
-                            TextStyle(
-                          color:
-                              Colors.orange
-                                  .shade900,
-                          fontSize:
-                              13,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(
-                height: 30,
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

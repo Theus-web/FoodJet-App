@@ -5,56 +5,38 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class RestaurantService {
-  static const String baseUrl =
-      'http://192.168.1.101:3000/api';
+  static const String baseUrl = 'https://foodjet-backend.onrender.com/api';
 
-  static const String _restaurantIdKey =
-      'restauranteId';
+  static const String _restaurantIdKey = 'restauranteId';
 
-  static const String _restaurantKey =
-      'restaurante';
+  static const String _restaurantKey = 'restaurante';
 
   // ============================================================
   // BUSCAR RESTAURANTE
   // ============================================================
 
-  Future<Map<String, dynamic>> buscarRestaurante(
-    String id,
-  ) async {
+  Future<Map<String, dynamic>> buscarRestaurante(String id) async {
     final restauranteId = id.trim();
 
     if (restauranteId.isEmpty) {
-      throw Exception(
-        'Restaurante não identificado.',
-      );
+      throw Exception('Restaurante não identificado.');
     }
 
     final response = await http
         .get(
-          Uri.parse(
-            '$baseUrl/restaurants/$restauranteId',
-          ),
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          Uri.parse('$baseUrl/restaurants/$restauranteId'),
+          headers: {'Content-Type': 'application/json'},
         )
-        .timeout(
-          const Duration(seconds: 10),
-        );
+        .timeout(const Duration(seconds: 10));
 
     Map<String, dynamic> data = {};
 
     try {
       if (response.body.trim().isNotEmpty) {
-        final decoded = jsonDecode(
-          response.body,
-        );
+        final decoded = jsonDecode(response.body);
 
         if (decoded is Map) {
-          data =
-              Map<String, dynamic>.from(
-            decoded,
-          );
+          data = Map<String, dynamic>.from(decoded);
         }
       }
     } catch (_) {}
@@ -63,25 +45,18 @@ class RestaurantService {
       Map<String, dynamic> restaurante;
 
       if (data['restaurante'] is Map) {
-        restaurante =
-            Map<String, dynamic>.from(
-          data['restaurante'],
-        );
+        restaurante = Map<String, dynamic>.from(data['restaurante']);
       } else {
         restaurante = data;
       }
 
-      await _salvarRestauranteLocal(
-        restaurante,
-      );
+      await _salvarRestauranteLocal(restaurante);
 
       return restaurante;
     }
 
     throw Exception(
-      data['erro'] ??
-          data['message'] ??
-          'Erro ao buscar restaurante.',
+      data['erro'] ?? data['message'] ?? 'Erro ao buscar restaurante.',
     );
   }
 
@@ -99,122 +74,75 @@ class RestaurantService {
     final id = restauranteId.trim();
 
     if (id.isEmpty) {
-      throw Exception(
-        'Restaurante não identificado.',
-      );
+      throw Exception('Restaurante não identificado.');
     }
 
-    final statusNormalizado =
-        status.trim().toUpperCase();
+    final statusNormalizado = status.trim().toUpperCase();
 
-    if (statusNormalizado != 'ABERTO' &&
-        statusNormalizado != 'FECHADO') {
-      throw Exception(
-        'Status inválido.',
-      );
+    if (statusNormalizado != 'ABERTO' && statusNormalizado != 'FECHADO') {
+      throw Exception('Status inválido.');
     }
 
-    final bool online =
-        statusNormalizado == 'ABERTO';
+    final bool online = statusNormalizado == 'ABERTO';
 
     print('');
-    print(
-      '==========================================',
-    );
-    print(
-      '🔄 FOODJET - ALTERANDO STATUS',
-    );
-    print(
-      '🏪 Restaurante: $id',
-    );
-    print(
-      '📌 Status: $statusNormalizado',
-    );
-    print(
-      '🟢 Online: $online',
-    );
-    print(
-      '==========================================',
-    );
+    print('==========================================');
+    print('🔄 FOODJET - ALTERANDO STATUS');
+    print('🏪 Restaurante: $id');
+    print('📌 Status: $statusNormalizado');
+    print('🟢 Online: $online');
+    print('==========================================');
 
     final response = await http
         .put(
-          Uri.parse(
-            '$baseUrl/restaurants/$id/status',
-          ),
-          headers: {
-            'Content-Type':
-                'application/json',
-          },
+          Uri.parse('$baseUrl/restaurants/$id/status'),
+          headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
-            'status':
-                statusNormalizado,
+            'status': statusNormalizado,
             'online': online,
             'aberto': online,
           }),
         )
-        .timeout(
-          const Duration(seconds: 10),
-        );
+        .timeout(const Duration(seconds: 10));
 
     Map<String, dynamic> data = {};
 
     try {
       if (response.body.trim().isNotEmpty) {
-        final decoded =
-            jsonDecode(response.body);
+        final decoded = jsonDecode(response.body);
 
         if (decoded is Map) {
-          data =
-              Map<String, dynamic>.from(
-            decoded,
-          );
+          data = Map<String, dynamic>.from(decoded);
         }
       }
     } catch (_) {}
 
-    print(
-      '📡 HTTP: ${response.statusCode}',
-    );
+    print('📡 HTTP: ${response.statusCode}');
 
-    print(
-      '📦 RESPOSTA: ${response.body}',
-    );
+    print('📦 RESPOSTA: ${response.body}');
 
     if (response.statusCode == 200) {
       Map<String, dynamic> restaurante;
 
       if (data['restaurante'] is Map) {
-        restaurante =
-            Map<String, dynamic>.from(
-          data['restaurante'],
-        );
+        restaurante = Map<String, dynamic>.from(data['restaurante']);
       } else {
         restaurante = {
           ...data,
           'id': id,
-          'status':
-              statusNormalizado,
+          'status': statusNormalizado,
           'online': online,
           'aberto': online,
         };
       }
 
-      restaurante['status'] =
-          restaurante['status'] ??
-              statusNormalizado;
+      restaurante['status'] = restaurante['status'] ?? statusNormalizado;
 
-      restaurante['online'] =
-          restaurante['online'] ??
-              online;
+      restaurante['online'] = restaurante['online'] ?? online;
 
-      restaurante['aberto'] =
-          restaurante['aberto'] ??
-              online;
+      restaurante['aberto'] = restaurante['aberto'] ?? online;
 
-      await _salvarRestauranteLocal(
-        restaurante,
-      );
+      await _salvarRestauranteLocal(restaurante);
 
       return restaurante;
     }
@@ -231,8 +159,12 @@ class RestaurantService {
   //
   // USADO PARA CONFIGURAÇÕES NORMAIS.
   //
-  // NÃO USAR PARA ENVIAR IMAGEM DE CAPA.
-  // A CAPA USA uploadCapa().
+  // NÃO USAR PARA ENVIAR:
+  // - CAPA
+  // - LOGO
+  //
+  // CAPA  -> uploadCapa()
+  // LOGO  -> uploadLogo()
   // ============================================================
 
   Future<bool> atualizarRestaurante(
@@ -242,38 +174,25 @@ class RestaurantService {
     final id = restauranteId.trim();
 
     if (id.isEmpty) {
-      throw Exception(
-        'Restaurante não identificado.',
-      );
+      throw Exception('Restaurante não identificado.');
     }
 
     final response = await http
         .put(
-          Uri.parse(
-            '$baseUrl/restaurants/$id',
-          ),
-          headers: {
-            'Content-Type':
-                'application/json',
-          },
+          Uri.parse('$baseUrl/restaurants/$id'),
+          headers: {'Content-Type': 'application/json'},
           body: jsonEncode(dados),
         )
-        .timeout(
-          const Duration(seconds: 10),
-        );
+        .timeout(const Duration(seconds: 10));
 
     Map<String, dynamic> data = {};
 
     try {
       if (response.body.trim().isNotEmpty) {
-        final decoded =
-            jsonDecode(response.body);
+        final decoded = jsonDecode(response.body);
 
         if (decoded is Map) {
-          data =
-              Map<String, dynamic>.from(
-            decoded,
-          );
+          data = Map<String, dynamic>.from(decoded);
         }
       }
     } catch (_) {}
@@ -281,9 +200,7 @@ class RestaurantService {
     if (response.statusCode == 200) {
       if (data['restaurante'] is Map) {
         await _salvarRestauranteLocal(
-          Map<String, dynamic>.from(
-            data['restaurante'],
-          ),
+          Map<String, dynamic>.from(data['restaurante']),
         );
       }
 
@@ -291,9 +208,7 @@ class RestaurantService {
     }
 
     throw Exception(
-      data['erro'] ??
-          data['message'] ??
-          'Erro ao atualizar restaurante.',
+      data['erro'] ?? data['message'] ?? 'Erro ao atualizar restaurante.',
     );
   }
 
@@ -302,13 +217,8 @@ class RestaurantService {
   //
   // POST /api/restaurants/:id/capa
   //
-  // Envia a imagem como multipart/form-data.
-  //
-  // BACKEND:
-  // /uploads/capas/
-  //
-  // POSTGRESQL:
-  // guarda somente o caminho da imagem.
+  // multipart/form-data
+  // campo: capa
   // ============================================================
 
   Future<Map<String, dynamic>> uploadCapa(
@@ -318,130 +228,219 @@ class RestaurantService {
     final id = restauranteId.trim();
 
     if (id.isEmpty) {
-      throw Exception(
-        'ID do restaurante inválido.',
-      );
+      throw Exception('ID do restaurante inválido.');
     }
 
     try {
       print('');
-      print(
-        '========================================',
-      );
-      print(
-        '📤 FOODJET - ENVIANDO CAPA',
-      );
-      print(
-        '🏪 Restaurante: $id',
-      );
-      print(
-        '📁 Arquivo: ${imagem.name}',
-      );
-      print(
-        '📁 Caminho: ${imagem.path}',
-      );
-      print(
-        '========================================',
-      );
+      print('========================================');
+      print('📤 FOODJET - ENVIANDO CAPA');
+      print('🏪 Restaurante: $id');
+      print('📁 Arquivo: ${imagem.name}');
+      print('📁 Caminho: ${imagem.path}');
+      print('========================================');
 
-      // ========================================================
-      // LER BYTES
-      //
-      // IMPORTANTE:
-      // Funciona no Android, iOS e principalmente WEB.
-      //
-      // NÃO usamos dart:io / File.
-      // ========================================================
+      final bytes = await imagem.readAsBytes();
 
-      final bytes =
-          await imagem.readAsBytes();
-
-      final tamanhoMB =
-          bytes.length /
-              1024 /
-              1024;
+      final tamanhoMB = bytes.length / 1024 / 1024;
 
       print(
         '📦 Tamanho da imagem: '
         '${tamanhoMB.toStringAsFixed(2)} MB',
       );
 
-      // ========================================================
-      // LIMITE DE 5 MB
-      // ========================================================
-
-      if (bytes.length >
-          5 * 1024 * 1024) {
-        throw Exception(
-          'A imagem da capa deve ter no máximo 5 MB.',
-        );
+      if (bytes.length > 5 * 1024 * 1024) {
+        throw Exception('A imagem da capa deve ter no máximo 5 MB.');
       }
 
-      // ========================================================
-      // CRIAR REQUEST MULTIPART
-      // ========================================================
-
-      final request =
-          http.MultipartRequest(
+      final request = http.MultipartRequest(
         'POST',
-        Uri.parse(
-          '$baseUrl/restaurants/$id/capa',
-        ),
+        Uri.parse('$baseUrl/restaurants/$id/capa'),
       );
-
-      // ========================================================
-      // ADICIONAR ARQUIVO
-      // ========================================================
 
       request.files.add(
         http.MultipartFile.fromBytes(
           'capa',
           bytes,
-          filename:
-              imagem.name.isNotEmpty
-                  ? imagem.name
-                  : 'capa.jpg',
+          filename: imagem.name.isNotEmpty ? imagem.name : 'capa.jpg',
         ),
       );
 
-      print(
-        '📤 Enviando Multipart para:',
+      print('📤 Enviando Multipart para:');
+
+      print('$baseUrl/restaurants/$id/capa');
+
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 60),
       );
 
-      print(
-        '$baseUrl/restaurants/$id/capa',
-      );
-
-      // ========================================================
-      // ENVIAR
-      // ========================================================
-
-      final streamedResponse =
-          await request
-              .send()
-              .timeout(
-                const Duration(
-                  seconds: 60,
-                ),
-              );
-
-      // ========================================================
-      // CONVERTER RESPONSE
-      // ========================================================
-
-      final response =
-          await http.Response.fromStream(
-        streamedResponse,
-      );
+      final response = await http.Response.fromStream(streamedResponse);
 
       print(
         '📥 Status HTTP: '
         '${response.statusCode}',
       );
 
+      print('📥 Resposta: ${response.body}');
+
+      Map<String, dynamic> data = {};
+
+      if (response.body.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(response.body);
+
+          if (decoded is Map) {
+            data = Map<String, dynamic>.from(decoded);
+          }
+        } catch (e) {
+          print('⚠️ Resposta não é JSON válido: $e');
+        }
+      }
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final restaurante = data['restaurante'] is Map
+            ? Map<String, dynamic>.from(data['restaurante'])
+            : <String, dynamic>{};
+
+        if (restaurante.isNotEmpty) {
+          await _salvarRestauranteLocal(restaurante);
+        }
+
+        print('========================================');
+        print('✅ CAPA ENVIADA COM SUCESSO');
+        print('🖼️ Capa: ${data['capa']}');
+        print('========================================');
+
+        return {...data, 'restaurante': restaurante};
+      }
+
+      final mensagem =
+          (data['erro'] ??
+                  data['mensagem'] ??
+                  data['message'] ??
+                  'Erro ao enviar capa.')
+              .toString();
+
+      throw Exception(mensagem);
+    } catch (e) {
+      print('========================================');
+      print('❌ ERRO NO UPLOAD DA CAPA');
+      print(e);
+      print('========================================');
+
+      rethrow;
+    }
+  }
+
+  // ============================================================
+  // UPLOAD DA LOGO
+  //
+  // POST /api/restaurants/:id/logo
+  //
+  // multipart/form-data
+  // campo: logo
+  //
+  // IMPORTANTE:
+  // NÃO envia Base64.
+  //
+  // O arquivo físico é enviado ao backend.
+  // ============================================================
+
+  Future<Map<String, dynamic>> uploadLogo(
+    String restauranteId,
+    XFile imagem,
+  ) async {
+    final id = restauranteId.trim();
+
+    if (id.isEmpty) {
+      throw Exception('ID do restaurante inválido.');
+    }
+
+    try {
+      print('');
+      print('========================================');
+      print('📤 FOODJET - ENVIANDO LOGO');
+      print('🏪 Restaurante: $id');
+      print('📁 Arquivo: ${imagem.name}');
+      print('📁 Caminho: ${imagem.path}');
+      print('========================================');
+
+      // ========================================================
+      // LER BYTES
+      //
+      // Compatível com:
+      // Android
+      // iOS
+      // Web
+      // ========================================================
+
+      final bytes = await imagem.readAsBytes();
+
+      final tamanhoMB = bytes.length / 1024 / 1024;
+
       print(
-        '📥 Resposta: ${response.body}',
+        '📦 Tamanho da logo: '
+        '${tamanhoMB.toStringAsFixed(2)} MB',
       );
+
+      // ========================================================
+      // LIMITE
+      // ========================================================
+
+      if (bytes.isEmpty) {
+        throw Exception('A imagem da logo está vazia.');
+      }
+
+      if (bytes.length > 5 * 1024 * 1024) {
+        throw Exception('A logo deve ter no máximo 5 MB.');
+      }
+
+      // ========================================================
+      // MULTIPART
+      // ========================================================
+
+      final url = '$baseUrl/restaurants/$id/logo';
+
+      print('📡 POST $url');
+
+      final request = http.MultipartRequest('POST', Uri.parse(url));
+
+      // ========================================================
+      // ADICIONAR LOGO
+      // ========================================================
+
+      request.files.add(
+        http.MultipartFile.fromBytes(
+          'logo',
+          bytes,
+          filename: imagem.name.isNotEmpty ? imagem.name : 'logo.jpg',
+        ),
+      );
+
+      print('📤 Campo Multipart: logo');
+
+      print('📦 Bytes enviados: ${bytes.length}');
+
+      // ========================================================
+      // ENVIAR
+      // ========================================================
+
+      final streamedResponse = await request.send().timeout(
+        const Duration(seconds: 60),
+      );
+
+      // ========================================================
+      // RESPONSE
+      // ========================================================
+
+      final response = await http.Response.fromStream(streamedResponse);
+
+      print(
+        '📥 Status HTTP: '
+        '${response.statusCode}',
+      );
+
+      print('📥 Resposta: ${response.body}');
 
       // ========================================================
       // DECODIFICAR JSON
@@ -449,25 +448,15 @@ class RestaurantService {
 
       Map<String, dynamic> data = {};
 
-      if (response.body
-          .trim()
-          .isNotEmpty) {
+      if (response.body.trim().isNotEmpty) {
         try {
-          final decoded =
-              jsonDecode(
-            response.body,
-          );
+          final decoded = jsonDecode(response.body);
 
           if (decoded is Map) {
-            data =
-                Map<String, dynamic>.from(
-              decoded,
-            );
+            data = Map<String, dynamic>.from(decoded);
           }
         } catch (e) {
-          print(
-            '⚠️ Resposta não é JSON válido: $e',
-          );
+          print('⚠️ Resposta não é JSON válido: $e');
         }
       }
 
@@ -475,42 +464,23 @@ class RestaurantService {
       // SUCESSO
       // ========================================================
 
-      if (response.statusCode == 200 ||
-          response.statusCode == 201) {
-        final restaurante =
-            data['restaurante'] is Map
-                ? Map<String, dynamic>.from(
-                    data['restaurante'],
-                  )
-                : <String, dynamic>{};
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final restaurante = data['restaurante'] is Map
+            ? Map<String, dynamic>.from(data['restaurante'])
+            : <String, dynamic>{};
 
         if (restaurante.isNotEmpty) {
-          await _salvarRestauranteLocal(
-            restaurante,
-          );
+          await _salvarRestauranteLocal(restaurante);
         }
 
-        print(
-          '========================================',
-        );
+        print('');
+        print('========================================');
+        print('✅ LOGO ENVIADA COM SUCESSO');
+        print('🖼️ Logo: ${data['logo']}');
+        print('🖼️ Logo URL: ${data['logoUrl']}');
+        print('========================================');
 
-        print(
-          '✅ CAPA ENVIADA COM SUCESSO',
-        );
-
-        print(
-          '🖼️ Capa: ${data['capa']}',
-        );
-
-        print(
-          '========================================',
-        );
-
-        return {
-          ...data,
-          'restaurante':
-              restaurante,
-        };
+        return {...data, 'restaurante': restaurante};
       }
 
       // ========================================================
@@ -518,32 +488,19 @@ class RestaurantService {
       // ========================================================
 
       final mensagem =
-          (
-            data['erro'] ??
-            data['mensagem'] ??
-            data['message'] ??
-            'Erro ao enviar capa.'
-          ).toString();
+          (data['erro'] ??
+                  data['mensagem'] ??
+                  data['message'] ??
+                  'Erro ao enviar logo.')
+              .toString();
 
-      throw Exception(
-        mensagem,
-      );
+      throw Exception(mensagem);
     } catch (e) {
-      print(
-        '========================================',
-      );
-
-      print(
-        '❌ ERRO NO UPLOAD DA CAPA',
-      );
-
-      print(
-        e,
-      );
-
-      print(
-        '========================================',
-      );
+      print('');
+      print('========================================');
+      print('❌ ERRO NO UPLOAD DA LOGO');
+      print(e);
+      print('========================================');
 
       rethrow;
     }
@@ -553,167 +510,168 @@ class RestaurantService {
   // REMOVER CAPA
   //
   // DELETE /api/restaurants/:id/capa
-  //
-  // BACKEND:
-  // 1. Remove arquivo de /uploads/capas/
-  // 2. Limpa a referência no PostgreSQL
-  // 3. Retorna restaurante atualizado
   // ============================================================
-  
-  
 
-
-  Future<Map<String, dynamic>> removerCapa(
-    String restauranteId,
-  ) async {
+  Future<Map<String, dynamic>> removerCapa(String restauranteId) async {
     final id = restauranteId.trim();
 
     if (id.isEmpty) {
-      throw Exception(
-        'ID do restaurante inválido.',
-      );
+      throw Exception('ID do restaurante inválido.');
     }
 
     try {
       print('');
-      print(
-        '========================================',
-      );
-      print(
-        '🗑️ FOODJET - REMOVENDO CAPA',
-      );
-      print(
-        '🏪 Restaurante: $id',
-      );
-      print(
-        '📡 DELETE /restaurants/$id/capa',
-      );
-      print(
-        '========================================',
-      );
+      print('========================================');
+      print('🗑️ FOODJET - REMOVENDO CAPA');
+      print('🏪 Restaurante: $id');
+      print('📡 DELETE /restaurants/$id/capa');
+      print('========================================');
 
-      final response =
-          await http
-              .delete(
-                Uri.parse(
-                  '$baseUrl/restaurants/$id/capa',
-                ),
-                headers: {
-                  'Content-Type':
-                      'application/json',
-                },
-              )
-              .timeout(
-                const Duration(
-                  seconds: 30,
-                ),
-              );
+      final response = await http
+          .delete(
+            Uri.parse('$baseUrl/restaurants/$id/capa'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 30));
 
       print(
         '📥 Status HTTP: '
         '${response.statusCode}',
       );
 
-      print(
-        '📥 Resposta: ${response.body}',
-      );
-
-      // ========================================================
-      // DECODIFICAR JSON
-      // ========================================================
+      print('📥 Resposta: ${response.body}');
 
       Map<String, dynamic> data = {};
 
-      if (response.body
-          .trim()
-          .isNotEmpty) {
+      if (response.body.trim().isNotEmpty) {
         try {
-          final decoded =
-              jsonDecode(
-            response.body,
-          );
+          final decoded = jsonDecode(response.body);
 
           if (decoded is Map) {
-            data =
-                Map<String, dynamic>.from(
-              decoded,
-            );
+            data = Map<String, dynamic>.from(decoded);
           }
         } catch (e) {
-          print(
-            '⚠️ Resposta não é JSON válido: $e',
-          );
+          print('⚠️ Resposta não é JSON válido: $e');
         }
       }
-
-      // ========================================================
-      // SUCESSO
-      // ========================================================
 
       if (response.statusCode == 200) {
-        final restaurante =
-            data['restaurante'] is Map
-                ? Map<String, dynamic>.from(
-                    data['restaurante'],
-                  )
-                : <String, dynamic>{};
+        final restaurante = data['restaurante'] is Map
+            ? Map<String, dynamic>.from(data['restaurante'])
+            : <String, dynamic>{};
 
         if (restaurante.isNotEmpty) {
-          await _salvarRestauranteLocal(
-            restaurante,
-          );
+          await _salvarRestauranteLocal(restaurante);
         }
 
-        print(
-          '========================================',
-        );
+        print('========================================');
+        print('✅ CAPA REMOVIDA COM SUCESSO');
+        print('========================================');
 
-        print(
-          '✅ CAPA REMOVIDA COM SUCESSO',
-        );
-
-        print(
-          '========================================',
-        );
-
-        return {
-          ...data,
-          'restaurante':
-              restaurante,
-        };
+        return {...data, 'restaurante': restaurante};
       }
 
-      // ========================================================
-      // ERRO
-      // ========================================================
+      final mensagem =
+          (data['erro'] ??
+                  data['mensagem'] ??
+                  data['message'] ??
+                  'Erro ao remover capa.')
+              .toString();
+
+      throw Exception(mensagem);
+    } catch (e) {
+      print('========================================');
+      print('❌ ERRO AO REMOVER CAPA');
+      print(e);
+      print('========================================');
+
+      rethrow;
+    }
+  }
+
+  // ============================================================
+  // REMOVER LOGO
+  //
+  // DELETE /api/restaurants/:id/logo
+  //
+  // Backend:
+  // 1. Remove arquivo físico
+  // 2. Limpa logo no PostgreSQL
+  // 3. Retorna restaurante atualizado
+  // ============================================================
+
+  Future<Map<String, dynamic>> removerLogo(String restauranteId) async {
+    final id = restauranteId.trim();
+
+    if (id.isEmpty) {
+      throw Exception('ID do restaurante inválido.');
+    }
+
+    try {
+      print('');
+      print('========================================');
+      print('🗑️ FOODJET - REMOVENDO LOGO');
+      print('🏪 Restaurante: $id');
+      print('📡 DELETE /restaurants/$id/logo');
+      print('========================================');
+
+      final response = await http
+          .delete(
+            Uri.parse('$baseUrl/restaurants/$id/logo'),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 30));
+
+      print(
+        '📥 Status HTTP: '
+        '${response.statusCode}',
+      );
+
+      print('📥 Resposta: ${response.body}');
+
+      Map<String, dynamic> data = {};
+
+      if (response.body.trim().isNotEmpty) {
+        try {
+          final decoded = jsonDecode(response.body);
+
+          if (decoded is Map) {
+            data = Map<String, dynamic>.from(decoded);
+          }
+        } catch (e) {
+          print('⚠️ Resposta não é JSON válido: $e');
+        }
+      }
+
+      if (response.statusCode == 200) {
+        final restaurante = data['restaurante'] is Map
+            ? Map<String, dynamic>.from(data['restaurante'])
+            : <String, dynamic>{};
+
+        if (restaurante.isNotEmpty) {
+          await _salvarRestauranteLocal(restaurante);
+        }
+
+        print('========================================');
+        print('✅ LOGO REMOVIDA COM SUCESSO');
+        print('========================================');
+
+        return {...data, 'restaurante': restaurante};
+      }
 
       final mensagem =
-          (
-            data['erro'] ??
-            data['mensagem'] ??
-            data['message'] ??
-            'Erro ao remover capa.'
-          ).toString();
+          (data['erro'] ??
+                  data['mensagem'] ??
+                  data['message'] ??
+                  'Erro ao remover logo.')
+              .toString();
 
-      throw Exception(
-        mensagem,
-      );
+      throw Exception(mensagem);
     } catch (e) {
-      print(
-        '========================================',
-      );
-
-      print(
-        '❌ ERRO AO REMOVER CAPA',
-      );
-
-      print(
-        e,
-      );
-
-      print(
-        '========================================',
-      );
+      print('========================================');
+      print('❌ ERRO AO REMOVER LOGO');
+      print(e);
+      print('========================================');
 
       rethrow;
     }
@@ -724,55 +682,32 @@ class RestaurantService {
   // ============================================================
 
   Future<String?> obterRestauranteId() async {
-    final prefs =
-        await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
-    final idSalvo =
-        prefs.getString(
-      _restaurantIdKey,
-    );
+    final idSalvo = prefs.getString(_restaurantIdKey);
 
-    if (idSalvo != null &&
-        idSalvo.trim().isNotEmpty) {
+    if (idSalvo != null && idSalvo.trim().isNotEmpty) {
       return idSalvo.trim();
     }
 
-    final restauranteJson =
-        prefs.getString(
-      _restaurantKey,
-    );
+    final restauranteJson = prefs.getString(_restaurantKey);
 
-    if (restauranteJson != null &&
-        restauranteJson.trim().isNotEmpty) {
+    if (restauranteJson != null && restauranteJson.trim().isNotEmpty) {
       try {
-        final decoded =
-            jsonDecode(
-          restauranteJson,
-        );
+        final decoded = jsonDecode(restauranteJson);
 
         if (decoded is Map) {
-          final restaurante =
-              Map<String, dynamic>.from(
-            decoded,
-          );
+          final restaurante = Map<String, dynamic>.from(decoded);
 
           final id =
               restaurante['id'] ??
-                  restaurante['_id'] ??
-                  restaurante[
-                      'restauranteId'];
+              restaurante['_id'] ??
+              restaurante['restauranteId'];
 
-          if (id != null &&
-              id.toString()
-                  .trim()
-                  .isNotEmpty) {
-            final restauranteId =
-                id.toString().trim();
+          if (id != null && id.toString().trim().isNotEmpty) {
+            final restauranteId = id.toString().trim();
 
-            await prefs.setString(
-              _restaurantIdKey,
-              restauranteId,
-            );
+            await prefs.setString(_restaurantIdKey, restauranteId);
 
             return restauranteId;
           }
@@ -787,102 +722,56 @@ class RestaurantService {
   // SALVAR RESTAURANTE LOCALMENTE
   // ============================================================
 
-  Future<void> _salvarRestauranteLocal(
-    Map<String, dynamic> restaurante,
-  ) async {
-    final prefs =
-        await SharedPreferences.getInstance();
+  Future<void> _salvarRestauranteLocal(Map<String, dynamic> restaurante) async {
+    final prefs = await SharedPreferences.getInstance();
 
     final id =
-        restaurante['id'] ??
-            restaurante['_id'] ??
-            restaurante[
-                'restauranteId'];
+        restaurante['id'] ?? restaurante['_id'] ?? restaurante['restauranteId'];
 
-    if (id != null &&
-        id.toString()
-            .trim()
-            .isNotEmpty) {
-      await prefs.setString(
-        _restaurantIdKey,
-        id.toString().trim(),
-      );
+    if (id != null && id.toString().trim().isNotEmpty) {
+      await prefs.setString(_restaurantIdKey, id.toString().trim());
     }
 
-    await prefs.setString(
-      _restaurantKey,
-      jsonEncode(restaurante),
-    );
+    await prefs.setString(_restaurantKey, jsonEncode(restaurante));
   }
 
   // ============================================================
   // EXCLUIR CONTA
   // ============================================================
 
-  Future<bool> excluirConta([
-    String? restauranteId,
-  ]) async {
-    String? id =
-        restauranteId?.trim();
+  Future<bool> excluirConta([String? restauranteId]) async {
+    String? id = restauranteId?.trim();
 
-    if (id == null ||
-        id.isEmpty) {
+    if (id == null || id.isEmpty) {
       id = await obterRestauranteId();
     }
 
-    if (id == null ||
-        id.trim().isEmpty) {
-      throw Exception(
-        'Restaurante não identificado. Faça login novamente.',
-      );
+    if (id == null || id.trim().isEmpty) {
+      throw Exception('Restaurante não identificado. Faça login novamente.');
     }
 
     id = id.trim();
 
     print('');
-    print(
-      '==========================================',
-    );
-    print(
-      '🗑️ FOODJET - EXCLUSÃO DE CONTA',
-    );
-    print(
-      '🏪 Restaurante ID: $id',
-    );
-    print(
-      '📡 DELETE /restaurants/$id',
-    );
-    print(
-      '==========================================',
-    );
+    print('==========================================');
+    print('🗑️ FOODJET - EXCLUSÃO DE CONTA');
+    print('🏪 Restaurante ID: $id');
+    print('📡 DELETE /restaurants/$id');
+    print('==========================================');
 
-    final response =
-        await http.delete(
-      Uri.parse(
-        '$baseUrl/restaurants/$id',
-      ),
-      headers: {
-        'Content-Type':
-            'application/json',
-      },
+    final response = await http.delete(
+      Uri.parse('$baseUrl/restaurants/$id'),
+      headers: {'Content-Type': 'application/json'},
     );
 
     Map<String, dynamic> data = {};
 
     try {
-      if (response.body
-          .trim()
-          .isNotEmpty) {
-        final decoded =
-            jsonDecode(
-          response.body,
-        );
+      if (response.body.trim().isNotEmpty) {
+        final decoded = jsonDecode(response.body);
 
         if (decoded is Map) {
-          data =
-              Map<String, dynamic>.from(
-            decoded,
-          );
+          data = Map<String, dynamic>.from(decoded);
         }
       }
     } catch (_) {}
@@ -892,12 +781,9 @@ class RestaurantService {
       '${response.statusCode}',
     );
 
-    print(
-      '📡 Resposta: ${response.body}',
-    );
+    print('📡 Resposta: ${response.body}');
 
-    if (response.statusCode == 200 ||
-        response.statusCode == 204) {
+    if (response.statusCode == 200 || response.statusCode == 204) {
       await _limparSessaoLocal();
       return true;
     }
@@ -909,12 +795,10 @@ class RestaurantService {
 
     final mensagem =
         data['erro'] ??
-            data['message'] ??
-            'Não foi possível excluir a conta do restaurante.';
+        data['message'] ??
+        'Não foi possível excluir a conta do restaurante.';
 
-    throw Exception(
-      mensagem.toString(),
-    );
+    throw Exception(mensagem.toString());
   }
 
   // ============================================================
@@ -922,55 +806,30 @@ class RestaurantService {
   // ============================================================
 
   Future<void> _limparSessaoLocal() async {
-    final prefs =
-        await SharedPreferences.getInstance();
+    final prefs = await SharedPreferences.getInstance();
 
-    await prefs.remove(
-      _restaurantIdKey,
-    );
+    await prefs.remove(_restaurantIdKey);
 
-    await prefs.remove(
-      _restaurantKey,
-    );
+    await prefs.remove(_restaurantKey);
 
-    await prefs.remove(
-      'token',
-    );
+    await prefs.remove('token');
 
-    await prefs.remove(
-      'usuario',
-    );
+    await prefs.remove('usuario');
 
-    await prefs.remove(
-      'user',
-    );
+    await prefs.remove('user');
 
-    await prefs.remove(
-      'access_token',
-    );
+    await prefs.remove('access_token');
 
-    await prefs.remove(
-      'auth_token',
-    );
+    await prefs.remove('auth_token');
 
-    await prefs.remove(
-      'restaurantId',
-    );
+    await prefs.remove('restaurantId');
 
-    await prefs.remove(
-      'restaurant',
-    );
+    await prefs.remove('restaurant');
 
-    await prefs.remove(
-      'usuarioLogado',
-    );
+    await prefs.remove('usuarioLogado');
 
-    await prefs.remove(
-      'userData',
-    );
+    await prefs.remove('userData');
 
-    await prefs.remove(
-      'restauranteAtual',
-    );
+    await prefs.remove('restauranteAtual');
   }
 }
