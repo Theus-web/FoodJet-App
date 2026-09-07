@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -45,7 +44,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool carregando = true;
   String? erro;
 
-  List<Map<String, dynamic>> restaurantes = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> restaurantes =
+      <Map<String, dynamic>>[];
 
   List<Map<String, dynamic>> restaurantesFiltrados =
       <Map<String, dynamic>>[];
@@ -54,7 +54,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // PROMOÇÕES
   // ============================================================
 
-  List<Map<String, dynamic>> promocoes = <Map<String, dynamic>>[];
+  List<Map<String, dynamic>> promocoes =
+      <Map<String, dynamic>>[];
 
   bool carregandoPromocoes = false;
 
@@ -62,7 +63,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // BUSCA
   // ============================================================
 
-  final TextEditingController buscaController = TextEditingController();
+  final TextEditingController buscaController =
+      TextEditingController();
 
   bool mostrarSugestoesBusca = false;
 
@@ -89,7 +91,8 @@ class _HomeScreenState extends State<HomeScreen> {
   // CARROSSEL
   // ============================================================
 
-  final PageController _bannerController = PageController();
+  final PageController _bannerController =
+      PageController();
 
   int _bannerAtual = 0;
 
@@ -100,7 +103,8 @@ class _HomeScreenState extends State<HomeScreen> {
   final List<Map<String, dynamic>> banners = [
     {
       'titulo': 'Peça pelo FoodJet',
-      'subtitulo': 'Os melhores restaurantes na palma da sua mão.',
+      'subtitulo':
+          'Os melhores restaurantes na palma da sua mão.',
       'imagem':
           'https://images.unsplash.com/photo-1504674900247-0877df9cc836?w=1200',
       'cor1': Color(0xFFF97316),
@@ -108,7 +112,8 @@ class _HomeScreenState extends State<HomeScreen> {
     },
     {
       'titulo': 'Ofertas imperdíveis',
-      'subtitulo': 'Economize nos seus pedidos de hoje.',
+      'subtitulo':
+          'Economize nos seus pedidos de hoje.',
       'imagem':
           'https://images.unsplash.com/photo-1600891964092-4316c288032e?w=1200',
       'cor1': Color(0xFFEA580C),
@@ -116,7 +121,8 @@ class _HomeScreenState extends State<HomeScreen> {
     },
     {
       'titulo': 'Seu hambúrguer favorito',
-      'subtitulo': 'Peça agora e receba onde estiver.',
+      'subtitulo':
+          'Peça agora e receba onde estiver.',
       'imagem':
           'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=1200',
       'cor1': Color(0xFFB91C1C),
@@ -124,7 +130,8 @@ class _HomeScreenState extends State<HomeScreen> {
     },
     {
       'titulo': 'Pizza quentinha',
-      'subtitulo': 'Escolha sua pizza e aproveite.',
+      'subtitulo':
+          'Escolha sua pizza e aproveite.',
       'imagem':
           'https://images.unsplash.com/photo-1574071318508-1cdbab80d002?w=1200',
       'cor1': Color(0xFFDC2626),
@@ -132,7 +139,8 @@ class _HomeScreenState extends State<HomeScreen> {
     },
     {
       'titulo': 'Comida japonesa',
-      'subtitulo': 'Sushi, temaki e muito mais.',
+      'subtitulo':
+          'Sushi, temaki e muito mais.',
       'imagem':
           'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=1200',
       'cor1': Color(0xFF7C3AED),
@@ -140,7 +148,8 @@ class _HomeScreenState extends State<HomeScreen> {
     },
     {
       'titulo': 'Delivery rápido',
-      'subtitulo': 'Seu pedido chegando até você.',
+      'subtitulo':
+          'Seu pedido chegando até você.',
       'imagem':
           'https://images.unsplash.com/photo-1526367790999-0150786686a2?w=1200',
       'cor1': Color(0xFF2563EB),
@@ -148,7 +157,8 @@ class _HomeScreenState extends State<HomeScreen> {
     },
     {
       'titulo': 'Doces para você',
-      'subtitulo': 'Deixe seu dia ainda mais gostoso.',
+      'subtitulo':
+          'Deixe seu dia ainda mais gostoso.',
       'imagem':
           'https://images.unsplash.com/photo-1551024506-0bccd828d307?w=1200',
       'cor1': Color(0xFFDB2777),
@@ -156,7 +166,8 @@ class _HomeScreenState extends State<HomeScreen> {
     },
     {
       'titulo': 'Bebidas geladas',
-      'subtitulo': 'Refresque seu pedido.',
+      'subtitulo':
+          'Refresque seu pedido.',
       'imagem':
           'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=1200',
       'cor1': Color(0xFF0891B2),
@@ -164,7 +175,8 @@ class _HomeScreenState extends State<HomeScreen> {
     },
     {
       'titulo': 'FoodJet Premium',
-      'subtitulo': 'Descubra novos sabores todos os dias.',
+      'subtitulo':
+          'Descubra novos sabores todos os dias.',
       'imagem':
           'https://images.unsplash.com/photo-1414235077428-338989a2e8c0?w=1200',
       'cor1': Color(0xFFEA580C),
@@ -211,7 +223,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _carregarHistoricoRestaurantes() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs =
+          await SharedPreferences.getInstance();
 
       final dados = prefs.getStringList(
         _chaveHistoricoRestaurantes,
@@ -221,7 +234,8 @@ class _HomeScreenState extends State<HomeScreen> {
         return;
       }
 
-      final resultado = <Map<String, dynamic>>[];
+      final resultado =
+          <Map<String, dynamic>>[];
 
       for (final item in dados) {
         try {
@@ -258,11 +272,13 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    final novoRestaurante = Map<String, dynamic>.from(
+    final novoRestaurante =
+        Map<String, dynamic>.from(
       restaurante,
     );
 
-    final historico = List<Map<String, dynamic>>.from(
+    final historico =
+        List<Map<String, dynamic>>.from(
       historicoRestaurantes,
     );
 
@@ -289,7 +305,8 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs =
+          await SharedPreferences.getInstance();
 
       final dados = historico
           .map(
@@ -310,7 +327,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _limparHistoricoRestaurantes() async {
     try {
-      final prefs = await SharedPreferences.getInstance();
+      final prefs =
+          await SharedPreferences.getInstance();
 
       await prefs.remove(
         _chaveHistoricoRestaurantes,
@@ -336,11 +354,14 @@ class _HomeScreenState extends State<HomeScreen> {
     if (texto.isNotEmpty) {
       if (sugestoes.isEmpty) {
         return Container(
-          margin: const EdgeInsets.only(top: 8),
-          padding: const EdgeInsets.all(18),
+          margin:
+              const EdgeInsets.only(top: 8),
+          padding:
+              const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius:
+                BorderRadius.circular(18),
             boxShadow: const [
               BoxShadow(
                 color: Colors.black12,
@@ -371,10 +392,12 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       return Container(
-        margin: const EdgeInsets.only(top: 8),
+        margin:
+            const EdgeInsets.only(top: 8),
         decoration: BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius:
+              BorderRadius.circular(18),
           boxShadow: const [
             BoxShadow(
               color: Colors.black12,
@@ -386,7 +409,8 @@ class _HomeScreenState extends State<HomeScreen> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding:
+                  const EdgeInsets.fromLTRB(
                 16,
                 14,
                 16,
@@ -404,23 +428,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     child: Text(
                       'Restaurantes encontrados',
                       style: TextStyle(
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight.bold,
                         fontSize: 14,
                       ),
                     ),
                   ),
                   Text(
                     '${sugestoes.length}',
-                    style: const TextStyle(
+                    style:
+                        const TextStyle(
                       color: laranja,
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                     ),
                   ),
                 ],
               ),
             ),
             ...sugestoes.map(
-              (restaurante) => _itemSugestaoRestaurante(
+              (restaurante) =>
+                  _itemSugestaoRestaurante(
                 restaurante,
               ),
             ),
@@ -434,10 +462,12 @@ class _HomeScreenState extends State<HomeScreen> {
     }
 
     return Container(
-      margin: const EdgeInsets.only(top: 8),
+      margin:
+          const EdgeInsets.only(top: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius:
+            BorderRadius.circular(18),
         boxShadow: const [
           BoxShadow(
             color: Colors.black12,
@@ -449,7 +479,8 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(
+            padding:
+                const EdgeInsets.fromLTRB(
               16,
               14,
               10,
@@ -467,13 +498,15 @@ class _HomeScreenState extends State<HomeScreen> {
                   child: Text(
                     'Restaurantes recentes',
                     style: TextStyle(
-                      fontWeight: FontWeight.bold,
+                      fontWeight:
+                          FontWeight.bold,
                       fontSize: 14,
                     ),
                   ),
                 ),
                 TextButton(
-                  onPressed: _limparHistoricoRestaurantes,
+                  onPressed:
+                      _limparHistoricoRestaurantes,
                   child: const Text(
                     'Limpar',
                     style: TextStyle(
@@ -486,7 +519,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           ...historicoRestaurantes.map(
-            (restaurante) => _itemSugestaoRestaurante(
+            (restaurante) =>
+                _itemSugestaoRestaurante(
               restaurante,
               historico: true,
             ),
@@ -504,7 +538,8 @@ class _HomeScreenState extends State<HomeScreen> {
     Map<String, dynamic> restaurante, {
     bool historico = false,
   }) {
-    final aberto = restauranteAberto(restaurante);
+    final aberto =
+        restauranteAberto(restaurante);
 
     return InkWell(
       onTap: () {
@@ -513,7 +548,8 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(
+        padding:
+            const EdgeInsets.symmetric(
           horizontal: 14,
           vertical: 10,
         ),
@@ -525,16 +561,20 @@ class _HomeScreenState extends State<HomeScreen> {
             const SizedBox(width: 12),
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Text(
                     nomeRestaurante(
                       restaurante,
                     ),
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
+                    overflow:
+                        TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(
+                      fontWeight:
+                          FontWeight.bold,
                       fontSize: 15,
                     ),
                   ),
@@ -547,9 +587,13 @@ class _HomeScreenState extends State<HomeScreen> {
                             restaurante,
                           ),
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          overflow:
+                              TextOverflow
+                                  .ellipsis,
                           style: TextStyle(
-                            color: Colors.grey.shade600,
+                            color: Colors
+                                .grey
+                                .shade600,
                             fontSize: 12,
                           ),
                         ),
@@ -567,9 +611,13 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(width: 8),
             Icon(
-              aberto ? Icons.check_circle : Icons.schedule,
+              aberto
+                  ? Icons.check_circle
+                  : Icons.schedule,
               size: 16,
-              color: aberto ? Colors.green : Colors.grey,
+              color: aberto
+                  ? Colors.green
+                  : Colors.grey,
             ),
             const SizedBox(width: 8),
             const Icon(
@@ -582,24 +630,128 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  // ============================================================
+  // URL DA IMAGEM
+  // ============================================================
+
+  String _urlImagem(
+    dynamic imagem,
+  ) {
+    if (imagem == null) {
+      return '';
+    }
+
+    final valor =
+        imagem.toString().trim();
+
+    if (valor.isEmpty) {
+      return '';
+    }
+
+    // Já é URL completa
+    if (valor.startsWith('http://') ||
+        valor.startsWith('https://')) {
+      return valor;
+    }
+
+    // Remove /api do endereço
+    // https://foodjet-backend.onrender.com/api
+    // vira
+    // https://foodjet-backend.onrender.com
+    final servidor =
+        Api.baseUrl.replaceFirst(
+      RegExp(r'/api/?$'),
+      '',
+    );
+
+    // Caminho já começa com /
+    if (valor.startsWith('/')) {
+      return '$servidor$valor';
+    }
+
+    // Caminho sem /
+    return '$servidor/$valor';
+  }
+
+  // ============================================================
+  // IMAGEM DA BUSCA
+  // ============================================================
+
   Widget _imagemBuscaRestaurante(
     Map<String, dynamic> restaurante,
   ) {
-    final imagem = restaurante['imagem'] ??
-        restaurante['logo'] ??
-        restaurante['foto'] ??
-        restaurante['imagemUrl'] ??
-        restaurante['logoUrl'];
+    final imagem =
+        restaurante['imagem'] ??
+            restaurante['capa'] ??
+            restaurante['foto'] ??
+            restaurante['imagemUrl'] ??
+            restaurante['capaUrl'] ??
+            restaurante['logo'] ??
+            restaurante['logoUrl'];
 
-    if (imagem != null && imagem.toString().trim().isNotEmpty) {
+    final url = _urlImagem(
+      imagem,
+    );
+
+    if (url.isNotEmpty) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius:
+            BorderRadius.circular(12),
         child: Image.network(
-          imagem.toString(),
+          url,
           width: 48,
           height: 48,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _iconeBuscaRestaurante(),
+          loadingBuilder: (
+            context,
+            child,
+            loadingProgress,
+          ) {
+            if (loadingProgress == null) {
+              return child;
+            }
+
+            return Container(
+              width: 48,
+              height: 48,
+              decoration:
+                  BoxDecoration(
+                color:
+                    const Color(
+                  0xFFFFEADB,
+                ),
+                borderRadius:
+                    BorderRadius.circular(
+                  12,
+                ),
+              ),
+              child: const Center(
+                child: SizedBox(
+                  width: 18,
+                  height: 18,
+                  child:
+                      CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: laranja,
+                  ),
+                ),
+              ),
+            );
+          },
+          errorBuilder: (
+            context,
+            error,
+            stackTrace,
+          ) {
+            debugPrint(
+              '❌ ERRO IMAGEM BUSCA: $url',
+            );
+            debugPrint(
+              'ERRO: $error',
+            );
+
+            return _iconeBuscaRestaurante();
+          },
         ),
       );
     }
@@ -611,9 +763,12 @@ class _HomeScreenState extends State<HomeScreen> {
     return Container(
       width: 48,
       height: 48,
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFEADB),
-        borderRadius: BorderRadius.circular(12),
+      decoration:
+          BoxDecoration(
+        color:
+            const Color(0xFFFFEADB),
+        borderRadius:
+            BorderRadius.circular(12),
       ),
       child: const Icon(
         Icons.restaurant,
@@ -623,26 +778,37 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  List<Map<String, dynamic>> _restaurantesSugeridos() {
-    final texto = buscaController.text.trim().toLowerCase();
+  List<Map<String, dynamic>>
+      _restaurantesSugeridos() {
+    final texto =
+        buscaController.text
+            .trim()
+            .toLowerCase();
 
     if (texto.isEmpty) {
       return [];
     }
 
-    final resultados = <Map<String, dynamic>>[];
+    final resultados =
+        <Map<String, dynamic>>[];
 
-    for (final restaurante in restaurantes) {
-      final nome = nomeRestaurante(
+    for (final restaurante
+        in restaurantes) {
+      final nome =
+          nomeRestaurante(
         restaurante,
       ).toLowerCase();
 
-      final categoria = categoriaRestaurante(
+      final categoria =
+          categoriaRestaurante(
         restaurante,
       ).toLowerCase();
 
       final descricao =
-          restaurante['descricao']?.toString().toLowerCase() ?? '';
+          restaurante['descricao']
+                  ?.toString()
+                  .toLowerCase() ??
+              '';
 
       if (nome.startsWith(texto)) {
         resultados.add(restaurante);
@@ -658,17 +824,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
     resultados.sort(
       (a, b) {
-        final nomeA = nomeRestaurante(
+        final nomeA =
+            nomeRestaurante(
           a,
         ).toLowerCase();
 
-        final nomeB = nomeRestaurante(
+        final nomeB =
+            nomeRestaurante(
           b,
         ).toLowerCase();
 
-        final inicioA = nomeA.startsWith(texto);
+        final inicioA =
+            nomeA.startsWith(texto);
 
-        final inicioB = nomeB.startsWith(texto);
+        final inicioB =
+            nomeB.startsWith(texto);
 
         if (inicioA && !inicioB) {
           return -1;
@@ -696,7 +866,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _abrirRestauranteBusca(
     Map<String, dynamic> restaurante,
   ) {
-    final id = idRestaurante(restaurante);
+    final id =
+        idRestaurante(restaurante);
 
     if (id.trim().isEmpty) {
       return;
@@ -713,16 +884,21 @@ class _HomeScreenState extends State<HomeScreen> {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => RestaurantScreen(
+        builder: (_) =>
+            RestaurantScreen(
           restauranteId: id,
-          nome: nomeRestaurante(
+          nome:
+              nomeRestaurante(
             restaurante,
           ),
-          descricao: restaurante['descricao']?.toString() ??
-              categoriaRestaurante(
-                restaurante,
-              ),
-          avaliacao: avaliacaoRestaurante(
+          descricao:
+              restaurante['descricao']
+                      ?.toString() ??
+                  categoriaRestaurante(
+                    restaurante,
+                  ),
+          avaliacao:
+              avaliacaoRestaurante(
             restaurante,
           ),
         ),
@@ -760,7 +936,8 @@ class _HomeScreenState extends State<HomeScreen> {
       const Duration(seconds: 15),
       (_) {
         if (!mounted ||
-            !_bannerController.hasClients ||
+            !_bannerController
+                .hasClients ||
             banners.isEmpty) {
           return;
         }
@@ -786,7 +963,8 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    int proximo = _bannerAtual + 1;
+    int proximo =
+        _bannerAtual + 1;
 
     if (proximo >= banners.length) {
       proximo = 0;
@@ -795,9 +973,11 @@ class _HomeScreenState extends State<HomeScreen> {
     _bannerController.animateToPage(
       proximo,
       duration: Duration(
-        milliseconds: automatico ? 700 : 450,
+        milliseconds:
+            automatico ? 700 : 450,
       ),
-      curve: Curves.easeInOutCubic,
+      curve:
+          Curves.easeInOutCubic,
     );
   }
 
@@ -816,17 +996,21 @@ class _HomeScreenState extends State<HomeScreen> {
   void _quandoBuscar() {
     if (!mounted) return;
 
-    final texto = buscaController.text.trim();
+    final texto =
+        buscaController.text.trim();
 
-    final filtrados = _aplicarFiltro(
+    final filtrados =
+        _aplicarFiltro(
       restaurantes,
       texto,
     );
 
     setState(() {
-      restaurantesFiltrados = filtrados;
+      restaurantesFiltrados =
+          filtrados;
 
-      mostrarSugestoesBusca = texto.isNotEmpty;
+      mostrarSugestoesBusca =
+          texto.isNotEmpty;
     });
   }
 
@@ -848,11 +1032,14 @@ class _HomeScreenState extends State<HomeScreen> {
         '${Api.baseUrl}/promocoes',
       );
 
-      final resposta = await http.get(
+      final resposta =
+          await http.get(
         url,
         headers: const {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          'Content-Type':
+              'application/json',
+          'Accept':
+              'application/json',
         },
       ).timeout(
         const Duration(
@@ -866,7 +1053,8 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
 
-      final body = resposta.body.trim();
+      final body =
+          resposta.body.trim();
 
       if (body.isEmpty) {
         throw Exception(
@@ -874,11 +1062,14 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
 
-      final dados = jsonDecode(body);
+      final dados =
+          jsonDecode(body);
 
-      final resultado = <Map<String, dynamic>>[];
+      final resultado =
+          <Map<String, dynamic>>[];
 
-      final lista = _extrairLista(dados);
+      final lista =
+          _extrairLista(dados);
 
       for (final item in lista) {
         if (item is Map) {
@@ -932,11 +1123,14 @@ class _HomeScreenState extends State<HomeScreen> {
         'FOODJET - BUSCANDO RESTAURANTES: $url',
       );
 
-      final resposta = await http.get(
+      final resposta =
+          await http.get(
         url,
         headers: const {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
+          'Content-Type':
+              'application/json',
+          'Accept':
+              'application/json',
         },
       ).timeout(
         const Duration(
@@ -950,7 +1144,8 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
 
-      final body = resposta.body.trim();
+      final body =
+          resposta.body.trim();
 
       if (body.isEmpty) {
         throw Exception(
@@ -968,13 +1163,16 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
 
-      final lista = _extrairLista(dados);
+      final lista =
+          _extrairLista(dados);
 
-      final resultado = <Map<String, dynamic>>[];
+      final resultado =
+          <Map<String, dynamic>>[];
 
       for (final item in lista) {
         if (item is Map) {
-          final restaurante = Map<String, dynamic>.from(
+          final restaurante =
+              Map<String, dynamic>.from(
             item,
           );
 
@@ -994,13 +1192,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      final filtrados = _aplicarFiltro(
+      final filtrados =
+          _aplicarFiltro(
         resultado,
         buscaController.text,
       );
 
       setState(() {
-        restaurantes = List<Map<String, dynamic>>.from(
+        restaurantes =
+            List<Map<String, dynamic>>.from(
           resultado,
         );
 
@@ -1012,6 +1212,10 @@ class _HomeScreenState extends State<HomeScreen> {
         carregando = false;
         erro = null;
       });
+
+      debugPrint(
+        'FOODJET - RESTAURANTES RECEBIDOS: ${resultado.length}',
+      );
     } catch (e) {
       debugPrint(
         'ERRO RESTAURANTES: $e',
@@ -1029,7 +1233,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
       setState(() {
         carregando = false;
-        erro = 'Não foi possível carregar os restaurantes.';
+        erro =
+            'Não foi possível carregar os restaurantes.';
       });
     }
   }
@@ -1051,7 +1256,8 @@ class _HomeScreenState extends State<HomeScreen> {
       return <dynamic>[];
     }
 
-    final mapa = Map<String, dynamic>.from(
+    final mapa =
+        Map<String, dynamic>.from(
       dados,
     );
 
@@ -1092,21 +1298,25 @@ class _HomeScreenState extends State<HomeScreen> {
   void _normalizarRestaurante(
     Map<String, dynamic> restaurante,
   ) {
-    restaurante['id'] = restaurante['id'] ??
-        restaurante['_id'] ??
-        restaurante['restauranteId'] ??
-        '';
+    restaurante['id'] =
+        restaurante['id'] ??
+            restaurante['_id'] ??
+            restaurante['restauranteId'] ??
+            '';
 
-    restaurante['nome'] = restaurante['nome'] ??
-        restaurante['nomeFantasia'] ??
-        restaurante['nomeRestaurante'] ??
-        'Restaurante';
+    restaurante['nome'] =
+        restaurante['nome'] ??
+            restaurante['nomeFantasia'] ??
+            restaurante['nomeRestaurante'] ??
+            'Restaurante';
 
     restaurante['categoria'] =
-        restaurante['categoria'] ?? 'Restaurante';
+        restaurante['categoria'] ??
+            'Restaurante';
 
     restaurante['descricao'] =
-        restaurante['descricao'] ?? '';
+        restaurante['descricao'] ??
+            '';
 
     restaurante['avaliacao'] =
         restaurante['avaliacao'] ??
@@ -1114,10 +1324,12 @@ class _HomeScreenState extends State<HomeScreen> {
             5.0;
 
     restaurante['tempoEntrega'] =
-        restaurante['tempoEntrega'] ?? '30-45 min';
+        restaurante['tempoEntrega'] ??
+            '30-45 min';
 
     restaurante['taxaEntrega'] =
-        restaurante['taxaEntrega'] ?? 0;
+        restaurante['taxaEntrega'] ??
+            0;
 
     if (restaurante['status'] == null) {
       restaurante['status'] =
@@ -1137,10 +1349,14 @@ class _HomeScreenState extends State<HomeScreen> {
     lista.sort(
       (a, b) {
         final destaqueA =
-            restauranteDestaque(a) ? 1 : 0;
+            restauranteDestaque(a)
+                ? 1
+                : 0;
 
         final destaqueB =
-            restauranteDestaque(b) ? 1 : 0;
+            restauranteDestaque(b)
+                ? 1
+                : 0;
 
         if (destaqueA != destaqueB) {
           return destaqueB.compareTo(
@@ -1149,22 +1365,31 @@ class _HomeScreenState extends State<HomeScreen> {
         }
 
         final prioridadeA =
-            _numeroInteiro(a['prioridade']);
+            _numeroInteiro(
+          a['prioridade'],
+        );
 
         final prioridadeB =
-            _numeroInteiro(b['prioridade']);
+            _numeroInteiro(
+          b['prioridade'],
+        );
 
-        if (prioridadeA != prioridadeB) {
+        if (prioridadeA !=
+            prioridadeB) {
           return prioridadeB.compareTo(
             prioridadeA,
           );
         }
 
         final abertoA =
-            restauranteAberto(a) ? 1 : 0;
+            restauranteAberto(a)
+                ? 1
+                : 0;
 
         final abertoB =
-            restauranteAberto(b) ? 1 : 0;
+            restauranteAberto(b)
+                ? 1
+                : 0;
 
         return abertoB.compareTo(
           abertoA,
@@ -1180,17 +1405,22 @@ class _HomeScreenState extends State<HomeScreen> {
   bool restauranteDestaque(
     Map<String, dynamic> restaurante,
   ) {
-    if (restaurante['destaque'] == true ||
-        restaurante['destaquePago'] == true ||
-        restaurante['patrocinado'] == true) {
+    if (restaurante['destaque'] ==
+            true ||
+        restaurante['destaquePago'] ==
+            true ||
+        restaurante['patrocinado'] ==
+            true) {
       return true;
     }
 
-    final promocao = restaurante['promocao'];
+    final promocao =
+        restaurante['promocao'];
 
     if (promocao is Map &&
         promocao['ativa'] == true) {
-      final expira = promocao['expiraEm'];
+      final expira =
+          promocao['expiraEm'];
 
       if (expira == null) {
         return true;
@@ -1235,7 +1465,8 @@ class _HomeScreenState extends State<HomeScreen> {
       return false;
     }
 
-    return restaurante['aberto'] == true ||
+    return restaurante['aberto'] ==
+            true ||
         restaurante['online'] == true;
   }
 
@@ -1243,11 +1474,13 @@ class _HomeScreenState extends State<HomeScreen> {
   // FILTRO
   // ============================================================
 
-  List<Map<String, dynamic>> _aplicarFiltro(
+  List<Map<String, dynamic>>
+      _aplicarFiltro(
     List<Map<String, dynamic>> lista,
     String texto,
   ) {
-    final busca = texto.trim().toLowerCase();
+    final busca =
+        texto.trim().toLowerCase();
 
     if (busca.isEmpty) {
       return List<Map<String, dynamic>>.from(
@@ -1258,12 +1491,14 @@ class _HomeScreenState extends State<HomeScreen> {
     return lista.where(
       (restaurante) {
         final nome =
-            nomeRestaurante(restaurante)
-                .toLowerCase();
+            nomeRestaurante(
+          restaurante,
+        ).toLowerCase();
 
         final categoria =
-            categoriaRestaurante(restaurante)
-                .toLowerCase();
+            categoriaRestaurante(
+          restaurante,
+        ).toLowerCase();
 
         final descricao =
             restaurante['descricao']
@@ -1303,7 +1538,8 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    final resultado = restaurantes.where(
+    final resultado =
+        restaurantes.where(
       (restaurante) {
         final categoriaRestaurante =
             restaurante['categoria']
@@ -1313,8 +1549,9 @@ class _HomeScreenState extends State<HomeScreen> {
                 '';
 
         final nome =
-            nomeRestaurante(restaurante)
-                .toLowerCase();
+            nomeRestaurante(
+          restaurante,
+        ).toLowerCase();
 
         final descricao =
             restaurante['descricao']
@@ -1332,7 +1569,8 @@ class _HomeScreenState extends State<HomeScreen> {
           busca,
         );
 
-        return categoriaNormalizada.contains(
+        return categoriaNormalizada
+                .contains(
               buscaNormalizada,
             ) ||
             nome.contains(busca) ||
@@ -1352,7 +1590,9 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     if (resultado.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(
         SnackBar(
           content: Text(
             'Nenhum restaurante encontrado em $categoria.',
@@ -1404,7 +1644,8 @@ class _HomeScreenState extends State<HomeScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => OrderHistoryScreen(
+          builder: (_) =>
+              OrderHistoryScreen(
             usuario: widget.usuario,
           ),
         ),
@@ -1416,7 +1657,8 @@ class _HomeScreenState extends State<HomeScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => const FavoritesScreen(),
+          builder: (_) =>
+              const FavoritesScreen(),
         ),
       );
       return;
@@ -1426,7 +1668,8 @@ class _HomeScreenState extends State<HomeScreen> {
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (_) => ProfileScreen(
+          builder: (_) =>
+              ProfileScreen(
             usuario: widget.usuario,
           ),
         ),
@@ -1441,9 +1684,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String nomeRestaurante(
     Map<String, dynamic> restaurante,
   ) {
-    final nome = restaurante['nome'] ??
-        restaurante['nomeFantasia'] ??
-        restaurante['nomeRestaurante'];
+    final nome =
+        restaurante['nome'] ??
+            restaurante['nomeFantasia'] ??
+            restaurante['nomeRestaurante'];
 
     if (nome == null ||
         nome.toString().trim().isEmpty) {
@@ -1496,7 +1740,8 @@ class _HomeScreenState extends State<HomeScreen> {
   String taxaEntrega(
     Map<String, dynamic> restaurante,
   ) {
-    final valor = _numero(
+    final valor =
+        _numero(
       restaurante['taxaEntrega'],
     );
 
@@ -1510,9 +1755,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String idRestaurante(
     Map<String, dynamic> restaurante,
   ) {
-    final id = restaurante['id'] ??
-        restaurante['_id'] ??
-        restaurante['restauranteId'];
+    final id =
+        restaurante['id'] ??
+            restaurante['_id'] ??
+            restaurante['restauranteId'];
 
     return id?.toString() ?? '';
   }
@@ -1531,7 +1777,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     .trim()
                     .isNotEmpty ==
                 true
-            ? widget.usuario['nome'].toString()
+            ? widget.usuario['nome']
+                .toString()
             : 'Usuário';
 
     return Scaffold(
@@ -1554,7 +1801,8 @@ class _HomeScreenState extends State<HomeScreen> {
               style: TextStyle(
                 fontSize: 12,
                 color: Colors.white70,
-                fontWeight: FontWeight.w500,
+                fontWeight:
+                    FontWeight.w500,
               ),
             ),
             const Row(
@@ -1569,7 +1817,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   'Ipatinga - MG',
                   style: TextStyle(
                     fontSize: 15,
-                    fontWeight: FontWeight.w800,
+                    fontWeight:
+                        FontWeight.w800,
                     color: Colors.white,
                   ),
                 ),
@@ -1581,7 +1830,8 @@ class _HomeScreenState extends State<HomeScreen> {
           IconButton(
             onPressed: () {},
             icon: const Icon(
-              Icons.notifications_none_rounded,
+              Icons
+                  .notifications_none_rounded,
               color: Colors.white,
               size: 27,
             ),
@@ -1605,17 +1855,21 @@ class _HomeScreenState extends State<HomeScreen> {
         child: SingleChildScrollView(
           physics:
               const AlwaysScrollableScrollPhysics(),
-          padding: const EdgeInsets.all(16),
+          padding:
+              const EdgeInsets.all(16),
           child: Column(
             crossAxisAlignment:
                 CrossAxisAlignment.start,
             children: [
               Text(
                 'Olá, $nomeUsuario 🏆',
-                style: const TextStyle(
-                  color: Color(0xFF1F1F1F),
+                style:
+                    const TextStyle(
+                  color:
+                      Color(0xFF1F1F1F),
                   fontSize: 25,
-                  fontWeight: FontWeight.w800,
+                  fontWeight:
+                      FontWeight.w800,
                 ),
               ),
 
@@ -1624,9 +1878,11 @@ class _HomeScreenState extends State<HomeScreen> {
               const Text(
                 'O que você quer pedir hoje?',
                 style: TextStyle(
-                  color: Color(0xFF555555),
+                  color:
+                      Color(0xFF555555),
                   fontSize: 16,
-                  fontWeight: FontWeight.w500,
+                  fontWeight:
+                      FontWeight.w500,
                 ),
               ),
 
@@ -1664,9 +1920,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             Icons.search,
                           ),
                           suffixIcon:
-                              value.text.isNotEmpty
+                              value.text
+                                      .isNotEmpty
                                   ? IconButton(
-                                      onPressed: () {
+                                      onPressed:
+                                          () {
                                         buscaController
                                             .clear();
                                       },
@@ -1725,7 +1983,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 style: TextStyle(
                   color: Colors.black,
                   fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                  fontWeight:
+                      FontWeight.bold,
                 ),
               ),
 
@@ -1819,7 +2078,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       style: TextStyle(
                         color: Colors.black,
                         fontSize: 20,
-                        fontWeight: FontWeight.bold,
+                        fontWeight:
+                            FontWeight.bold,
                       ),
                     ),
                   ),
@@ -1858,9 +2118,8 @@ class _HomeScreenState extends State<HomeScreen> {
               else if (erro != null &&
                   restaurantes.isEmpty)
                 _erroCard()
-              else if (
-                  restaurantesFiltrados
-                      .isEmpty)
+              else if (restaurantesFiltrados
+                  .isEmpty)
                 _nenhumRestaurante()
               else
                 _listaRestaurantes(),
@@ -1889,7 +2148,8 @@ class _HomeScreenState extends State<HomeScreen> {
             Colors.white70,
         selectedLabelStyle:
             const TextStyle(
-          fontWeight: FontWeight.bold,
+          fontWeight:
+              FontWeight.bold,
           fontSize: 12,
         ),
         unselectedLabelStyle:
@@ -1902,18 +2162,21 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Início',
           ),
           BottomNavigationBarItem(
-            icon:
-                Icon(Icons.receipt_long),
+            icon: Icon(
+              Icons.receipt_long,
+            ),
             label: 'Pedidos',
           ),
           BottomNavigationBarItem(
-            icon:
-                Icon(Icons.favorite_border),
+            icon: Icon(
+              Icons.favorite_border,
+            ),
             label: 'Favoritos',
           ),
           BottomNavigationBarItem(
-            icon:
-                Icon(Icons.person_outline),
+            icon: Icon(
+              Icons.person_outline,
+            ),
             label: 'Perfil',
           ),
         ],
@@ -1936,7 +2199,8 @@ class _HomeScreenState extends State<HomeScreen> {
             child: PageView.builder(
               controller:
                   _bannerController,
-              itemCount: banners.length,
+              itemCount:
+                  banners.length,
               onPageChanged: (index) {
                 if (!mounted) return;
 
@@ -1956,7 +2220,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 return GestureDetector(
                   behavior:
                       HitTestBehavior.opaque,
-                  onTap: _clicarBanner,
+                  onTap:
+                      _clicarBanner,
                   child: _bannerCard(
                     imagem:
                         banner['imagem']
@@ -1975,10 +2240,6 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
 
         const SizedBox(height: 10),
-
-        // ========================================================
-        // INDICADORES
-        // ========================================================
 
         Row(
           mainAxisAlignment:
@@ -2006,7 +2267,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     BoxDecoration(
                   color: ativo
                       ? laranja
-                      : Colors.grey.shade300,
+                      : Colors.grey
+                          .shade300,
                   borderRadius:
                       BorderRadius.circular(
                     10,
@@ -2035,7 +2297,6 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // IMAGEM
           Image.network(
             imagem,
             fit: BoxFit.cover,
@@ -2045,20 +2306,22 @@ class _HomeScreenState extends State<HomeScreen> {
               stackTrace,
             ) {
               return Container(
-                color: Colors.grey.shade300,
-                child: const Center(
+                color:
+                    Colors.grey.shade300,
+                child:
+                    const Center(
                   child: Icon(
                     Icons
                         .image_not_supported,
                     size: 45,
-                    color: Colors.grey,
+                    color:
+                        Colors.grey,
                   ),
                 ),
               );
             },
           ),
 
-          // ESCURECIMENTO
           Container(
             decoration:
                 BoxDecoration(
@@ -2070,7 +2333,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     .bottomCenter,
                 colors: [
                   Colors.transparent,
-                  Colors.black.withValues(
+                  Colors.black
+                      .withValues(
                     alpha: 0.75,
                   ),
                 ],
@@ -2078,7 +2342,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // TEXTO
           Positioned(
             left: 18,
             right: 18,
@@ -2096,15 +2359,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       TextOverflow.ellipsis,
                   style:
                       const TextStyle(
-                    color: Colors.white,
+                    color:
+                        Colors.white,
                     fontSize: 22,
                     fontWeight:
                         FontWeight.w900,
                   ),
                 ),
-
                 const SizedBox(height: 5),
-
                 Text(
                   subtitulo,
                   maxLines: 2,
@@ -2112,7 +2374,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       TextOverflow.ellipsis,
                   style:
                       const TextStyle(
-                    color: Colors.white,
+                    color:
+                        Colors.white,
                     fontSize: 13,
                     fontWeight:
                         FontWeight.w500,
@@ -2173,7 +2436,8 @@ class _HomeScreenState extends State<HomeScreen> {
           style: TextStyle(
             color: Colors.black,
             fontSize: 20,
-            fontWeight: FontWeight.bold,
+            fontWeight:
+                FontWeight.bold,
           ),
         ),
         const SizedBox(height: 14),
@@ -2182,7 +2446,8 @@ class _HomeScreenState extends State<HomeScreen> {
           child: ListView.builder(
             scrollDirection:
                 Axis.horizontal,
-            itemCount: ativas.length,
+            itemCount:
+                ativas.length,
             itemBuilder: (
               context,
               index,
@@ -2206,7 +2471,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     .trim()
                     .isNotEmpty ==
                 true
-            ? promocao['titulo'].toString()
+            ? promocao['titulo']
+                .toString()
             : 'Promoção especial';
 
     final descricao =
@@ -2291,7 +2557,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   decoration:
                       BoxDecoration(
-                    color: Colors.white,
+                    color:
+                        Colors.white,
                     borderRadius:
                         BorderRadius
                             .circular(
@@ -2314,7 +2581,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 const Spacer(),
                 const Icon(
                   Icons.local_offer,
-                  color: Colors.white,
+                  color:
+                      Colors.white,
                   size: 28,
                 ),
               ],
@@ -2327,7 +2595,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   TextOverflow.ellipsis,
               style:
                   const TextStyle(
-                color: Colors.white,
+                color:
+                    Colors.white,
                 fontSize: 18,
                 fontWeight:
                     FontWeight.bold,
@@ -2341,7 +2610,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   TextOverflow.ellipsis,
               style:
                   const TextStyle(
-                color: Colors.white,
+                color:
+                    Colors.white,
                 fontSize: 13,
               ),
             ),
@@ -2349,7 +2619,8 @@ class _HomeScreenState extends State<HomeScreen> {
             Row(
               children: [
                 if (precoOriginal > 0 &&
-                    precoPromocional > 0) ...[
+                    precoPromocional >
+                        0) ...[
                   Text(
                     'R\$ ${precoOriginal.toStringAsFixed(2).replaceAll('.', ',')}',
                     style:
@@ -2397,7 +2668,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           .all(8),
                   decoration:
                       BoxDecoration(
-                    color: Colors.white24,
+                    color:
+                        Colors.white24,
                     borderRadius:
                         BorderRadius
                             .circular(
@@ -2453,9 +2725,10 @@ class _HomeScreenState extends State<HomeScreen> {
             RestaurantScreen(
           restauranteId:
               restauranteId,
-          nome: promocao['titulo']
-                  ?.toString() ??
-              'Restaurante',
+          nome:
+              promocao['titulo']
+                      ?.toString() ??
+                  'Restaurante',
           descricao:
               promocao['descricao']
                       ?.toString() ??
@@ -2511,7 +2784,8 @@ class _HomeScreenState extends State<HomeScreen> {
               height: 62,
               decoration:
                   BoxDecoration(
-                color: Colors.white,
+                color:
+                    Colors.white,
                 borderRadius:
                     BorderRadius.circular(
                   35,
@@ -2539,7 +2813,8 @@ class _HomeScreenState extends State<HomeScreen> {
               style:
                   const TextStyle(
                 fontSize: 13,
-                color: Colors.black,
+                color:
+                    Colors.black,
                 fontWeight:
                     FontWeight.w500,
               ),
@@ -2579,7 +2854,8 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       decoration:
           BoxDecoration(
-        color: Colors.white,
+        color:
+            Colors.white,
         borderRadius:
             BorderRadius.circular(
           22,
@@ -2587,7 +2863,8 @@ class _HomeScreenState extends State<HomeScreen> {
         boxShadow:
             const [
           BoxShadow(
-            color: Colors.black12,
+            color:
+                Colors.black12,
             blurRadius: 12,
             offset: Offset(0, 4),
           ),
@@ -2687,7 +2964,8 @@ class _HomeScreenState extends State<HomeScreen> {
                                     .symmetric(
                               horizontal:
                                   8,
-                              vertical: 4,
+                              vertical:
+                                  4,
                             ),
                             decoration:
                                 BoxDecoration(
@@ -2727,8 +3005,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               .ellipsis,
                       style:
                           const TextStyle(
-                        color: Color
-                            .fromARGB(
+                        color:
+                            Color.fromARGB(
                           255,
                           7,
                           1,
@@ -2747,7 +3025,8 @@ class _HomeScreenState extends State<HomeScreen> {
                               Colors.orange,
                         ),
                         const SizedBox(
-                            width: 3),
+                          width: 3,
+                        ),
                         Text(
                           avaliacaoRestaurante(
                             restaurante,
@@ -2762,19 +3041,22 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const SizedBox(
-                            width: 12),
+                          width: 12,
+                        ),
                         Icon(
                           aberto
                               ? Icons
                                   .check_circle
-                              : Icons.schedule,
+                              : Icons
+                                  .schedule,
                           size: 16,
                           color: aberto
                               ? Colors.green
                               : Colors.red,
                         ),
                         const SizedBox(
-                            width: 4),
+                          width: 4,
+                        ),
                         Text(
                           aberto
                               ? 'Aberto'
@@ -2801,7 +3083,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           size: 15,
                         ),
                         const SizedBox(
-                            width: 3),
+                          width: 3,
+                        ),
                         Flexible(
                           child: Text(
                             tempoEntrega(
@@ -2823,7 +3106,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ),
                         const SizedBox(
-                            width: 15),
+                          width: 15,
+                        ),
                         Text(
                           taxaEntrega(
                             restaurante,
@@ -2858,18 +3142,30 @@ class _HomeScreenState extends State<HomeScreen> {
   ) {
     final imagem =
         restaurante['imagem'] ??
-            restaurante['logo'] ??
+            restaurante['capa'] ??
             restaurante['foto'] ??
             restaurante['imagemUrl'] ??
+            restaurante['capaUrl'] ??
+            restaurante['logo'] ??
             restaurante['logoUrl'];
 
-    if (imagem != null &&
-        imagem.toString().trim().isNotEmpty) {
+    final url =
+        _urlImagem(imagem);
+
+    debugPrint(
+      '🖼️ IMAGEM RESTAURANTE: $url',
+    );
+
+    if (url.isNotEmpty) {
       return Container(
         width: 90,
         height: 90,
         decoration:
             BoxDecoration(
+          color:
+              const Color(
+            0xFFFFEADB,
+          ),
           borderRadius:
               BorderRadius.circular(
             18,
@@ -2878,13 +3174,55 @@ class _HomeScreenState extends State<HomeScreen> {
         clipBehavior:
             Clip.antiAlias,
         child: Image.network(
-          imagem.toString(),
+          url,
+          width: 90,
+          height: 90,
           fit: BoxFit.cover,
+          loadingBuilder: (
+            context,
+            child,
+            loadingProgress,
+          ) {
+            if (loadingProgress ==
+                null) {
+              return child;
+            }
+
+            return Container(
+              width: 90,
+              height: 90,
+              color:
+                  const Color(
+                0xFFFFEADB,
+              ),
+              child: const Center(
+                child: SizedBox(
+                  width: 24,
+                  height: 24,
+                  child:
+                      CircularProgressIndicator(
+                    strokeWidth: 2.5,
+                    color: laranja,
+                  ),
+                ),
+              ),
+            );
+          },
           errorBuilder: (
             context,
             error,
             stackTrace,
           ) {
+            debugPrint(
+              '❌ ERRO AO CARREGAR IMAGEM RESTAURANTE',
+            );
+            debugPrint(
+              'URL: $url',
+            );
+            debugPrint(
+              'ERRO: $error',
+            );
+
             return _iconeRestaurante();
           },
         ),
@@ -2924,12 +3262,14 @@ class _HomeScreenState extends State<HomeScreen> {
         buscaController.text.trim();
 
     return Container(
-      width: double.infinity,
+      width:
+          double.infinity,
       padding:
           const EdgeInsets.all(30),
       decoration:
           BoxDecoration(
-        color: Colors.white,
+        color:
+            Colors.white,
         borderRadius:
             BorderRadius.circular(
           20,
@@ -2943,7 +3283,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     .store_mall_directory_outlined
                 : Icons.search_off,
             size: 55,
-            color: Colors.grey,
+            color:
+                Colors.grey,
           ),
           const SizedBox(height: 12),
           Text(
@@ -2992,12 +3333,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _erroCard() {
     return Container(
-      width: double.infinity,
+      width:
+          double.infinity,
       padding:
           const EdgeInsets.all(25),
       decoration:
           BoxDecoration(
-        color: Colors.white,
+        color:
+            Colors.white,
         borderRadius:
             BorderRadius.circular(
           20,
@@ -3008,7 +3351,8 @@ class _HomeScreenState extends State<HomeScreen> {
           const Icon(
             Icons.cloud_off_rounded,
             size: 50,
-            color: Colors.grey,
+            color:
+                Colors.grey,
           ),
           const SizedBox(height: 10),
           const Text(
@@ -3034,7 +3378,8 @@ class _HomeScreenState extends State<HomeScreen> {
               foregroundColor:
                   Colors.white,
             ),
-            icon: const Icon(
+            icon:
+                const Icon(
               Icons.refresh,
             ),
             label:
@@ -3094,4 +3439,3 @@ class _HomeScreenState extends State<HomeScreen> {
         0;
   }
 }
-

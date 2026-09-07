@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
+import '../../config/api.dart';
 import '../../services/favorite_service.dart';
 import '../restaurant/restaurant_screen.dart';
 
@@ -83,7 +84,11 @@ class _FavoritesScreenState extends State<FavoritesScreen>
         );
 
         debugPrint(
-          'IMAGEM: ${_obterImagem(favorito) != null}',
+          'IMAGEM ORIGINAL: ${_obterImagem(favorito)}',
+        );
+
+        debugPrint(
+          'IMAGEM FINAL: ${_urlImagem(_obterImagem(favorito))}',
         );
       }
 
@@ -117,6 +122,60 @@ class _FavoritesScreenState extends State<FavoritesScreen>
         carregando = false;
       });
     }
+  }
+
+  // ============================================================
+  // CONVERTER URL DA IMAGEM
+  // ============================================================
+
+  String _urlImagem(
+    String? imagem,
+  ) {
+    if (imagem == null) {
+      return '';
+    }
+
+    final valor = imagem.trim();
+
+    if (valor.isEmpty) {
+      return '';
+    }
+
+    // ----------------------------------------------------------
+    // URL COMPLETA
+    // ----------------------------------------------------------
+
+    if (valor.startsWith('http://') ||
+        valor.startsWith('https://')) {
+      return valor;
+    }
+
+    // ----------------------------------------------------------
+    // SERVIDOR DO FOODJET
+    // ----------------------------------------------------------
+
+    final servidor = Api.baseUrl.replaceFirst(
+      RegExp(r'/api/?$'),
+      '',
+    );
+
+    // ----------------------------------------------------------
+    // CAMINHO ABSOLUTO DO BACKEND
+    // Exemplo:
+    // /uploads/logos/logo.webp
+    // ----------------------------------------------------------
+
+    if (valor.startsWith('/')) {
+      return '$servidor$valor';
+    }
+
+    // ----------------------------------------------------------
+    // CAMINHO SEM /
+    // Exemplo:
+    // uploads/logos/logo.webp
+    // ----------------------------------------------------------
+
+    return '$servidor/$valor';
   }
 
   // ============================================================
@@ -240,15 +299,29 @@ class _FavoritesScreenState extends State<FavoritesScreen>
     Map<String, dynamic> restaurante,
   ) {
     final valores = [
-      restaurante['logo'],
-      restaurante['logoUrl'],
+      // CAPA PRIMEIRO
+      restaurante['capa'],
+      restaurante['capaUrl'],
+      restaurante['imagemCapa'],
+      restaurante['imagemCapaUrl'],
+
+      // IMAGEM
       restaurante['imagem'],
       restaurante['imagemUrl'],
+
+      // FOTO
       restaurante['foto'],
       restaurante['fotoUrl'],
+
+      // LOGO
+      restaurante['logo'],
+      restaurante['logoUrl'],
+
+      // BASE64
       restaurante['logoBase64'],
       restaurante['imagemBase64'],
       restaurante['fotoBase64'],
+      restaurante['capaBase64'],
     ];
 
     for (final valor in valores) {
@@ -259,6 +332,8 @@ class _FavoritesScreenState extends State<FavoritesScreen>
       if (imagem.isEmpty) continue;
 
       if (imagem.toLowerCase() == 'null') continue;
+
+      if (imagem.toLowerCase() == 'undefined') continue;
 
       return imagem;
     }
@@ -302,7 +377,6 @@ class _FavoritesScreenState extends State<FavoritesScreen>
 
       await FavoriteService.remover(id);
 
-      // Remove imediatamente da interface.
       if (mounted) {
         setState(() {
           favoritos.removeWhere(
@@ -362,8 +436,6 @@ class _FavoritesScreenState extends State<FavoritesScreen>
       ),
     );
 
-    // O usuário pode ter alterado o favorito
-    // dentro do RestaurantScreen.
     await carregarFavoritos();
   }
 
@@ -761,15 +833,21 @@ class _FavoritesScreenState extends State<FavoritesScreen>
     }
 
     // ----------------------------------------------------------
-    // URL
+    // URL NORMALIZADA
     // ----------------------------------------------------------
+
+    final url = _urlImagem(valor);
+
+    debugPrint(
+      '🖼️ IMAGEM FAVORITO: $url',
+    );
 
     return ClipRRect(
       borderRadius:
           BorderRadius.circular(18),
 
       child: Image.network(
-        valor,
+        url,
 
         width: 82,
         height: 82,
@@ -794,7 +872,15 @@ class _FavoritesScreenState extends State<FavoritesScreen>
           stackTrace,
         ) {
           debugPrint(
-            'ERRO IMAGEM FAVORITO: $error',
+            '❌ ERRO IMAGEM FAVORITO',
+          );
+
+          debugPrint(
+            'URL: $url',
+          );
+
+          debugPrint(
+            'ERRO: $error',
           );
 
           return _imagemPadrao();
