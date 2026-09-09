@@ -1,3 +1,4 @@
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -648,29 +649,62 @@ class _HomeScreenState extends State<HomeScreen> {
       return '';
     }
 
-    // Já é URL completa
     if (valor.startsWith('http://') ||
         valor.startsWith('https://')) {
       return valor;
     }
 
-    // Remove /api do endereço
-    // https://foodjet-backend.onrender.com/api
-    // vira
-    // https://foodjet-backend.onrender.com
     final servidor =
         Api.baseUrl.replaceFirst(
       RegExp(r'/api/?$'),
       '',
     );
 
-    // Caminho já começa com /
     if (valor.startsWith('/')) {
       return '$servidor$valor';
     }
 
-    // Caminho sem /
     return '$servidor/$valor';
+  }
+
+  // ============================================================
+  // PEGAR LOGO
+  // ============================================================
+
+  dynamic _obterLogo(
+    Map<String, dynamic> restaurante,
+  ) {
+    return restaurante['logo'] ??
+        restaurante['logoUrl'] ??
+        restaurante['logo_url'] ??
+        restaurante['imagemPerfil'] ??
+        restaurante['imagem_perfil'] ??
+        restaurante['fotoPerfil'] ??
+        restaurante['foto_perfil'] ??
+        restaurante['fotoRestaurante'] ??
+        restaurante['foto_restaurante'] ??
+        restaurante['imagemRestaurante'] ??
+        restaurante['imagem_restaurante'] ??
+        restaurante['imagem'];
+  }
+
+  // ============================================================
+  // PEGAR CAPA
+  // ============================================================
+
+  dynamic _obterCapa(
+    Map<String, dynamic> restaurante,
+  ) {
+    return restaurante['capa'] ??
+        restaurante['capaUrl'] ??
+        restaurante['capa_url'] ??
+        restaurante['banner'] ??
+        restaurante['bannerUrl'] ??
+        restaurante['banner_url'] ??
+        restaurante['imagemCapa'] ??
+        restaurante['imagem_capa'] ??
+        restaurante['fotoCapa'] ??
+        restaurante['foto_capa'];
   }
 
   // ============================================================
@@ -681,13 +715,7 @@ class _HomeScreenState extends State<HomeScreen> {
     Map<String, dynamic> restaurante,
   ) {
     final imagem =
-        restaurante['imagem'] ??
-            restaurante['capa'] ??
-            restaurante['foto'] ??
-            restaurante['imagemUrl'] ??
-            restaurante['capaUrl'] ??
-            restaurante['logo'] ??
-            restaurante['logoUrl'];
+        _obterLogo(restaurante);
 
     final url = _urlImagem(
       imagem,
@@ -745,9 +773,6 @@ class _HomeScreenState extends State<HomeScreen> {
           ) {
             debugPrint(
               '❌ ERRO IMAGEM BUSCA: $url',
-            );
-            debugPrint(
-              'ERRO: $error',
             );
 
             return _iconeBuscaRestaurante();
@@ -860,12 +885,101 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
+  // ATUALIZAR RESTAURANTE APÓS VOLTAR
+  // ============================================================
+
+  Future<void> _processarRetornoRestaurante(
+    String restauranteId,
+    dynamic resultado,
+  ) async {
+    if (!mounted) return;
+
+    if (resultado is! Map) {
+      await carregarRestaurantes(
+        silencioso: true,
+      );
+      return;
+    }
+
+    final retorno =
+        Map<String, dynamic>.from(
+      resultado,
+    );
+
+    final logo =
+        retorno['logo'] ??
+            retorno['imagem'];
+
+    final capa =
+        retorno['capa'];
+
+    debugPrint(
+      '🏠 RETORNO RESTAURANTE',
+    );
+    debugPrint(
+      '🏠 ID: $restauranteId',
+    );
+    debugPrint(
+      '🏠 LOGO: $logo',
+    );
+    debugPrint(
+      '🏠 CAPA: $capa',
+    );
+
+    final indice = restaurantes.indexWhere(
+      (item) =>
+          idRestaurante(item) ==
+          restauranteId,
+    );
+
+    if (indice >= 0) {
+      final atualizado =
+          Map<String, dynamic>.from(
+        restaurantes[indice],
+      );
+
+      if (logo != null &&
+          logo.toString().trim().isNotEmpty) {
+        atualizado['logo'] = logo;
+        atualizado['logoUrl'] = logo;
+        atualizado['imagem'] = logo;
+      }
+
+      if (capa != null &&
+          capa.toString().trim().isNotEmpty) {
+        atualizado['capa'] = capa;
+        atualizado['capaUrl'] = capa;
+      }
+
+      setState(() {
+        restaurantes[indice] = atualizado;
+
+        restaurantesFiltrados =
+            _aplicarFiltro(
+          restaurantes,
+          buscaController.text,
+        );
+      });
+
+      await _salvarHistoricoRestaurante(
+        atualizado,
+      );
+    }
+
+    // Busca novamente no backend para garantir
+    // que a Home fique sincronizada com o banco.
+    await carregarRestaurantes(
+      silencioso: true,
+    );
+  }
+
+  // ============================================================
   // ABRIR RESTAURANTE DA BUSCA
   // ============================================================
 
-  void _abrirRestauranteBusca(
+  Future<void> _abrirRestauranteBusca(
     Map<String, dynamic> restaurante,
-  ) {
+  ) async {
     final id =
         idRestaurante(restaurante);
 
@@ -873,7 +987,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    _salvarHistoricoRestaurante(
+    await _salvarHistoricoRestaurante(
       restaurante,
     );
 
@@ -881,7 +995,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     FocusScope.of(context).unfocus();
 
-    Navigator.push(
+    final resultado =
+        await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) =>
@@ -901,8 +1016,25 @@ class _HomeScreenState extends State<HomeScreen> {
               avaliacaoRestaurante(
             restaurante,
           ),
+          imagem:
+              _urlImagem(
+            _obterLogo(
+              restaurante,
+            ),
+          ),
+          capa:
+              _urlImagem(
+            _obterCapa(
+              restaurante,
+            ),
+          ),
         ),
       ),
+    );
+
+    await _processarRetornoRestaurante(
+      id,
+      resultado,
     );
   }
 
@@ -2696,9 +2828,9 @@ class _HomeScreenState extends State<HomeScreen> {
   // ABRIR PROMOÇÃO
   // ============================================================
 
-  void _abrirPromocao(
+  Future<void> _abrirPromocao(
     Map<String, dynamic> promocao,
-  ) {
+  ) async {
     final restauranteId =
         promocao['restauranteId']
                 ?.toString()
@@ -2718,7 +2850,17 @@ class _HomeScreenState extends State<HomeScreen> {
       return;
     }
 
-    Navigator.push(
+    final restaurante =
+        restaurantes.firstWhere(
+      (item) =>
+          idRestaurante(item) ==
+          restauranteId,
+      orElse: () =>
+          <String, dynamic>{},
+    );
+
+    final resultado =
+        await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) =>
@@ -2726,16 +2868,52 @@ class _HomeScreenState extends State<HomeScreen> {
           restauranteId:
               restauranteId,
           nome:
-              promocao['titulo']
-                      ?.toString() ??
-                  'Restaurante',
+              restaurante.isNotEmpty
+                  ? nomeRestaurante(
+                      restaurante,
+                    )
+                  : promocao['titulo']
+                          ?.toString() ??
+                      'Restaurante',
           descricao:
-              promocao['descricao']
-                      ?.toString() ??
-                  '',
-          avaliacao: '5.0',
+              restaurante.isNotEmpty
+                  ? restaurante['descricao']
+                          ?.toString() ??
+                      categoriaRestaurante(
+                        restaurante,
+                      )
+                  : promocao['descricao']
+                          ?.toString() ??
+                      '',
+          avaliacao:
+              restaurante.isNotEmpty
+                  ? avaliacaoRestaurante(
+                      restaurante,
+                    )
+                  : '5.0',
+          imagem:
+              restaurante.isNotEmpty
+                  ? _urlImagem(
+                      _obterLogo(
+                        restaurante,
+                      ),
+                    )
+                  : null,
+          capa:
+              restaurante.isNotEmpty
+                  ? _urlImagem(
+                      _obterCapa(
+                        restaurante,
+                      ),
+                    )
+                  : null,
         ),
       ),
+    );
+
+    await _processarRetornoRestaurante(
+      restauranteId,
+      resultado,
     );
   }
 
@@ -2875,7 +3053,7 @@ class _HomeScreenState extends State<HomeScreen> {
             BorderRadius.circular(
           22,
         ),
-        onTap: () {
+        onTap: () async {
           if (id.trim().isEmpty) {
             ScaffoldMessenger.of(
               context,
@@ -2889,11 +3067,12 @@ class _HomeScreenState extends State<HomeScreen> {
             return;
           }
 
-          _salvarHistoricoRestaurante(
+          await _salvarHistoricoRestaurante(
             restaurante,
           );
 
-          Navigator.push(
+          final resultado =
+              await Navigator.push(
             context,
             MaterialPageRoute(
               builder: (_) =>
@@ -2914,8 +3093,25 @@ class _HomeScreenState extends State<HomeScreen> {
                     avaliacaoRestaurante(
                   restaurante,
                 ),
+                imagem:
+                    _urlImagem(
+                  _obterLogo(
+                    restaurante,
+                  ),
+                ),
+                capa:
+                    _urlImagem(
+                  _obterCapa(
+                    restaurante,
+                  ),
+                ),
               ),
             ),
+          );
+
+          await _processarRetornoRestaurante(
+            id,
+            resultado,
           );
         },
         child: Padding(
@@ -3140,14 +3336,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _imagemRestaurante(
     Map<String, dynamic> restaurante,
   ) {
+    // IMPORTANTE:
+    // A Home agora prioriza a LOGO.
+    // A capa não é utilizada como imagem do card.
     final imagem =
-        restaurante['imagem'] ??
-            restaurante['capa'] ??
-            restaurante['foto'] ??
-            restaurante['imagemUrl'] ??
-            restaurante['capaUrl'] ??
-            restaurante['logo'] ??
-            restaurante['logoUrl'];
+        _obterLogo(restaurante);
 
     final url =
         _urlImagem(imagem);

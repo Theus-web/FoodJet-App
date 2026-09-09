@@ -15,10 +15,7 @@ class RestaurantScreen extends StatefulWidget {
   final String descricao;
   final String avaliacao;
 
-  // IMAGEM/LOGO DO RESTAURANTE
   final String? imagem;
-
-  // CAPA/BANNER DO RESTAURANTE
   final String? capa;
 
   const RestaurantScreen({
@@ -94,6 +91,36 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
+  // VOLTAR PARA HOME DEVOLVENDO LOGO E CAPA
+  // ============================================================
+
+  void _voltarParaHome() {
+    final logo = logoRestaurante != null &&
+            logoRestaurante!.trim().isNotEmpty
+        ? _urlLogo(logoRestaurante!)
+        : (widget.imagem != null &&
+                widget.imagem!.trim().isNotEmpty
+            ? _urlLogo(widget.imagem!)
+            : null);
+
+    final capa = _urlCapa();
+
+    debugPrint('========================================');
+    debugPrint('VOLTANDO PARA HOME');
+    debugPrint('LOGO: $logo');
+    debugPrint('CAPA: $capa');
+    debugPrint('========================================');
+
+    Navigator.pop(
+      context,
+      {
+        'logo': logo,
+        'capa': capa,
+      },
+    );
+  }
+
+  // ============================================================
   // FAVORITOS
   // ============================================================
 
@@ -130,9 +157,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         carregandoFavorito = false;
       });
     } catch (e) {
-      debugPrint(
-        'ERRO AO CARREGAR FAVORITO: $e',
-      );
+      debugPrint('ERRO AO CARREGAR FAVORITO: $e');
 
       if (!mounted) return;
 
@@ -182,19 +207,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         'categoria': 'restaurante',
       };
 
-      debugPrint('========================================');
-      debugPrint('ALTERANDO FAVORITO');
-      debugPrint('ID: $restauranteId');
-      debugPrint('NOME: ${widget.nome}');
-      debugPrint('ANTES: $favoritoAnterior');
-      debugPrint('========================================');
-
       final resultado = await FavoriteService.alternar(
         restaurante,
-      );
-
-      debugPrint(
-        'NOVO ESTADO DO FAVORITO: $resultado',
       );
 
       if (!mounted) return;
@@ -214,10 +228,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         );
       }
     } catch (e) {
-      debugPrint('========================================');
-      debugPrint('ERRO AO ALTERAR FAVORITO');
-      debugPrint('$e');
-      debugPrint('========================================');
+      debugPrint('ERRO AO ALTERAR FAVORITO: $e');
 
       if (!mounted) return;
 
@@ -316,7 +327,7 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
-  // RESTAURANTE DA RESPOSTA DA API
+  // EXTRAIR RESTAURANTE
   // ============================================================
 
   Map<String, dynamic> _extrairRestaurante(
@@ -346,22 +357,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       );
     }
 
-    // ----------------------------------------------------------
-    // IMPORTANTE:
-    // Algumas respostas podem devolver:
-    //
-    // {
-    //   "id": "...",
-    //   "dados": {
-    //      "logo": "...",
-    //      "capa": "..."
-    //   }
-    // }
-    //
-    // Copiamos os campos de "dados" para o nível principal,
-    // sem sobrescrever valores que já existam.
-    // ----------------------------------------------------------
-
     if (restaurante['dados'] is Map) {
       final dadosInternos = Map<String, dynamic>.from(
         restaurante['dados'] as Map,
@@ -373,17 +368,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           () => entry.value,
         );
       }
-
-      debugPrint(
-        '📦 CAMPOS ENCONTRADOS DENTRO DE "dados"',
-      );
     }
 
     return restaurante;
   }
 
   // ============================================================
-  // STATUS RESTAURANTE + FOTO REAL
+  // STATUS + LOGO + CAPA
   // ============================================================
 
   Future<void> _verificarStatusRestaurante() async {
@@ -413,21 +404,21 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
       final resposta = await http.get(
         uri,
-        headers: {
+        headers: const {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
         },
       ).timeout(
-        const Duration(seconds: 10),
+        const Duration(seconds: 15),
       );
 
       debugPrint(
         'STATUS RESTAURANTE: ${resposta.statusCode}',
       );
 
-      if (resposta.statusCode < 200 || resposta.statusCode >= 300) {
+      if (resposta.statusCode < 200 ||
+          resposta.statusCode >= 300) {
         debugPrint(
-          '❌ ERRO HTTP RESTAURANTE: ${resposta.body}',
+          'ERRO HTTP RESTAURANTE: ${resposta.body}',
         );
 
         if (!mounted) return;
@@ -443,78 +434,55 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
       final restaurante = _extrairRestaurante(dados);
 
-      debugPrint(
-        '📦 DADOS DO RESTAURANTE RECEBIDOS',
-      );
-
-      debugPrint(
-        'ID API: ${restaurante['id']}',
-      );
-
-      debugPrint(
-        'LOGO API: ${restaurante['logo']}',
-      );
-
-      debugPrint(
-        'CAPA API: ${restaurante['capa']}',
-      );
+      debugPrint('========================================');
+      debugPrint('DADOS RECEBIDOS DO RESTAURANTE');
+      debugPrint('ID: ${restaurante['id']}');
+      debugPrint('LOGO: ${restaurante['logo']}');
+      debugPrint('LOGO URL: ${restaurante['logoUrl']}');
+      debugPrint('IMAGEM: ${restaurante['imagem']}');
+      debugPrint('CAPA: ${restaurante['capa']}');
+      debugPrint('========================================');
 
       // ========================================================
-      // BUSCAR FOTO REAL DO RESTAURANTE
+      // LOGO
       // ========================================================
 
       String? logo;
 
-      // ========================================================
-// BUSCAR LOGO DO RESTAURANTE (TODOS OS CAMPOS)
-// ========================================================
-
       final possiveisLogos = [
-  restaurante['logo'],
-  restaurante['logoUrl'],
-  restaurante['logo_url'],
-
-  restaurante['imagem'],
-  restaurante['imagemUrl'],
-  restaurante['imagem_url'],
-
-  restaurante['foto'],
-  restaurante['fotoUrl'],
-  restaurante['foto_url'],
-
-  restaurante['fotoPerfil'],
-  restaurante['foto_perfil'],
-
-  restaurante['imagemPerfil'],
-  restaurante['imagem_perfil'],
-
-  restaurante['fotoRestaurante'],
-  restaurante['foto_restaurante'],
-
-  restaurante['imagemRestaurante'],
-  restaurante['imagem_restaurante'],
-];
+        restaurante['logo'],
+        restaurante['logoUrl'],
+        restaurante['logo_url'],
+        restaurante['imagemPerfil'],
+        restaurante['imagem_perfil'],
+        restaurante['fotoPerfil'],
+        restaurante['foto_perfil'],
+        restaurante['fotoRestaurante'],
+        restaurante['foto_restaurante'],
+        restaurante['imagemRestaurante'],
+        restaurante['imagem_restaurante'],
+        restaurante['imagem'],
+        restaurante['imagemUrl'],
+        restaurante['imagem_url'],
+        restaurante['foto'],
+        restaurante['fotoUrl'],
+        restaurante['foto_url'],
+      ];
 
       for (final valor in possiveisLogos) {
-        if (valor != null && valor.toString().trim().isNotEmpty) {
-          logo = valor.toString().trim();
+        if (valor == null) continue;
 
-          debugPrint(
-            'FOTO DO RESTAURANTE ENCONTRADA: $logo',
-          );
+        final texto = valor.toString().trim();
 
-          break;
-        }
-      }
+        if (texto.isEmpty) continue;
 
-      if (logo == null) {
-        debugPrint(
-          '⚠️ NENHUMA FOTO/LOGO ENCONTRADA NA API',
-        );
+        logo = texto;
+
+        break;
       }
 
       // ========================================================
-      // BUSCAR CAPA / BANNER DO RESTAURANTE
+      // CAPA
       // ========================================================
 
       String? capa;
@@ -522,8 +490,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       final possiveisCapas = [
         restaurante['capa'],
         restaurante['capaUrl'],
+        restaurante['capa_url'],
         restaurante['banner'],
         restaurante['bannerUrl'],
+        restaurante['banner_url'],
         restaurante['imagemCapa'],
         restaurante['imagem_capa'],
         restaurante['fotoCapa'],
@@ -531,25 +501,19 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       ];
 
       for (final valor in possiveisCapas) {
-        if (valor != null && valor.toString().trim().isNotEmpty) {
-          capa = valor.toString().trim();
+        if (valor == null) continue;
 
-          debugPrint(
-            'CAPA DO RESTAURANTE ENCONTRADA: $capa',
-          );
+        final texto = valor.toString().trim();
 
-          break;
-        }
-      }
+        if (texto.isEmpty) continue;
 
-      if (capa == null) {
-        debugPrint(
-          '⚠️ NENHUMA CAPA ENCONTRADA NA API',
-        );
+        capa = texto;
+
+        break;
       }
 
       // ========================================================
-      // BUSCAR BASE64
+      // BASE64
       // ========================================================
 
       String? base64Logo;
@@ -564,15 +528,15 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       ];
 
       for (final valor in possiveisBase64) {
-        if (valor != null && valor.toString().trim().isNotEmpty) {
-          base64Logo = valor.toString().trim();
+        if (valor == null) continue;
 
-          debugPrint(
-            'BASE64 DA FOTO ENCONTRADO',
-          );
+        final texto = valor.toString().trim();
 
-          break;
-        }
+        if (texto.isEmpty) continue;
+
+        base64Logo = texto;
+
+        break;
       }
 
       final status =
@@ -615,7 +579,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         if (statusFechado) {
           disponivel = false;
         } else {
-          disponivel = statusAberto && online && aberto && ativo;
+          disponivel =
+              statusAberto && online && aberto && ativo;
         }
       } else {
         disponivel = online && aberto && ativo;
@@ -629,40 +594,39 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         restauranteOnline = disponivel;
         carregandoStatus = false;
 
-        // API tem prioridade
-        if (logo != null && logo.trim().isNotEmpty) {
-          logoRestaurante = logo.trim();
+        if (logo != null && logo.isNotEmpty) {
+          logoRestaurante = logo;
 
-          debugPrint("✅ LOGO SALVA DA API: $logoRestaurante");
+          debugPrint(
+            'LOGO SALVA: $logoRestaurante',
+          );
+
+          debugPrint(
+            'URL FINAL LOGO: ${_urlLogo(logo)}',
+          );
         }
 
-        if (base64Logo != null) {
+        if (base64Logo != null &&
+            base64Logo.isNotEmpty) {
           logoBase64 = base64Logo;
         }
 
-        // API tem prioridade
-        if (capa != null) {
+        if (capa != null && capa.isNotEmpty) {
           capaRestaurante = capa;
+
+          debugPrint(
+            'CAPA SALVA: $capaRestaurante',
+          );
+
+          debugPrint(
+            'URL FINAL CAPA: ${_urlLogo(capa)}',
+          );
         }
       });
 
-      debugPrint('========================================');
-      debugPrint('IMAGENS ATUALIZADAS NO CLIENTE');
-      debugPrint(
-        'LOGO RESTAURANTE: $logoRestaurante',
-      );
-      debugPrint(
-        'CAPA RESTAURANTE: $capaRestaurante',
-      );
-      debugPrint(
-        'URL LOGO FINAL: ${logoRestaurante != null ? _urlLogo(logoRestaurante!) : 'NENHUMA'}',
-      );
-      debugPrint(
-        'URL CAPA FINAL: ${_urlCapa() ?? 'NENHUMA'}',
-      );
-      debugPrint('========================================');
-
-      if (estavaOnline && !disponivel && carrinho.isNotEmpty) {
+      if (estavaOnline &&
+          !disponivel &&
+          carrinho.isNotEmpty) {
         setState(() {
           carrinho.clear();
         });
@@ -713,9 +677,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
       final resposta = await http.get(
         uri,
-        headers: {
+        headers: const {
           'Accept': 'application/json',
-          'Content-Type': 'application/json',
         },
       ).timeout(
         const Duration(seconds: 15),
@@ -725,7 +688,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         'PRODUTOS STATUS: ${resposta.statusCode}',
       );
 
-      if (resposta.statusCode < 200 || resposta.statusCode >= 300) {
+      if (resposta.statusCode < 200 ||
+          resposta.statusCode >= 300) {
         throw Exception(
           'Erro HTTP ${resposta.statusCode}',
         );
@@ -737,43 +701,55 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
       if (resultado is List) {
         listaProdutos = resultado;
-      } else if (resultado is Map && resultado['produtos'] is List) {
-        listaProdutos = resultado['produtos'] as List;
-      } else if (resultado is Map && resultado['products'] is List) {
-        listaProdutos = resultado['products'] as List;
-      } else if (resultado is Map && resultado['data'] is List) {
-        listaProdutos = resultado['data'] as List;
+      } else if (resultado is Map &&
+          resultado['produtos'] is List) {
+        listaProdutos =
+            resultado['produtos'] as List;
+      } else if (resultado is Map &&
+          resultado['products'] is List) {
+        listaProdutos =
+            resultado['products'] as List;
+      } else if (resultado is Map &&
+          resultado['data'] is List) {
+        listaProdutos =
+            resultado['data'] as List;
       } else {
         throw Exception(
           'Formato de resposta inválido.',
         );
       }
 
-      final produtosApi = <Map<String, dynamic>>[];
+      final produtosApi =
+          <Map<String, dynamic>>[];
 
       for (final item in listaProdutos) {
         if (item is! Map) continue;
 
-        final produto = Map<String, dynamic>.from(item);
+        final produto =
+            Map<String, dynamic>.from(item);
 
-        final idProduto = produto['restauranteId'] ??
-            produto['restaurantId'] ??
-            produto['restaurante_id'];
+        final idProduto =
+            produto['restauranteId'] ??
+                produto['restaurantId'] ??
+                produto['restaurante_id'];
 
         if (idProduto == null) continue;
 
-        if (idProduto.toString().trim() != restauranteId) {
+        if (idProduto.toString().trim() !=
+            restauranteId) {
           continue;
         }
 
-        final disponivel = _converterBooleano(
+        final disponivel =
+            _converterBooleano(
           produto['disponivel'],
           padrao: true,
         );
 
         if (!disponivel) continue;
 
-        produto['restauranteId'] = idProduto.toString();
+        produto['restauranteId'] =
+            idProduto.toString();
 
         produtosApi.add(produto);
       }
@@ -799,7 +775,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
       setState(() {
         carregandoProdutos = false;
-        erroProdutos = 'Não foi possível carregar o cardápio.';
+        erroProdutos =
+            'Não foi possível carregar o cardápio.';
       });
     }
   }
@@ -812,9 +789,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     final conjunto = <String>{};
 
     for (final produto in produtos) {
-      final categoria = produto['categoria']?.toString().trim();
+      final categoria =
+          produto['categoria']
+              ?.toString()
+              .trim();
 
-      if (categoria != null && categoria.isNotEmpty) {
+      if (categoria != null &&
+          categoria.isNotEmpty) {
         conjunto.add(categoria);
       }
     }
@@ -833,7 +814,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     ];
   }
 
-  List<Map<String, dynamic>> get produtosFiltrados {
+  List<Map<String, dynamic>>
+      get produtosFiltrados {
     if (categoriaSelecionada == 'Todos') {
       return produtos;
     }
@@ -841,8 +823,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return produtos
         .where(
           (produto) =>
-              produto['categoria']?.toString().trim().toLowerCase() ==
-              categoriaSelecionada.trim().toLowerCase(),
+              produto['categoria']
+                  ?.toString()
+                  .trim()
+                  .toLowerCase() ==
+              categoriaSelecionada
+                  .trim()
+                  .toLowerCase(),
         )
         .toList();
   }
@@ -865,7 +852,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       return;
     }
 
-    final restauranteId = widget.restauranteId.trim();
+    final restauranteId =
+        widget.restauranteId.trim();
 
     if (restauranteId.isEmpty) {
       _mensagem(
@@ -876,8 +864,11 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     }
 
     setState(() {
-      final index = carrinho.indexWhere(
-        (item) => item.produtoId == produtoId && produtoId != null,
+      final index =
+          carrinho.indexWhere(
+        (item) =>
+            item.produtoId == produtoId &&
+            produtoId != null,
       );
 
       if (index >= 0) {
@@ -907,7 +898,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   void _mensagem(
     String texto, {
     bool vermelho = false,
-    Duration duracao = const Duration(seconds: 1),
+    Duration duracao =
+        const Duration(seconds: 1),
   }) {
     if (!mounted) return;
 
@@ -916,11 +908,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(texto),
-          backgroundColor: vermelho ? Colors.redAccent : laranja,
+          backgroundColor:
+              vermelho ? Colors.redAccent : laranja,
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.all(16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
+            borderRadius:
+                BorderRadius.circular(18),
           ),
           duration: duracao,
         ),
@@ -934,14 +928,16 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   double get totalCarrinho {
     return carrinho.fold(
       0,
-      (total, item) => total + item.preco * item.quantidade,
+      (total, item) =>
+          total + item.preco * item.quantidade,
     );
   }
 
   int get quantidadeItens {
     return carrinho.fold(
       0,
-      (total, item) => total + item.quantidade,
+      (total, item) =>
+          total + item.quantidade,
     );
   }
 
@@ -954,7 +950,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       return;
     }
 
-    final restauranteId = widget.restauranteId.trim();
+    final restauranteId =
+        widget.restauranteId.trim();
 
     if (restauranteId.isEmpty) {
       _mensagem(
@@ -988,7 +985,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       return valor.toDouble();
     }
 
-    final texto = valor?.toString().trim() ?? '';
+    final texto =
+        valor?.toString().trim() ?? '';
 
     if (texto.isEmpty) {
       return 0;
@@ -1003,7 +1001,9 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           .replaceAll('.', '')
           .replaceAll(',', '.');
     } else {
-      normalizado = texto.replaceAll('R\$', '').replaceAll(' ', '');
+      normalizado = texto
+          .replaceAll('R\$', '')
+          .replaceAll(' ', '');
     }
 
     return double.tryParse(
@@ -1025,11 +1025,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   ) {
     final valor = imagem.trim();
 
-    if (valor.startsWith('http://') || valor.startsWith('https://')) {
+    if (valor.startsWith('http://') ||
+        valor.startsWith('https://')) {
       return valor;
     }
 
-    final baseUrl = Api.baseUrl.replaceFirst(
+    final baseUrl =
+        Api.baseUrl.replaceFirst(
       RegExp(r'/api/?$'),
       '',
     );
@@ -1052,20 +1054,26 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       return '';
     }
 
-    if (valor.startsWith('http://') || valor.startsWith('https://')) {
+    // URL completa
+    if (valor.startsWith('http://') ||
+        valor.startsWith('https://')) {
       return valor;
     }
 
-    final baseUrl = Api.baseUrl.replaceFirst(
+    // Remove /api da URL do backend
+    final servidor =
+        Api.baseUrl.replaceFirst(
       RegExp(r'/api/?$'),
       '',
     );
 
+    // /uploads/logos/arquivo.webp
     if (valor.startsWith('/')) {
-      return '$baseUrl$valor';
+      return '$servidor$valor';
     }
 
-    return '$baseUrl/$valor';
+    // uploads/logos/arquivo.webp
+    return '$servidor/$valor';
   }
 
   // ============================================================
@@ -1073,9 +1081,6 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   // ============================================================
 
   String? _urlCapa() {
-    // API primeiro.
-    // Widget somente como fallback.
-
     final candidatos = <String?>[
       capaRestaurante,
       widget.capa,
@@ -1091,36 +1096,36 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       final url = _urlLogo(texto);
 
       debugPrint(
-        '🖼️ CAPA CLIENTE: $url',
+        'CAPA CLIENTE: $url',
       );
 
       return url;
     }
 
-    debugPrint(
-      '🖼️ CAPA CLIENTE: nenhuma capa encontrada',
-    );
-
     return null;
   }
 
   // ============================================================
-  // LOGO BASE64
+  // BASE64
   // ============================================================
 
   Widget? _logoBase64Widget() {
-    if (logoBase64 == null || logoBase64!.trim().isEmpty) {
+    if (logoBase64 == null ||
+        logoBase64!.trim().isEmpty) {
       return null;
     }
 
     try {
-      String base64String = logoBase64!.trim();
+      String base64String =
+          logoBase64!.trim();
 
       if (base64String.contains(',')) {
-        base64String = base64String.split(',').last;
+        base64String =
+            base64String.split(',').last;
       }
 
-      final bytes = base64Decode(base64String);
+      final bytes =
+          base64Decode(base64String);
 
       return Image.memory(
         bytes,
@@ -1141,11 +1146,10 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   }
 
   // ============================================================
-// LOGO / FOTO DO RESTAURANTE
-// ============================================================
+  // LOGO
+  // ============================================================
 
   Widget _logoRestaurante() {
-    // A API sempre tem prioridade sobre a imagem da tela anterior.
     final candidatos = <String?>[
       logoRestaurante,
       widget.imagem,
@@ -1167,17 +1171,43 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     Widget conteudo;
 
     if (imagemFinal != null) {
-      final url = _urlLogo(imagemFinal);
+      final url =
+          _urlLogo(imagemFinal);
 
-      debugPrint("🟠 LOGO CLIENTE: $url");
+      debugPrint(
+        '========================================',
+      );
+      debugPrint(
+        'LOGO CLIENTE',
+      );
+      debugPrint(
+        'ORIGINAL: $imagemFinal',
+      );
+      debugPrint(
+        'URL FINAL: $url',
+      );
+      debugPrint(
+        '========================================',
+      );
 
       conteudo = Image.network(
         url,
         fit: BoxFit.cover,
         width: 100,
         height: 100,
-        loadingBuilder: (context, child, progress) {
-          if (progress == null) return child;
+        cacheWidth: 300,
+        cacheHeight: 300,
+        headers: const {
+          'Accept': '*/*',
+        },
+        loadingBuilder: (
+          context,
+          child,
+          progress,
+        ) {
+          if (progress == null) {
+            return child;
+          }
 
           return const Center(
             child: SizedBox(
@@ -1190,17 +1220,35 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             ),
           );
         },
-        errorBuilder: (context, error, stackTrace) {
-          debugPrint("❌ ERRO AO CARREGAR LOGO");
-          debugPrint("URL: $url");
-          debugPrint("ERRO: $error");
+        errorBuilder: (
+          context,
+          error,
+          stackTrace,
+        ) {
+          debugPrint(
+            '========================================',
+          );
+          debugPrint(
+            'ERRO AO CARREGAR LOGO',
+          );
+          debugPrint(
+            'URL: $url',
+          );
+          debugPrint(
+            'ERRO: $error',
+          );
+          debugPrint(
+            '========================================',
+          );
 
-          // Se a URL falhar, tenta Base64.
-          return _logoBase64Widget() ?? _iconeLogo();
+          return _logoBase64Widget() ??
+              _iconeLogo();
         },
       );
     } else {
-      conteudo = _logoBase64Widget() ?? _iconeLogo();
+      conteudo =
+          _logoBase64Widget() ??
+              _iconeLogo();
     }
 
     return Container(
@@ -1208,17 +1256,21 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       height: 100,
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
+        borderRadius:
+            BorderRadius.circular(30),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.20),
+            color: Colors.black.withValues(
+              alpha: 0.20,
+            ),
             blurRadius: 28,
             offset: const Offset(0, 12),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(30),
+        borderRadius:
+            BorderRadius.circular(30),
         child: conteudo,
       ),
     );
@@ -1257,7 +1309,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           ]);
         },
         child: CustomScrollView(
-          physics: const AlwaysScrollableScrollPhysics(),
+          physics:
+              const AlwaysScrollableScrollPhysics(),
           slivers: [
             SliverAppBar(
               expandedHeight: 410,
@@ -1266,28 +1319,40 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               scrolledUnderElevation: 0,
               backgroundColor: laranja,
               foregroundColor: Colors.white,
+
+              // IMPORTANTE:
+              // agora a seta devolve logo e capa para Home.
               leading: _botaoHeader(
-                icon: Icons.arrow_back_ios_new_rounded,
-                onPressed: () {
-                  Navigator.pop(context);
-                },
+                icon:
+                    Icons.arrow_back_ios_new_rounded,
+                onPressed: _voltarParaHome,
               ),
+
               actions: [
                 _botaoHeaderFavorito(),
                 const SizedBox(width: 8),
               ],
-              flexibleSpace: FlexibleSpaceBar(
-                collapseMode: CollapseMode.parallax,
-                background: _cabecalhoRestaurante(),
+
+              flexibleSpace:
+                  FlexibleSpaceBar(
+                collapseMode:
+                    CollapseMode.parallax,
+                background:
+                    _cabecalhoRestaurante(),
               ),
             ),
-            if (!carregandoStatus && !restauranteOnline)
+
+            if (!carregandoStatus &&
+                !restauranteOnline)
               SliverToBoxAdapter(
-                child: _avisoRestauranteOffline(),
+                child:
+                    _avisoRestauranteOffline(),
               ),
+
             SliverToBoxAdapter(
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(
+                padding:
+                    const EdgeInsets.fromLTRB(
                   18,
                   24,
                   18,
@@ -1301,29 +1366,36 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                         style: TextStyle(
                           color: Colors.black,
                           fontSize: 25,
-                          fontWeight: FontWeight.w800,
+                          fontWeight:
+                              FontWeight.w800,
                           letterSpacing: -0.5,
                         ),
                       ),
                     ),
-                    if (produtos.isNotEmpty) _contadorProdutos(),
+                    if (produtos.isNotEmpty)
+                      _contadorProdutos(),
                   ],
                 ),
               ),
             ),
-            if (!carregandoProdutos && produtos.isNotEmpty)
+
+            if (!carregandoProdutos &&
+                produtos.isNotEmpty)
               SliverToBoxAdapter(
                 child: _categorias(),
               ),
+
             const SliverToBoxAdapter(
               child: SizedBox(height: 10),
             ),
+
             if (carregandoProdutos)
               const SliverToBoxAdapter(
                 child: Padding(
                   padding: EdgeInsets.all(70),
                   child: Center(
-                    child: CircularProgressIndicator(
+                    child:
+                        CircularProgressIndicator(
                       color: laranja,
                     ),
                   ),
@@ -1331,35 +1403,43 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
               )
             else if (erroProdutos != null)
               SliverToBoxAdapter(
-                child: _estadoErroProdutos(),
+                child:
+                    _estadoErroProdutos(),
               )
             else if (produtos.isEmpty)
               SliverToBoxAdapter(
-                child: _estadoVazioProdutos(),
+                child:
+                    _estadoVazioProdutos(),
               )
             else if (produtosFiltrados.isEmpty)
               SliverToBoxAdapter(
-                child: _estadoVazioCategoria(),
+                child:
+                    _estadoVazioCategoria(),
               )
             else
               SliverPadding(
-                padding: const EdgeInsets.fromLTRB(
+                padding:
+                    const EdgeInsets.fromLTRB(
                   16,
                   4,
                   16,
                   140,
                 ),
                 sliver: SliverList(
-                  delegate: SliverChildBuilderDelegate(
+                  delegate:
+                      SliverChildBuilderDelegate(
                     (
                       context,
                       index,
                     ) {
                       return produtoCard(
-                        produto: produtosFiltrados[index],
+                        produto:
+                            produtosFiltrados[
+                                index],
                       );
                     },
-                    childCount: produtosFiltrados.length,
+                    childCount:
+                        produtosFiltrados.length,
                   ),
                 ),
               ),
@@ -1367,8 +1447,13 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         ),
       ),
       floatingActionButton:
-          quantidadeItens > 0 && restauranteOnline ? _botaoCarrinho() : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+          quantidadeItens > 0 &&
+                  restauranteOnline
+              ? _botaoCarrinho()
+              : null,
+      floatingActionButtonLocation:
+          FloatingActionButtonLocation
+              .centerFloat,
     );
   }
 
@@ -1378,7 +1463,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   Widget _botaoHeaderFavorito() {
     return Container(
-      margin: const EdgeInsets.symmetric(
+      margin:
+          const EdgeInsets.symmetric(
         vertical: 8,
       ),
       decoration: BoxDecoration(
@@ -1391,17 +1477,22 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
         color: Colors.transparent,
         shape: const CircleBorder(),
         child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: carregandoFavorito ? null : alternarFavorito,
+          customBorder:
+              const CircleBorder(),
+          onTap: carregandoFavorito
+              ? null
+              : alternarFavorito,
           child: SizedBox(
             width: 48,
             height: 48,
             child: Center(
               child: AnimatedSwitcher(
-                duration: const Duration(
+                duration:
+                    const Duration(
                   milliseconds: 200,
                 ),
-                transitionBuilder: (
+                transitionBuilder:
+                    (
                   child,
                   animation,
                 ) {
@@ -1410,30 +1501,38 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     child: child,
                   );
                 },
-                child: carregandoFavorito
-                    ? const SizedBox(
-                        key: ValueKey(
-                          'loading',
-                        ),
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation<Color>(
-                            Colors.white,
+                child:
+                    carregandoFavorito
+                        ? const SizedBox(
+                            key: ValueKey(
+                              'loading',
+                            ),
+                            width: 20,
+                            height: 20,
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth: 2.5,
+                              valueColor:
+                                  AlwaysStoppedAnimation<
+                                      Color>(
+                                Colors.white,
+                              ),
+                            ),
+                          )
+                        : Icon(
+                            favorito
+                                ? Icons
+                                    .favorite_rounded
+                                : Icons
+                                    .favorite_border_rounded,
+                            key: ValueKey(
+                              favorito,
+                            ),
+                            color: favorito
+                                ? Colors.redAccent
+                                : Colors.white,
+                            size: 25,
                           ),
-                        ),
-                      )
-                    : Icon(
-                        favorito
-                            ? Icons.favorite_rounded
-                            : Icons.favorite_border_rounded,
-                        key: ValueKey(
-                          favorito,
-                        ),
-                        color: favorito ? Colors.redAccent : Colors.white,
-                        size: 25,
-                      ),
               ),
             ),
           ),
@@ -1450,10 +1549,14 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     final urlCapa = _urlCapa();
 
     return Container(
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+      decoration:
+          const BoxDecoration(
+        gradient:
+            LinearGradient(
+          begin:
+              Alignment.topLeft,
+          end:
+              Alignment.bottomRight,
           colors: [
             Color(0xFFF97316),
             Color(0xFFEA580C),
@@ -1464,28 +1567,31 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          // ======================================================
-          // CAPA DO RESTAURANTE
-          // ======================================================
-
           if (urlCapa != null)
             Image.network(
               urlCapa,
               fit: BoxFit.cover,
+              headers: const {
+                'Accept': '*/*',
+              },
               loadingBuilder: (
                 context,
                 child,
                 loadingProgress,
               ) {
-                if (loadingProgress == null) {
+                if (loadingProgress ==
+                    null) {
                   return child;
                 }
 
                 return Container(
                   color: laranja,
-                  child: const Center(
-                    child: CircularProgressIndicator(
-                      color: Colors.white,
+                  child:
+                      const Center(
+                    child:
+                        CircularProgressIndicator(
+                      color:
+                          Colors.white,
                     ),
                   ),
                 );
@@ -1496,35 +1602,39 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                 stackTrace,
               ) {
                 debugPrint(
-                  '❌ ERRO AO CARREGAR CAPA: $urlCapa',
+                  'ERRO CAPA: $urlCapa',
                 );
 
                 debugPrint(
-                  '❌ ERRO CAPA: $error',
+                  '$error',
                 );
 
-                return const SizedBox.shrink();
+                return const SizedBox
+                    .shrink();
               },
             ),
 
-          // ======================================================
-          // GRADIENTE PARA GARANTIR LEITURA
-          // ======================================================
-
           Positioned.fill(
             child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+              decoration:
+                  BoxDecoration(
+                gradient:
+                    LinearGradient(
+                  begin: Alignment
+                      .topCenter,
+                  end: Alignment
+                      .bottomCenter,
                   colors: [
-                    Colors.black.withValues(
+                    Colors.black
+                        .withValues(
                       alpha: 0.10,
                     ),
-                    Colors.black.withValues(
+                    Colors.black
+                        .withValues(
                       alpha: 0.18,
                     ),
-                    Colors.black.withValues(
+                    Colors.black
+                        .withValues(
                       alpha: 0.72,
                     ),
                   ],
@@ -1539,11 +1649,14 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             child: Container(
               width: 210,
               height: 210,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(
+              decoration:
+                  BoxDecoration(
+                color: Colors.white
+                    .withValues(
                   alpha: 0.08,
                 ),
-                shape: BoxShape.circle,
+                shape:
+                    BoxShape.circle,
               ),
             ),
           ),
@@ -1554,72 +1667,117 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             child: Container(
               width: 230,
               height: 230,
-              decoration: BoxDecoration(
-                color: Colors.black.withValues(
+              decoration:
+                  BoxDecoration(
+                color: Colors.black
+                    .withValues(
                   alpha: 0.07,
                 ),
-                shape: BoxShape.circle,
+                shape:
+                    BoxShape.circle,
               ),
             ),
           ),
 
           Align(
-            alignment: Alignment.bottomCenter,
+            alignment:
+                Alignment.bottomCenter,
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding:
+                  const EdgeInsets
+                      .fromLTRB(
                 20,
                 78,
                 20,
                 22,
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
+                mainAxisSize:
+                    MainAxisSize.min,
                 children: [
                   _logoRestaurante(),
-                  const SizedBox(height: 12),
+
+                  const SizedBox(
+                    height: 12,
+                  ),
+
                   Text(
                     widget.nome,
-                    textAlign: TextAlign.center,
+                    textAlign:
+                        TextAlign.center,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    overflow:
+                        TextOverflow
+                            .ellipsis,
+                    style:
+                        const TextStyle(
+                      color:
+                          Colors.white,
                       fontSize: 25,
-                      fontWeight: FontWeight.w900,
+                      fontWeight:
+                          FontWeight.w900,
                     ),
                   ),
-                  const SizedBox(height: 7),
+
+                  const SizedBox(
+                    height: 7,
+                  ),
+
                   _statusPremium(),
-                  const SizedBox(height: 8),
-                  if (widget.descricao.trim().isNotEmpty)
+
+                  const SizedBox(
+                    height: 8,
+                  ),
+
+                  if (widget.descricao
+                      .trim()
+                      .isNotEmpty)
                     Text(
                       widget.descricao,
-                      textAlign: TextAlign.center,
+                      textAlign:
+                          TextAlign.center,
                       maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+                      overflow:
+                          TextOverflow
+                              .ellipsis,
                       style: TextStyle(
-                        color: Colors.white.withValues(
+                        color: Colors
+                            .white
+                            .withValues(
                           alpha: 0.88,
                         ),
                         fontSize: 12,
                       ),
                     ),
-                  const SizedBox(height: 10),
+
+                  const SizedBox(
+                    height: 10,
+                  ),
+
                   Wrap(
-                    alignment: WrapAlignment.center,
+                    alignment:
+                        WrapAlignment
+                            .center,
                     spacing: 7,
                     runSpacing: 6,
                     children: [
                       _informacaoHeader(
-                        Icons.star_rounded,
-                        widget.avaliacao.isEmpty ? '5,0' : widget.avaliacao,
+                        Icons
+                            .star_rounded,
+                        widget.avaliacao
+                                .isEmpty
+                            ? '5,0'
+                            : widget
+                                .avaliacao,
                       ),
                       _informacaoHeader(
-                        Icons.access_time_rounded,
+                        Icons
+                            .access_time_rounded,
                         '30–45 min',
                       ),
                       _informacaoHeader(
-                        Icons.delivery_dining_rounded,
+                        Icons
+                            .delivery_dining_rounded,
                         'Entrega',
                       ),
                     ],
@@ -1639,42 +1797,60 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   Widget _statusPremium() {
     return Container(
-      constraints: const BoxConstraints(
+      constraints:
+          const BoxConstraints(
         maxWidth: 280,
       ),
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         horizontal: 13,
         vertical: 7,
       ),
-      decoration: BoxDecoration(
+      decoration:
+          BoxDecoration(
         color: restauranteOnline
-            ? const Color(0xFF16A34A)
-            : const Color(0xFFDC2626),
-        borderRadius: BorderRadius.circular(30),
+            ? const Color(
+                0xFF16A34A)
+            : const Color(
+                0xFFDC2626),
+        borderRadius:
+            BorderRadius.circular(
+          30,
+        ),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize:
+            MainAxisSize.min,
         children: [
           Container(
             width: 8,
             height: 8,
-            decoration: const BoxDecoration(
+            decoration:
+                const BoxDecoration(
               color: Colors.white,
-              shape: BoxShape.circle,
+              shape:
+                  BoxShape.circle,
             ),
           ),
-          const SizedBox(width: 7),
+          const SizedBox(
+            width: 7,
+          ),
           Flexible(
             child: Text(
               restauranteOnline
                   ? 'ONLINE • ACEITANDO PEDIDOS'
                   : 'OFFLINE • PEDIDOS INDISPONÍVEIS',
               maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: Colors.white,
+              overflow:
+                  TextOverflow
+                      .ellipsis,
+              style:
+                  const TextStyle(
+                color:
+                    Colors.white,
                 fontSize: 9.5,
-                fontWeight: FontWeight.w800,
+                fontWeight:
+                    FontWeight.w800,
               ),
             ),
           ),
@@ -1688,31 +1864,44 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     String texto,
   ) {
     return Container(
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         horizontal: 10,
         vertical: 7,
       ),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(
+      decoration:
+          BoxDecoration(
+        color: Colors.white
+            .withValues(
           alpha: 0.14,
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius:
+            BorderRadius.circular(
+          20,
+        ),
       ),
       child: Row(
-        mainAxisSize: MainAxisSize.min,
+        mainAxisSize:
+            MainAxisSize.min,
         children: [
           Icon(
             icon,
-            color: Colors.white,
+            color:
+                Colors.white,
             size: 14,
           ),
-          const SizedBox(width: 4),
+          const SizedBox(
+            width: 4,
+          ),
           Text(
             texto,
-            style: const TextStyle(
-              color: Colors.white,
+            style:
+                const TextStyle(
+              color:
+                  Colors.white,
               fontSize: 10,
-              fontWeight: FontWeight.w700,
+              fontWeight:
+                  FontWeight.w700,
             ),
           ),
         ],
@@ -1725,20 +1914,26 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     required VoidCallback onPressed,
   }) {
     return Container(
-      margin: const EdgeInsets.symmetric(
+      margin:
+          const EdgeInsets.symmetric(
         vertical: 8,
       ),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(
+      decoration:
+          BoxDecoration(
+        color: Colors.black
+            .withValues(
           alpha: 0.18,
         ),
-        shape: BoxShape.circle,
+        shape:
+            BoxShape.circle,
       ),
       child: IconButton(
-        onPressed: onPressed,
+        onPressed:
+            onPressed,
         icon: Icon(
           icon,
-          color: Colors.white,
+          color:
+              Colors.white,
           size: 20,
         ),
       ),
@@ -1747,20 +1942,28 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   Widget _contadorProdutos() {
     return Container(
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         horizontal: 12,
         vertical: 7,
       ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(30),
+      decoration:
+          BoxDecoration(
+        color:
+            Colors.white,
+        borderRadius:
+            BorderRadius.circular(
+          30,
+        ),
       ),
       child: Text(
         '${produtos.length} ${produtos.length == 1 ? 'item' : 'itens'}',
-        style: const TextStyle(
+        style:
+            const TextStyle(
           color: laranja,
           fontSize: 11,
-          fontWeight: FontWeight.w800,
+          fontWeight:
+              FontWeight.w800,
         ),
       ),
     );
@@ -1774,32 +1977,49 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return SizedBox(
       height: 50,
       child: ListView.separated(
-        padding: const EdgeInsets.symmetric(
+        padding:
+            const EdgeInsets.symmetric(
           horizontal: 16,
         ),
-        scrollDirection: Axis.horizontal,
-        itemCount: categorias.length,
-        separatorBuilder: (_, __) => const SizedBox(width: 9),
-        itemBuilder: (_, index) {
-          final categoria = categorias[index];
+        scrollDirection:
+            Axis.horizontal,
+        itemCount:
+            categorias.length,
+        separatorBuilder:
+            (_, __) =>
+                const SizedBox(
+          width: 9,
+        ),
+        itemBuilder:
+            (_, index) {
+          final categoria =
+              categorias[index];
 
-          final selecionada = categoria == categoriaSelecionada;
+          final selecionada =
+              categoria ==
+                  categoriaSelecionada;
 
           return GestureDetector(
             onTap: () {
               setState(() {
-                categoriaSelecionada = categoria;
+                categoriaSelecionada =
+                    categoria;
               });
             },
-            child: AnimatedContainer(
-              duration: const Duration(
+            child:
+                AnimatedContainer(
+              duration:
+                  const Duration(
                 milliseconds: 200,
               ),
-              padding: const EdgeInsets.symmetric(
+              padding:
+                  const EdgeInsets
+                      .symmetric(
                 horizontal: 18,
                 vertical: 11,
               ),
-              decoration: BoxDecoration(
+              decoration:
+                  BoxDecoration(
                 gradient: selecionada
                     ? const LinearGradient(
                         colors: [
@@ -1808,20 +2028,32 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                         ],
                       )
                     : null,
-                color: selecionada ? null : Colors.white,
-                borderRadius: BorderRadius.circular(
+                color: selecionada
+                    ? null
+                    : Colors.white,
+                borderRadius:
+                    BorderRadius
+                        .circular(
                   30,
                 ),
-                border: Border.all(
-                  color: selecionada ? Colors.transparent : Colors.black12,
+                border:
+                    Border.all(
+                  color: selecionada
+                      ? Colors
+                          .transparent
+                      : Colors.black12,
                 ),
               ),
               child: Text(
                 categoria,
-                style: TextStyle(
-                  color: selecionada ? Colors.white : Colors.black87,
+                style:
+                    TextStyle(
+                  color: selecionada
+                      ? Colors.white
+                      : Colors.black87,
                   fontSize: 13,
-                  fontWeight: FontWeight.w700,
+                  fontWeight:
+                      FontWeight.w700,
                 ),
               ),
             ),
@@ -1837,18 +2069,29 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   Widget _avisoRestauranteOffline() {
     return Container(
-      margin: const EdgeInsets.fromLTRB(
+      margin:
+          const EdgeInsets.fromLTRB(
         16,
         15,
         16,
         0,
       ),
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: Colors.red.withValues(
+      padding:
+          const EdgeInsets.all(
+        15,
+      ),
+      decoration:
+          BoxDecoration(
+        color:
+            Colors.white,
+        borderRadius:
+            BorderRadius.circular(
+          20,
+        ),
+        border:
+            Border.all(
+          color: Colors.red
+              .withValues(
             alpha: 0.10,
           ),
         ),
@@ -1858,35 +2101,52 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
           Container(
             width: 46,
             height: 46,
-            decoration: BoxDecoration(
-              color: Colors.red.withValues(
+            decoration:
+                BoxDecoration(
+              color: Colors.red
+                  .withValues(
                 alpha: 0.10,
               ),
-              shape: BoxShape.circle,
+              shape:
+                  BoxShape.circle,
             ),
-            child: const Icon(
-              Icons.storefront_rounded,
-              color: Colors.redAccent,
+            child:
+                const Icon(
+              Icons
+                  .storefront_rounded,
+              color:
+                  Colors.redAccent,
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(
+            width: 12,
+          ),
           const Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment
+                      .start,
               children: [
                 Text(
                   'Restaurante fechado',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w800,
+                  style:
+                      TextStyle(
+                    fontWeight:
+                        FontWeight.w800,
                     fontSize: 15,
-                    color: Colors.red,
+                    color:
+                        Colors.red,
                   ),
                 ),
-                SizedBox(height: 3),
+                SizedBox(
+                  height: 3,
+                ),
                 Text(
                   'Este restaurante não está aceitando pedidos agora.',
-                  style: TextStyle(
-                    color: Colors.black54,
+                  style:
+                      TextStyle(
+                    color:
+                        Colors.black54,
                     fontSize: 12,
                   ),
                 ),
@@ -1903,100 +2163,161 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
   // ============================================================
 
   Widget produtoCard({
-    required Map<String, dynamic> produto,
+    required Map<String, dynamic>
+        produto,
   }) {
-    final nome = produto['nome']?.toString().trim().isNotEmpty == true
-        ? produto['nome'].toString()
-        : 'Produto';
+    final nome =
+        produto['nome']
+                    ?.toString()
+                    .trim()
+                    .isNotEmpty ==
+                true
+            ? produto['nome']
+                .toString()
+            : 'Produto';
 
-    final descricao = produto['descricao']?.toString() ?? '';
+    final descricao =
+        produto['descricao']
+                ?.toString() ??
+            '';
 
-    final preco = _precoProduto(
+    final preco =
+        _precoProduto(
       produto['preco'],
     );
 
-    final imagem = produto['imagem']?.toString();
+    final imagem =
+        produto['imagem']?.toString();
 
     final produtoId =
-        (produto['id'] ?? produto['_id'] ?? produto['produtoId'])?.toString();
+        (produto['id'] ??
+                produto['_id'] ??
+                produto['produtoId'])
+            ?.toString();
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 14,
       ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        border: Border.all(
-          color: Colors.black.withValues(
+      decoration:
+          BoxDecoration(
+        color:
+            Colors.white,
+        borderRadius:
+            BorderRadius.circular(
+          24,
+        ),
+        border:
+            Border.all(
+          color: Colors.black
+              .withValues(
             alpha: 0.035,
           ),
         ),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(
+            color: Colors.black
+                .withValues(
               alpha: 0.055,
             ),
             blurRadius: 20,
-            offset: const Offset(0, 8),
+            offset:
+                const Offset(
+              0,
+              8,
+            ),
           ),
         ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(10),
+        padding:
+            const EdgeInsets.all(
+          10,
+        ),
         child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment:
+              CrossAxisAlignment
+                  .center,
           children: [
             SizedBox(
               width: 105,
               height: 105,
               child: Hero(
-                tag: 'produto_${produtoId ?? nome}',
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(
+                tag:
+                    'produto_${produtoId ?? nome}',
+                child:
+                    ClipRRect(
+                  borderRadius:
+                      BorderRadius
+                          .circular(
                     20,
                   ),
-                  child: _imagemProduto(
+                  child:
+                      _imagemProduto(
                     imagem,
                     tamanho: 105,
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(
+              width: 12,
+            ),
             Expanded(
               child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize:
+                    MainAxisSize.min,
+                crossAxisAlignment:
+                    CrossAxisAlignment
+                        .start,
                 children: [
                   Text(
                     nome,
                     maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.black,
+                    overflow:
+                        TextOverflow
+                            .ellipsis,
+                    style:
+                        const TextStyle(
+                      color:
+                          Colors.black,
                       fontSize: 16,
                       height: 1.15,
-                      fontWeight: FontWeight.w800,
+                      fontWeight:
+                          FontWeight.w800,
                     ),
                   ),
-                  if (descricao.trim().isNotEmpty) ...[
-                    const SizedBox(height: 7),
+                  if (descricao
+                      .trim()
+                      .isNotEmpty) ...[
+                    const SizedBox(
+                      height: 7,
+                    ),
                     Text(
                       descricao,
                       maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
+                      overflow:
+                          TextOverflow
+                              .ellipsis,
+                      style:
+                          TextStyle(
+                        color: Colors
+                            .grey
+                            .shade600,
                         fontSize: 12,
                         height: 1.3,
                       ),
                     ),
                   ],
-                  const SizedBox(height: 10),
+                  const SizedBox(
+                    height: 10,
+                  ),
                   Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
+                    crossAxisAlignment:
+                        CrossAxisAlignment
+                            .center,
                     children: [
                       Expanded(
                         child: Text(
@@ -2004,20 +2325,30 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                             preco,
                           ),
                           maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: laranja,
-                            fontSize: 17,
-                            fontWeight: FontWeight.w900,
+                          overflow:
+                              TextOverflow
+                                  .ellipsis,
+                          style:
+                              const TextStyle(
+                            color:
+                                laranja,
+                            fontSize:
+                                17,
+                            fontWeight:
+                                FontWeight
+                                    .w900,
                           ),
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(
+                        width: 8,
+                      ),
                       _botaoAdicionar(
                         nome: nome,
                         preco: preco,
                         imagem: imagem,
-                        produtoId: produtoId,
+                        produtoId:
+                            produtoId,
                       ),
                     ],
                   ),
@@ -2037,50 +2368,66 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     String? produtoId,
   }) {
     return GestureDetector(
-      behavior: HitTestBehavior.opaque,
+      behavior:
+          HitTestBehavior.opaque,
       onTap: () {
         adicionarProduto(
           nome: nome,
           preco: preco,
           imagem: imagem,
-          produtoId: produtoId,
+          produtoId:
+              produtoId,
         );
       },
-      child: AnimatedContainer(
-        duration: const Duration(
+      child:
+          AnimatedContainer(
+        duration:
+            const Duration(
           milliseconds: 180,
         ),
         width: 44,
         height: 44,
-        decoration: BoxDecoration(
-          gradient: restauranteOnline
-              ? const LinearGradient(
-                  colors: [
-                    laranja,
-                    laranjaEscuro,
-                  ],
-                )
-              : null,
-          color: restauranteOnline ? null : Colors.grey.shade400,
-          shape: BoxShape.circle,
-          boxShadow: restauranteOnline
-              ? [
-                  BoxShadow(
-                    color: laranja.withValues(
-                      alpha: 0.30,
-                    ),
-                    blurRadius: 12,
-                    offset: const Offset(
-                      0,
-                      5,
-                    ),
-                  ),
-                ]
-              : null,
+        decoration:
+            BoxDecoration(
+          gradient:
+              restauranteOnline
+                  ? const LinearGradient(
+                      colors: [
+                        laranja,
+                        laranjaEscuro,
+                      ],
+                    )
+                  : null,
+          color: restauranteOnline
+              ? null
+              : Colors.grey.shade400,
+          shape:
+              BoxShape.circle,
+          boxShadow:
+              restauranteOnline
+                  ? [
+                      BoxShadow(
+                        color: laranja
+                            .withValues(
+                          alpha: 0.30,
+                        ),
+                        blurRadius: 12,
+                        offset:
+                            const Offset(
+                          0,
+                          5,
+                        ),
+                      ),
+                    ]
+                  : null,
         ),
         child: Icon(
-          restauranteOnline ? Icons.add_rounded : Icons.lock_outline_rounded,
-          color: Colors.white,
+          restauranteOnline
+              ? Icons.add_rounded
+              : Icons
+                  .lock_outline_rounded,
+          color:
+              Colors.white,
           size: 25,
         ),
       ),
@@ -2091,7 +2438,8 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     String? imagem, {
     double tamanho = 105,
   }) {
-    if (imagem == null || imagem.trim().isEmpty) {
+    if (imagem == null ||
+        imagem.trim().isEmpty) {
       return _placeholderImagem(
         tamanho,
       );
@@ -2122,15 +2470,18 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     return Container(
       width: tamanho,
       height: tamanho,
-      decoration: const BoxDecoration(
-        gradient: LinearGradient(
+      decoration:
+          const BoxDecoration(
+        gradient:
+            LinearGradient(
           colors: [
             Color(0xFFFFEAD9),
             Color(0xFFFFD5B5),
           ],
         ),
       ),
-      child: const Icon(
+      child:
+          const Icon(
         Icons.fastfood_rounded,
         color: laranja,
         size: 42,
@@ -2144,30 +2495,43 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   Widget _botaoCarrinho() {
     return GestureDetector(
-      onTap: abrirCarrinho,
+      onTap:
+          abrirCarrinho,
       child: Container(
         height: 64,
-        margin: const EdgeInsets.symmetric(
+        margin:
+            const EdgeInsets.symmetric(
           horizontal: 16,
         ),
-        padding: const EdgeInsets.symmetric(
+        padding:
+            const EdgeInsets.symmetric(
           horizontal: 14,
         ),
-        decoration: BoxDecoration(
-          gradient: const LinearGradient(
+        decoration:
+            BoxDecoration(
+          gradient:
+              const LinearGradient(
             colors: [
               Color(0xFFF97316),
               Color(0xFFEA580C),
             ],
           ),
-          borderRadius: BorderRadius.circular(22),
+          borderRadius:
+              BorderRadius.circular(
+            22,
+          ),
           boxShadow: [
             BoxShadow(
-              color: laranja.withValues(
+              color: laranja
+                  .withValues(
                 alpha: 0.38,
               ),
               blurRadius: 24,
-              offset: const Offset(0, 10),
+              offset:
+                  const Offset(
+                0,
+                10,
+              ),
             ),
           ],
         ),
@@ -2176,28 +2540,43 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             Container(
               width: 43,
               height: 43,
-              decoration: BoxDecoration(
-                color: Colors.white.withValues(
+              decoration:
+                  BoxDecoration(
+                color: Colors.white
+                    .withValues(
                   alpha: 0.18,
                 ),
-                shape: BoxShape.circle,
+                shape:
+                    BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.shopping_bag_rounded,
-                color: Colors.white,
+              child:
+                  const Icon(
+                Icons
+                    .shopping_bag_rounded,
+                color:
+                    Colors.white,
                 size: 22,
               ),
             ),
-            const SizedBox(width: 11),
+            const SizedBox(
+              width: 11,
+            ),
             Expanded(
               child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment:
+                    MainAxisAlignment
+                        .center,
+                crossAxisAlignment:
+                    CrossAxisAlignment
+                        .start,
                 children: [
                   Text(
                     '$quantidadeItens ${quantidadeItens == 1 ? 'item' : 'itens'}',
-                    style: TextStyle(
-                      color: Colors.white.withValues(
+                    style:
+                        TextStyle(
+                      color: Colors
+                          .white
+                          .withValues(
                         alpha: 0.85,
                       ),
                       fontSize: 11,
@@ -2207,10 +2586,14 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
                     _formatarPreco(
                       totalCarrinho,
                     ),
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style:
+                        const TextStyle(
+                      color:
+                          Colors.white,
                       fontSize: 17,
-                      fontWeight: FontWeight.w900,
+                      fontWeight:
+                          FontWeight
+                              .w900,
                     ),
                   ),
                 ],
@@ -2218,16 +2601,23 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
             ),
             const Text(
               'Ver carrinho',
-              style: TextStyle(
-                color: Colors.white,
+              style:
+                  TextStyle(
+                color:
+                    Colors.white,
                 fontSize: 14,
-                fontWeight: FontWeight.w800,
+                fontWeight:
+                    FontWeight.w800,
               ),
             ),
-            const SizedBox(width: 7),
+            const SizedBox(
+              width: 7,
+            ),
             const Icon(
-              Icons.arrow_forward_rounded,
-              color: Colors.white,
+              Icons
+                  .arrow_forward_rounded,
+              color:
+                  Colors.white,
             ),
           ],
         ),
@@ -2241,27 +2631,43 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   Widget _estadoErroProdutos() {
     return _estadoBase(
-      icon: Icons.cloud_off_rounded,
-      titulo: 'Não foi possível carregar o cardápio',
-      descricao: 'Verifique a conexão com o servidor e tente novamente.',
-      botao: ElevatedButton.icon(
-        onPressed: _carregarProdutos,
-        icon: const Icon(
+      icon:
+          Icons.cloud_off_rounded,
+      titulo:
+          'Não foi possível carregar o cardápio',
+      descricao:
+          'Verifique a conexão com o servidor e tente novamente.',
+      botao:
+          ElevatedButton.icon(
+        onPressed:
+            _carregarProdutos,
+        icon:
+            const Icon(
           Icons.refresh_rounded,
         ),
-        label: const Text(
+        label:
+            const Text(
           'Tentar novamente',
         ),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: laranja,
-          foregroundColor: Colors.white,
+        style:
+            ElevatedButton.styleFrom(
+          backgroundColor:
+              laranja,
+          foregroundColor:
+              Colors.white,
           elevation: 0,
-          padding: const EdgeInsets.symmetric(
+          padding:
+              const EdgeInsets
+                  .symmetric(
             horizontal: 20,
             vertical: 13,
           ),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
+          shape:
+              RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(
+              14,
+            ),
           ),
         ),
       ),
@@ -2270,16 +2676,21 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
 
   Widget _estadoVazioProdutos() {
     return _estadoBase(
-      icon: Icons.restaurant_menu_rounded,
-      titulo: 'Nenhum produto disponível',
-      descricao: 'Este restaurante ainda não possui produtos disponíveis.',
+      icon:
+          Icons.restaurant_menu_rounded,
+      titulo:
+          'Nenhum produto disponível',
+      descricao:
+          'Este restaurante ainda não possui produtos disponíveis.',
     );
   }
 
   Widget _estadoVazioCategoria() {
     return _estadoBase(
-      icon: Icons.search_off_rounded,
-      titulo: 'Nenhum produto nesta categoria',
+      icon:
+          Icons.search_off_rounded,
+      titulo:
+          'Nenhum produto nesta categoria',
     );
   }
 
@@ -2290,51 +2701,79 @@ class _RestaurantScreenState extends State<RestaurantScreen> {
     Widget? botao,
   }) {
     return Container(
-      margin: const EdgeInsets.all(16),
-      padding: const EdgeInsets.all(30),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+      margin:
+          const EdgeInsets.all(
+        16,
+      ),
+      padding:
+          const EdgeInsets.all(
+        30,
+      ),
+      decoration:
+          BoxDecoration(
+        color:
+            Colors.white,
+        borderRadius:
+            BorderRadius.circular(
+          24,
+        ),
       ),
       child: Column(
         children: [
           Container(
             width: 76,
             height: 76,
-            decoration: BoxDecoration(
-              color: laranja.withValues(
+            decoration:
+                BoxDecoration(
+              color: laranja
+                  .withValues(
                 alpha: 0.10,
               ),
-              shape: BoxShape.circle,
+              shape:
+                  BoxShape.circle,
             ),
-            child: Icon(
+            child:
+                Icon(
               icon,
-              color: laranja,
+              color:
+                  laranja,
               size: 36,
             ),
           ),
-          const SizedBox(height: 17),
+          const SizedBox(
+            height: 17,
+          ),
           Text(
             titulo,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
+            textAlign:
+                TextAlign.center,
+            style:
+                const TextStyle(
               fontSize: 17,
-              fontWeight: FontWeight.w800,
+              fontWeight:
+                  FontWeight.w800,
             ),
           ),
           if (descricao != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(
+              height: 8,
+            ),
             Text(
               descricao,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Colors.black54,
+              textAlign:
+                  TextAlign.center,
+              style:
+                  const TextStyle(
+                color:
+                    Colors.black54,
                 height: 1.4,
               ),
             ),
           ],
           if (botao != null) ...[
-            const SizedBox(height: 20),
+            const SizedBox(
+              height: 20,
+            ),
             botao,
           ],
         ],
