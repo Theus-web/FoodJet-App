@@ -1,64 +1,49 @@
 const Restaurant = require("../models/restaurant");
-
-const fs = require("fs");
-const path = require("path");
 const multer = require("multer");
+const cloudinary = require("cloudinary").v2;
 
 // ============================================================
-// PASTAS
+// CLOUDINARY
 // ============================================================
 
-const pastaUploads = path.join(
-    process.cwd(),
-    "uploads"
-);
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+});
 
-const pastaCapas = path.join(
-    pastaUploads,
-    "capas"
-);
+// ============================================================
+// VALIDAR CONFIGURAÇÃO CLOUDINARY
+// ============================================================
 
-const pastaLogos = path.join(
-    pastaUploads,
-    "logos"
-);
+function validarCloudinary() {
+    const faltando = [];
 
-function criarPastas() {
-    fs.mkdirSync(pastaUploads, {
-        recursive: true,
-    });
+    if (!process.env.CLOUDINARY_CLOUD_NAME) {
+        faltando.push("CLOUDINARY_CLOUD_NAME");
+    }
 
-    fs.mkdirSync(pastaCapas, {
-        recursive: true,
-    });
+    if (!process.env.CLOUDINARY_API_KEY) {
+        faltando.push("CLOUDINARY_API_KEY");
+    }
 
-    fs.mkdirSync(pastaLogos, {
-        recursive: true,
-    });
+    if (!process.env.CLOUDINARY_API_SECRET) {
+        faltando.push("CLOUDINARY_API_SECRET");
+    }
+
+    if (faltando.length) {
+        throw new Error(
+            `Cloudinary não configurado. Variáveis ausentes: ${faltando.join(", ")}`
+        );
+    }
 }
 
-criarPastas();
-
-console.log("========================================");
-console.log("📁 PASTA UPLOADS:", pastaUploads);
-console.log("📁 PASTA CAPAS:", pastaCapas);
-console.log("📁 PASTA LOGOS:", pastaLogos);
-console.log("========================================");
-
 // ============================================================
-// UTILITÁRIOS
+// NORMALIZAR URL
 // ============================================================
 
-function limparId(id) {
-    return String(id || "")
-        .replace(/[^a-zA-Z0-9_-]/g, "_");
-}
-
-function normalizarCaminhoImagem(valor) {
-    if (
-        valor === null ||
-        valor === undefined
-    ) {
+function normalizarImagem(valor) {
+    if (!valor) {
         return null;
     }
 
@@ -68,14 +53,16 @@ function normalizarCaminhoImagem(valor) {
         return null;
     }
 
+    // Cloudinary / URL HTTPS
     if (
-        texto.startsWith("http://") ||
         texto.startsWith("https://") ||
+        texto.startsWith("http://") ||
         texto.startsWith("data:image/")
     ) {
         return texto;
     }
 
+    // Caminho antigo
     if (texto.startsWith("/")) {
         return texto;
     }
@@ -83,582 +70,389 @@ function normalizarCaminhoImagem(valor) {
     return `/${texto}`;
 }
 
-function removerArquivo(caminho) {
-    try {
-        if (!caminho) {
-            return;
-        }
+// ============================================================
+// MULTER - MEMÓRIA
+// ============================================================
 
-        let caminhoLimpo = String(caminho).trim();
+const storage = multer.memoryStorage();
 
-        if (
-            caminhoLimpo.startsWith("http://") ||
-            caminhoLimpo.startsWith("https://")
-        ) {
-            try {
-                const url = new URL(caminhoLimpo);
-                caminhoLimpo = url.pathname;
-            } catch (_) {
-                return;
-            }
-        }
+function filtroImagem(req, file, cb) {
+    const tiposPermitidos = [
+        "image/jpeg",
+        "image/jpg",
+        "image/png",
+        "image/webp",
+    ];
 
-        if (
-            caminhoLimpo.startsWith("/uploads/")
-        ) {
-            caminhoLimpo = caminhoLimpo.substring(1);
-        }
-
-        if (
-            !caminhoLimpo.startsWith("uploads/")
-        ) {
-            return;
-        }
-
-        const caminhoFisico = path.join(
-            process.cwd(),
-            caminhoLimpo
-        );
-
-        if (fs.existsSync(caminhoFisico)) {
-            fs.unlinkSync(caminhoFisico);
-
-            console.log(
-                "🗑️ ARQUIVO REMOVIDO:",
-                caminhoFisico
-            );
-        }
-    } catch (erro) {
-        console.error(
-            "⚠️ ERRO AO REMOVER ARQUIVO:",
-            erro.message
-        );
+    if (tiposPermitidos.includes(file.mimetype)) {
+        cb(null, true);
+        return;
     }
+
+    cb(
+        new Error(
+            "Formato de imagem não permitido. Use JPG, JPEG, PNG ou WEBP."
+        )
+    );
 }
 
-function removerArquivoCapa(caminho) {
-    removerArquivo(caminho);
-}
+const uploadLogo = multer({
+    storage,
+    fileFilter: filtroImagem,
+    limits: {
+        fileSize: 5 * 1024 * 1024,
+    },
+});
 
-function removerArquivoLogo(caminho) {
-    removerArquivo(caminho);
-}
+const uploadCapa = multer({
+    storage,
+    fileFilter: filtroImagem,
+    limits: {
+        fileSize: 10 * 1024 * 1024,
+    },
+});
 
 // ============================================================
-// BASE64 DO LOGO
+// UPLOAD BUFFER PARA CLOUDINARY
 // ============================================================
 
-function salvarLogoBase64(
-    imagem,
-    restauranteId
+function enviarBufferCloudinary(
+    buffer,
+    pasta,
+    publicId
 ) {
-    if (
-        typeof imagem !== "string"
-    ) {
-        return null;
-    }
+    return new Promise((resolve, reject) => {
+        const stream =
+            cloudinary.uploader.upload_stream(
+                {
+                    folder: pasta,
+                    public_id: publicId,
+                    resource_type: "image",
+                    overwrite: true,
+                    invalidate: true,
+                },
+                (error, resultado) => {
+                    if (error) {
+                        reject(error);
+                        return;
+                    }
 
-    const valor = imagem.trim();
+                    resolve(resultado);
+                }
+            );
 
-    if (
-        !valor.startsWith("data:image/")
-    ) {
-        return null;
-    }
-
-    const match = valor.match(
-        /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/i
-    );
-
-    if (!match) {
-        throw new Error(
-            "Formato Base64 do logo inválido."
-        );
-    }
-
-    const mime = match[1].toLowerCase();
-
-    const base64 = match[2];
-
-    let extensao;
-
-    if (
-        mime === "image/webp"
-    ) {
-        extensao = ".webp";
-    } else if (
-        mime === "image/png" ||
-        mime === "image/x-png"
-    ) {
-        extensao = ".png";
-    } else if (
-        mime === "image/jpeg" ||
-        mime === "image/jpg"
-    ) {
-        extensao = ".jpg";
-    } else {
-        throw new Error(
-            "Formato de logo não permitido. Use JPG, PNG ou WEBP."
-        );
-    }
-
-    const buffer = Buffer.from(
-        base64,
-        "base64"
-    );
-
-    if (!buffer.length) {
-        throw new Error(
-            "O arquivo do logo está vazio."
-        );
-    }
-
-    if (
-        buffer.length >
-        5 * 1024 * 1024
-    ) {
-        throw new Error(
-            "A imagem do logo deve ter no máximo 5 MB."
-        );
-    }
-
-    criarPastas();
-
-    const nomeArquivo =
-        `logo_${limparId(restauranteId)}_${Date.now()}${extensao}`;
-
-    const caminhoArquivo = path.join(
-        pastaLogos,
-        nomeArquivo
-    );
-
-    fs.writeFileSync(
-        caminhoArquivo,
-        buffer
-    );
-
-    console.log(
-        "✅ LOGO BASE64 SALVO:",
-        caminhoArquivo
-    );
-
-    return `/uploads/logos/${nomeArquivo}`;
+        stream.end(buffer);
+    });
 }
 
 // ============================================================
-// MULTER - CAPA
+// UPLOAD BASE64 PARA CLOUDINARY
 // ============================================================
 
-const storageCapa =
-    multer.diskStorage({
+async function enviarBase64Cloudinary(
+    base64,
+    pasta,
+    publicId
+) {
+    validarCloudinary();
 
-        destination: (
-            req,
-            file,
-            cb
-        ) => {
-            criarPastas();
+    if (!base64) {
+        return null;
+    }
 
-            cb(
-                null,
-                pastaCapas
-            );
-        },
+    if (
+        typeof base64 !== "string" ||
+        !base64.startsWith("data:image/")
+    ) {
+        return base64;
+    }
 
-        filename: (
-            req,
-            file,
-            cb
-        ) => {
-
-            let extensao =
-                path.extname(
-                    String(
-                        file.originalname || ""
-                    )
-                ).toLowerCase();
-
-            if (
-                extensao === ".jpeg"
-            ) {
-                extensao = ".jpg";
+    const resultado =
+        await cloudinary.uploader.upload(
+            base64,
+            {
+                folder: pasta,
+                public_id: publicId,
+                resource_type: "image",
+                overwrite: true,
+                invalidate: true,
             }
+        );
 
-            if (
-                ![
-                    ".jpg",
-                    ".png",
-                    ".webp",
-                ].includes(extensao)
-            ) {
-                extensao = ".jpg";
-            }
-
-            const nome =
-                `capa_${limparId(req.params.id)}_${Date.now()}${extensao}`;
-
-            cb(
-                null,
-                nome
-            );
-        },
-    });
-
-const uploadCapaMulter =
-    multer({
-        storage: storageCapa,
-
-        limits: {
-            fileSize:
-                10 * 1024 * 1024,
-        },
-
-        fileFilter: (
-            req,
-            file,
-            cb
-        ) => {
-
-            const mime =
-                String(
-                    file.mimetype || ""
-                ).toLowerCase();
-
-            const extensao =
-                path.extname(
-                    String(
-                        file.originalname || ""
-                    )
-                ).toLowerCase();
-
-            const mimePermitidos = [
-                "image/jpeg",
-                "image/jpg",
-                "image/png",
-                "image/webp",
-                "image/x-png",
-            ];
-
-            const extensoesPermitidas = [
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".webp",
-            ];
-
-            if (
-                mimePermitidos.includes(
-                    mime
-                ) ||
-                extensoesPermitidas.includes(
-                    extensao
-                )
-            ) {
-                return cb(
-                    null,
-                    true
-                );
-            }
-
-            return cb(
-                new Error(
-                    "Formato de capa não permitido. Use JPG, PNG ou WEBP."
-                )
-            );
-        },
-    });
+    return resultado.secure_url;
+}
 
 // ============================================================
-// MULTER - LOGO
+// OBTER PUBLIC ID CLOUDINARY
 // ============================================================
 
-const storageLogo =
-    multer.diskStorage({
+function obterPublicIdCloudinary(url) {
+    if (!url || typeof url !== "string") {
+        return null;
+    }
 
-        destination: (
-            req,
-            file,
-            cb
-        ) => {
+    if (
+        !url.includes("res.cloudinary.com") ||
+        !url.includes("/image/upload/")
+    ) {
+        return null;
+    }
 
-            criarPastas();
+    try {
+        const urlObj = new URL(url);
 
-            cb(
-                null,
-                pastaLogos
+        const caminho =
+            urlObj.pathname;
+
+        const marcador =
+            "/image/upload/";
+
+        const posicao =
+            caminho.indexOf(marcador);
+
+        if (posicao === -1) {
+            return null;
+        }
+
+        let publicId =
+            caminho.substring(
+                posicao + marcador.length
             );
-        },
 
-        filename: (
-            req,
-            file,
-            cb
-        ) => {
+        // Remove transformações Cloudinary
+        // caso existam antes do public_id.
+        const partes =
+            publicId.split("/");
 
-            let extensao =
-                path.extname(
-                    String(
-                        file.originalname || ""
-                    )
-                ).toLowerCase();
+        const primeiro =
+            partes[0] || "";
 
-            if (
-                extensao === ".jpeg"
-            ) {
-                extensao = ".jpg";
-            }
+        if (
+            primeiro.includes(",") ||
+            primeiro.includes("_") &&
+            (
+                primeiro.includes("w_") ||
+                primeiro.includes("h_") ||
+                primeiro.includes("c_") ||
+                primeiro.includes("q_") ||
+                primeiro.includes("f_")
+            )
+        ) {
+            partes.shift();
+            publicId =
+                partes.join("/");
+        }
 
-            if (
-                ![
-                    ".jpg",
-                    ".png",
-                    ".webp",
-                ].includes(extensao)
-            ) {
-                extensao = ".jpg";
-            }
-
-            const nome =
-                `logo_${limparId(req.params.id)}_${Date.now()}${extensao}`;
-
-            cb(
-                null,
-                nome
+        // Remove extensão
+        publicId =
+            publicId.replace(
+                /\.[^/.]+$/,
+                ""
             );
-        },
-    });
 
-const uploadLogoMulter =
-    multer({
-        storage: storageLogo,
+        return publicId || null;
 
-        limits: {
-            fileSize:
-                5 * 1024 * 1024,
-        },
+    } catch (error) {
+        console.log(
+            "⚠️ Não foi possível obter public_id:",
+            error.message
+        );
 
-        fileFilter: (
-            req,
-            file,
-            cb
-        ) => {
+        return null;
+    }
+}
 
-            const mime =
-                String(
-                    file.mimetype || ""
-                ).toLowerCase();
+// ============================================================
+// REMOVER IMAGEM DO CLOUDINARY
+// ============================================================
 
-            const extensao =
-                path.extname(
-                    String(
-                        file.originalname || ""
-                    )
-                ).toLowerCase();
+async function removerImagemCloudinary(url) {
+    if (!url) {
+        return;
+    }
 
-            const mimePermitidos = [
-                "image/jpeg",
-                "image/jpg",
-                "image/png",
-                "image/webp",
-                "image/x-png",
-            ];
+    const publicId =
+        obterPublicIdCloudinary(url);
 
-            const extensoesPermitidas = [
-                ".jpg",
-                ".jpeg",
-                ".png",
-                ".webp",
-            ];
+    if (!publicId) {
+        return;
+    }
 
-            if (
-                mimePermitidos.includes(
-                    mime
-                ) ||
-                extensoesPermitidas.includes(
-                    extensao
-                )
-            ) {
-                return cb(
-                    null,
-                    true
-                );
+    try {
+        validarCloudinary();
+
+        await cloudinary.uploader.destroy(
+            publicId,
+            {
+                resource_type: "image",
+                invalidate: true,
             }
+        );
 
-            return cb(
-                new Error(
-                    "Formato de logo não permitido. Use JPG, PNG ou WEBP."
-                )
-            );
-        },
-    });
+        console.log(
+            "🗑️ IMAGEM REMOVIDA DO CLOUDINARY:",
+            publicId
+        );
+
+    } catch (error) {
+        console.log(
+            "⚠️ Erro ao remover imagem do Cloudinary:",
+            error.message
+        );
+    }
+}
+
+// ============================================================
+// EMITIR EVENTOS
+// ============================================================
+
+function emitirAtualizacaoRestaurante(
+    req,
+    restaurante
+) {
+    try {
+        const io =
+            req.app.get("io");
+
+        if (!io || !restaurante) {
+            return;
+        }
+
+        const restauranteId =
+            String(restaurante.id);
+
+        io.to(
+            `restaurante_${restauranteId}`
+        ).emit(
+            "restaurante_atualizado",
+            restaurante
+        );
+
+        io.emit(
+            "restaurante_atualizado",
+            restaurante
+        );
+
+    } catch (error) {
+        console.log(
+            "⚠️ Erro ao emitir atualização:",
+            error.message
+        );
+    }
+}
 
 // ============================================================
 // CRIAR RESTAURANTE
 // ============================================================
 
-exports.create = async (
-    req,
-    res
-) => {
-
+exports.create = async (req, res) => {
     try {
+        const body =
+            req.body || {};
 
-        console.log(
-            "========================================"
-        );
+        const id =
+            body.id
+                ? String(body.id)
+                : `rest_${Date.now()}`;
 
-        console.log(
-            "🏪 CRIANDO RESTAURANTE"
-        );
-
-        console.log(
-            "========================================"
-        );
-
-        const restaurante = {
-            id:
-                req.body.id ||
-                `rest_${Date.now()}`,
-
-            nome:
-                req.body.nome ||
-                "",
-
-            categoria:
-                req.body.categoria ||
-                "",
-
-            descricao:
-                req.body.descricao ||
-                "",
-
-            telefone:
-                req.body.telefone ||
-                "",
-
-            endereco:
-                req.body.endereco ||
-                "",
-
-            numero:
-                req.body.numero ||
-                "",
-
-            bairro:
-                req.body.bairro ||
-                "",
-
-            cidade:
-                req.body.cidade ||
-                "",
-
-            estado:
-                req.body.estado ||
-                "",
-
-            cep:
-                req.body.cep ||
-                "",
-
-            logo:
-                null,
-
-            capa:
-                req.body.capa ||
-                null,
-
-            imagem:
-                null,
-
-            status:
-                req.body.status ||
-                "ABERTO",
-
-            online:
-                req.body.online !==
-                undefined
-                    ? req.body.online
-                    : true,
-
-            aberto:
-                req.body.aberto !==
-                undefined
-                    ? req.body.aberto
-                    : true,
-
-            ativo:
-                req.body.ativo !==
-                undefined
-                    ? req.body.ativo
-                    : true,
-        };
-
-        // ----------------------------------------------------
-        // LOGO BASE64
-        // ----------------------------------------------------
-
-        const imagemRecebida =
-            req.body.logo ||
-            req.body.imagem ||
-            req.body.foto ||
+        let imagem =
+            body.imagem ||
+            body.logo ||
+            body.foto ||
             null;
 
+        let capa =
+            body.capa ||
+            body.banner ||
+            null;
+
+        // ====================================================
+        // LOGO BASE64
+        // ====================================================
+
         if (
-            typeof imagemRecebida ===
-                "string" &&
-            imagemRecebida.startsWith(
-                "data:image/"
-            )
+            imagem &&
+            typeof imagem === "string" &&
+            imagem.startsWith("data:image/")
         ) {
-
-            restaurante.logo =
-                salvarLogoBase64(
-                    imagemRecebida,
-                    restaurante.id
+            imagem =
+                await enviarBase64Cloudinary(
+                    imagem,
+                    "foodjet/restaurantes/logos",
+                    `logo_${id}`
                 );
-
-            restaurante.imagem =
-                null;
         }
 
-        // ----------------------------------------------------
-        // SALVAR
-        // ----------------------------------------------------
+        // ====================================================
+        // CAPA BASE64
+        // ====================================================
 
-        const resultado =
-            await Restaurant.criar(
-                restaurante
-            );
+        if (
+            capa &&
+            typeof capa === "string" &&
+            capa.startsWith("data:image/")
+        ) {
+            capa =
+                await enviarBase64Cloudinary(
+                    capa,
+                    "foodjet/restaurantes/capas",
+                    `capa_${id}`
+                );
+        }
+
+        const restaurante =
+            await Restaurant.criar({
+                ...body,
+                id,
+                imagem,
+                capa,
+            });
 
         console.log(
-            "✅ RESTAURANTE CRIADO:",
+            "============================================"
+        );
+
+        console.log(
+            "🏪 RESTAURANTE CRIADO"
+        );
+
+        console.log(
+            "ID:",
             restaurante.id
         );
 
-        return res.status(201).json(
-            {
-                sucesso: true,
-                restaurante:
-                    resultado ||
-                    restaurante,
-            }
+        console.log(
+            "LOGO:",
+            restaurante.imagem
         );
 
-    } catch (erro) {
+        console.log(
+            "CAPA:",
+            restaurante.capa
+        );
 
+        console.log(
+            "============================================"
+        );
+
+        res.status(201).json({
+            sucesso: true,
+            restaurante,
+        });
+
+    } catch (error) {
         console.error(
             "❌ ERRO AO CRIAR RESTAURANTE:",
-            erro
+            error
         );
 
-        return res.status(500).json(
-            {
-                sucesso: false,
-                mensagem:
-                    erro.message ||
-                    "Erro ao criar restaurante.",
-            }
-        );
+        res.status(500).json({
+            sucesso: false,
+            mensagem:
+                "Erro ao criar restaurante.",
+            detalhes:
+                error.message,
+        });
     }
 };
 
@@ -666,236 +460,119 @@ exports.create = async (
 // LISTAR RESTAURANTES
 // ============================================================
 
-exports.list = async (
-    req,
-    res
-) => {
-
+exports.list = async (req, res) => {
     try {
-
         const restaurantes =
             await Restaurant.listar();
 
-        const lista =
-            Array.isArray(
-                restaurantes
-            )
-                ? restaurantes
-                : [];
-
         const resultado =
-            lista.map(
-                (restaurante) => {
+            restaurantes.map(
+                restaurante => ({
+                    ...restaurante,
 
-                    const item = {
-                        ...restaurante,
-                    };
+                    imagem:
+                        normalizarImagem(
+                            restaurante.imagem
+                        ),
 
-                    if (
-                        item.logo
-                    ) {
-                        item.logo =
-                            normalizarCaminhoImagem(
-                                item.logo
-                            );
-                    }
+                    logo:
+                        normalizarImagem(
+                            restaurante.imagem
+                        ),
 
-                    if (
-                        item.capa
-                    ) {
-                        item.capa =
-                            normalizarCaminhoImagem(
-                                item.capa
-                            );
-                    }
-
-                    // Nunca devolver Base64 gigante
-                    if (
-                        typeof item.imagem ===
-                            "string" &&
-                        item.imagem.startsWith(
-                            "data:image/"
-                        )
-                    ) {
-                        item.imagem =
-                            null;
-                    }
-
-                    return item;
-                }
+                    capa:
+                        normalizarImagem(
+                            restaurante.capa
+                        ),
+                })
             );
 
-        return res.json(
-            resultado
-        );
+        res.json({
+            sucesso: true,
+            restaurantes: resultado,
+        });
 
-    } catch (erro) {
-
+    } catch (error) {
         console.error(
             "❌ ERRO AO LISTAR RESTAURANTES:",
-            erro
+            error
         );
 
-        return res.status(500).json(
-            {
-                sucesso: false,
-                mensagem:
-                    erro.message ||
-                    "Erro ao listar restaurantes.",
-            }
-        );
+        res.status(500).json({
+            sucesso: false,
+            mensagem:
+                "Erro ao listar restaurantes.",
+            detalhes:
+                error.message,
+        });
     }
 };
 
 // ============================================================
-// BUSCAR POR ID
+// BUSCAR RESTAURANTE POR ID
 // ============================================================
 
-exports.getById = async (
-    req,
-    res
-) => {
-
+exports.getById = async (req, res) => {
     try {
-
         const id =
-            String(
-                req.params.id || ""
-            ).trim();
-
-        console.log(
-            "========================================"
-        );
-
-        console.log(
-            "🔎 BUSCANDO RESTAURANTE"
-        );
-
-        console.log(
-            "ID:",
-            id
-        );
-
-        console.log(
-            "========================================"
-        );
+            req.params.id;
 
         if (!id) {
-            return res.status(400).json(
-                {
-                    sucesso: false,
-                    mensagem:
-                        "ID do restaurante não informado.",
-                }
-            );
+            return res.status(400).json({
+                sucesso: false,
+                mensagem:
+                    "ID do restaurante é obrigatório.",
+            });
         }
 
         const restaurante =
-            await Restaurant.buscarPorId(
-                id
-            );
+            await Restaurant.buscarPorId(id);
 
         if (!restaurante) {
-
-            return res.status(404).json(
-                {
-                    sucesso: false,
-                    mensagem:
-                        "Restaurante não encontrado.",
-                }
-            );
+            return res.status(404).json({
+                sucesso: false,
+                mensagem:
+                    "Restaurante não encontrado.",
+            });
         }
 
         const resultado = {
             ...restaurante,
+
+            imagem:
+                normalizarImagem(
+                    restaurante.imagem
+                ),
+
+            logo:
+                normalizarImagem(
+                    restaurante.imagem
+                ),
+
+            capa:
+                normalizarImagem(
+                    restaurante.capa
+                ),
         };
 
-        // ----------------------------------------------------
-        // LOGO
-        // ----------------------------------------------------
+        res.json({
+            sucesso: true,
+            restaurante: resultado,
+        });
 
-        if (
-            resultado.logo
-        ) {
-
-            resultado.logo =
-                normalizarCaminhoImagem(
-                    resultado.logo
-                );
-        }
-
-        // ----------------------------------------------------
-        // CAPA
-        // ----------------------------------------------------
-
-        if (
-            resultado.capa
-        ) {
-
-            resultado.capa =
-                normalizarCaminhoImagem(
-                    resultado.capa
-                );
-        }
-
-        // ----------------------------------------------------
-        // NÃO ENVIAR BASE64 GIGANTE
-        // ----------------------------------------------------
-
-        if (
-            typeof resultado.imagem ===
-                "string" &&
-            resultado.imagem.startsWith(
-                "data:image/"
-            )
-        ) {
-
-            resultado.imagem =
-                null;
-        }
-
-        console.log(
-            "📦 RESTAURANTE DEVOLVIDO:"
-        );
-
-        console.log(
-            "ID:",
-            resultado.id
-        );
-
-        console.log(
-            "LOGO:",
-            resultado.logo
-        );
-
-        console.log(
-            "CAPA:",
-            resultado.capa
-        );
-
-        return res.json(
-            {
-                sucesso: true,
-                restaurante:
-                    resultado,
-            }
-        );
-
-    } catch (erro) {
-
+    } catch (error) {
         console.error(
             "❌ ERRO AO BUSCAR RESTAURANTE:",
-            erro
+            error
         );
 
-        return res.status(500).json(
-            {
-                sucesso: false,
-                mensagem:
-                    erro.message ||
-                    "Erro ao buscar restaurante.",
-            }
-        );
+        res.status(500).json({
+            sucesso: false,
+            mensagem:
+                "Erro ao buscar restaurante.",
+            detalhes:
+                error.message,
+        });
     }
 };
 
@@ -903,262 +580,484 @@ exports.getById = async (
 // ATUALIZAR RESTAURANTE
 // ============================================================
 
-exports.update = async (
-    req,
-    res
-) => {
-
+exports.update = async (req, res) => {
     try {
-
         const id =
-            String(
-                req.params.id || ""
-            ).trim();
-
-        console.log(
-            "========================================"
-        );
-
-        console.log(
-            "⚙️ ATUALIZANDO RESTAURANTE"
-        );
-
-        console.log(
-            "ID:",
-            id
-        );
-
-        console.log(
-            "========================================"
-        );
+            req.params.id;
 
         if (!id) {
-            return res.status(400).json(
-                {
-                    sucesso: false,
-                    mensagem:
-                        "ID do restaurante não informado.",
-                }
-            );
+            return res.status(400).json({
+                sucesso: false,
+                mensagem:
+                    "ID do restaurante é obrigatório.",
+            });
         }
 
         const restauranteAtual =
-            await Restaurant.buscarPorId(
-                id
-            );
+            await Restaurant.buscarPorId(id);
 
         if (!restauranteAtual) {
-
-            return res.status(404).json(
-                {
-                    sucesso: false,
-                    mensagem:
-                        "Restaurante não encontrado.",
-                }
-            );
+            return res.status(404).json({
+                sucesso: false,
+                mensagem:
+                    "Restaurante não encontrado.",
+            });
         }
 
         const dados =
-            {
-                ...req.body,
-            };
+            req.body || {};
 
-        // ----------------------------------------------------
+        const dadosAtualizados = {
+            ...dados,
+        };
+
+        // ====================================================
         // LOGO BASE64
-        // ----------------------------------------------------
+        // ====================================================
 
-        const imagemRecebida =
-            dados.logo ||
-            dados.imagem ||
-            dados.foto ||
+        let imagem =
+            dadosAtualizados.imagem ||
+            dadosAtualizados.logo ||
             null;
 
         if (
-            typeof imagemRecebida ===
-                "string" &&
-            imagemRecebida.startsWith(
-                "data:image/"
-            )
+            imagem &&
+            typeof imagem === "string" &&
+            imagem.startsWith("data:image/")
         ) {
-
-            console.log(
-                "🖼️ LOGO BASE64 RECEBIDO"
-            );
-
-            const logoAntigo =
-                restauranteAtual.logo ||
-                restauranteAtual.imagem ||
-                null;
-
-            const novoLogo =
-                salvarLogoBase64(
-                    imagemRecebida,
-                    id
+            const novaImagem =
+                await enviarBase64Cloudinary(
+                    imagem,
+                    "foodjet/restaurantes/logos",
+                    `logo_${id}`
                 );
 
-            dados.logo =
-                novoLogo;
+            dadosAtualizados.imagem =
+                novaImagem;
+        } else if (
+            dadosAtualizados.logo &&
+            !dadosAtualizados.imagem
+        ) {
+            dadosAtualizados.imagem =
+                dadosAtualizados.logo;
+        }
 
-            dados.imagem =
-                null;
+        // ====================================================
+        // CAPA BASE64
+        // ====================================================
 
-            delete dados.foto;
+        let capa =
+            dadosAtualizados.capa ||
+            dadosAtualizados.banner ||
+            null;
 
-            // ------------------------------------------------
-            // ATUALIZAR BANCO
-            // ------------------------------------------------
+        if (
+            capa &&
+            typeof capa === "string" &&
+            capa.startsWith("data:image/")
+        ) {
+            const novaCapa =
+                await enviarBase64Cloudinary(
+                    capa,
+                    "foodjet/restaurantes/capas",
+                    `capa_${id}`
+                );
+
+            dadosAtualizados.capa =
+                novaCapa;
+        } else if (
+            dadosAtualizados.banner &&
+            !dadosAtualizados.capa
+        ) {
+            dadosAtualizados.capa =
+                dadosAtualizados.banner;
+        }
+
+        const restaurante =
+            await Restaurant.atualizar(
+                id,
+                dadosAtualizados
+            );
+
+        if (!restaurante) {
+            return res.status(404).json({
+                sucesso: false,
+                mensagem:
+                    "Restaurante não encontrado.",
+            });
+        }
+
+        const resultado = {
+            ...restaurante,
+
+            imagem:
+                normalizarImagem(
+                    restaurante.imagem
+                ),
+
+            logo:
+                normalizarImagem(
+                    restaurante.imagem
+                ),
+
+            capa:
+                normalizarImagem(
+                    restaurante.capa
+                ),
+        };
+
+        emitirAtualizacaoRestaurante(
+            req,
+            resultado
+        );
+
+        res.json({
+            sucesso: true,
+            mensagem:
+                "Restaurante atualizado com sucesso.",
+            restaurante: resultado,
+        });
+
+    } catch (error) {
+        console.error(
+            "❌ ERRO AO ATUALIZAR RESTAURANTE:",
+            error
+        );
+
+        res.status(500).json({
+            sucesso: false,
+            mensagem:
+                "Erro ao atualizar restaurante.",
+            detalhes:
+                error.message,
+        });
+    }
+};
+
+// ============================================================
+// ATUALIZAR STATUS
+// ============================================================
+
+exports.updateStatus = async (req, res) => {
+    try {
+        const id =
+            req.params.id;
+
+        const status =
+            req.body?.status;
+
+        if (!id) {
+            return res.status(400).json({
+                sucesso: false,
+                mensagem:
+                    "ID do restaurante é obrigatório.",
+            });
+        }
+
+        if (!status) {
+            return res.status(400).json({
+                sucesso: false,
+                mensagem:
+                    "Status é obrigatório.",
+            });
+        }
+
+        const restaurante =
+            await Restaurant.atualizarStatus(
+                id,
+                status
+            );
+
+        if (!restaurante) {
+            return res.status(404).json({
+                sucesso: false,
+                mensagem:
+                    "Restaurante não encontrado.",
+            });
+        }
+
+        const resultado = {
+            ...restaurante,
+
+            imagem:
+                normalizarImagem(
+                    restaurante.imagem
+                ),
+
+            logo:
+                normalizarImagem(
+                    restaurante.imagem
+                ),
+
+            capa:
+                normalizarImagem(
+                    restaurante.capa
+                ),
+        };
+
+        emitirAtualizacaoRestaurante(
+            req,
+            resultado
+        );
+
+        res.json({
+            sucesso: true,
+            mensagem:
+                "Status atualizado com sucesso.",
+            restaurante: resultado,
+        });
+
+    } catch (error) {
+        console.error(
+            "❌ ERRO AO ATUALIZAR STATUS:",
+            error
+        );
+
+        res.status(500).json({
+            sucesso: false,
+            mensagem:
+                "Erro ao atualizar status.",
+            detalhes:
+                error.message,
+        });
+    }
+};
+
+// ============================================================
+// UPLOAD DA LOGO
+// ============================================================
+
+exports.uploadLogo = [
+    uploadLogo.single("logo"),
+
+    async (req, res) => {
+        try {
+            validarCloudinary();
+
+            const id =
+                req.params.id;
+
+            if (!id) {
+                return res.status(400).json({
+                    sucesso: false,
+                    mensagem:
+                        "ID do restaurante é obrigatório.",
+                });
+            }
+
+            if (!req.file) {
+                return res.status(400).json({
+                    sucesso: false,
+                    mensagem:
+                        "Nenhuma logo foi enviada.",
+                });
+            }
+
+            const restaurante =
+                await Restaurant.buscarPorId(id);
+
+            if (!restaurante) {
+                return res.status(404).json({
+                    sucesso: false,
+                    mensagem:
+                        "Restaurante não encontrado.",
+                });
+            }
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "☁️ FOODJET - ENVIANDO LOGO PARA CLOUDINARY"
+            );
+
+            console.log(
+                "🏪 Restaurante:",
+                id
+            );
+
+            console.log(
+                "📁 Arquivo:",
+                req.file.originalname
+            );
+
+            console.log(
+                "📦 Tamanho:",
+                req.file.size
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            const resultadoCloudinary =
+                await enviarBufferCloudinary(
+                    req.file.buffer,
+                    "foodjet/restaurantes/logos",
+                    `logo_${id}`
+                );
+
+            const logoUrl =
+                resultadoCloudinary.secure_url;
+
+            // =================================================
+            // SALVAR NO CAMPO IMAGEM
+            // =================================================
 
             const atualizado =
                 await Restaurant.atualizar(
                     id,
-                    dados
+                    {
+                        imagem: logoUrl,
+                    }
                 );
 
             if (!atualizado) {
-
-                removerArquivoLogo(
-                    novoLogo
-                );
-
-                return res.status(500).json(
-                    {
-                        sucesso: false,
-                        mensagem:
-                            "Não foi possível atualizar o restaurante.",
-                    }
-                );
+                return res.status(404).json({
+                    sucesso: false,
+                    mensagem:
+                        "Restaurante não encontrado.",
+                });
             }
 
-            // ------------------------------------------------
-            // REMOVER LOGO ANTIGO
-            // ------------------------------------------------
+            const resposta = {
+                ...atualizado,
 
-            if (
-                logoAntigo &&
-                logoAntigo !== novoLogo
-            ) {
+                imagem: logoUrl,
 
-                removerArquivoLogo(
-                    logoAntigo
-                );
-            }
+                logo: logoUrl,
+
+                capa:
+                    normalizarImagem(
+                        atualizado.capa
+                    ),
+            };
+
+            emitirAtualizacaoRestaurante(
+                req,
+                resposta
+            );
 
             console.log(
-                "✅ NOVO LOGO:",
-                novoLogo
+                "✅ LOGO SALVA NO CLOUDINARY:"
             );
 
-            if (
-                global.io
-            ) {
-
-                global.io.emit(
-                    "restaurante_atualizado",
-                    atualizado
-                );
-            }
-
-            return res.json(
-                {
-                    sucesso: true,
-                    mensagem:
-                        "Restaurante atualizado com sucesso.",
-                    restaurante:
-                        atualizado,
-                    logo:
-                        novoLogo,
-                }
+            console.log(
+                logoUrl
             );
+
+            res.json({
+                sucesso: true,
+
+                mensagem:
+                    "Logo atualizada com sucesso.",
+
+                logo: logoUrl,
+
+                imagem: logoUrl,
+
+                restaurante:
+                    resposta,
+            });
+
+        } catch (error) {
+            console.error(
+                "❌ ERRO AO ENVIAR LOGO:",
+                error
+            );
+
+            res.status(500).json({
+                sucesso: false,
+                mensagem:
+                    "Erro ao enviar logo.",
+                detalhes:
+                    error.message,
+            });
+        }
+    },
+];
+
+// ============================================================
+// REMOVER LOGO
+// ============================================================
+
+exports.deleteLogo = async (req, res) => {
+    try {
+        validarCloudinary();
+
+        const id =
+            req.params.id;
+
+        const restaurante =
+            await Restaurant.buscarPorId(id);
+
+        if (!restaurante) {
+            return res.status(404).json({
+                sucesso: false,
+                mensagem:
+                    "Restaurante não encontrado.",
+            });
         }
 
-        // ----------------------------------------------------
-        // LOGO NORMAL
-        // ----------------------------------------------------
-
-        if (
-            dados.logo
-        ) {
-
-            dados.logo =
-                normalizarCaminhoImagem(
-                    dados.logo
-                );
-        }
-
-        // ----------------------------------------------------
-        // CAPA
-        // ----------------------------------------------------
-
-        if (
-            dados.capa
-        ) {
-
-            dados.capa =
-                normalizarCaminhoImagem(
-                    dados.capa
-                );
-        }
-
-        // ----------------------------------------------------
-        // ATUALIZAR NORMAL
-        // ----------------------------------------------------
+        const imagemAntiga =
+            restaurante.imagem ||
+            restaurante.logo ||
+            null;
 
         const atualizado =
             await Restaurant.atualizar(
                 id,
-                dados
-            );
-
-        if (!atualizado) {
-
-            return res.status(500).json(
                 {
-                    sucesso: false,
-                    mensagem:
-                        "Não foi possível atualizar o restaurante.",
+                    imagem: null,
                 }
             );
-        }
 
-        console.log(
-            "✅ RESTAURANTE ATUALIZADO"
-        );
-
-        if (
-            global.io
-        ) {
-
-            global.io.emit(
-                "restaurante_atualizado",
-                atualizado
+        if (imagemAntiga) {
+            await removerImagemCloudinary(
+                imagemAntiga
             );
         }
 
-        return res.json(
-            {
-                sucesso: true,
-                mensagem:
-                    "Restaurante atualizado com sucesso.",
-                restaurante:
-                    atualizado,
-            }
+        const resposta = {
+            ...atualizado,
+
+            imagem: null,
+
+            logo: null,
+
+            capa:
+                normalizarImagem(
+                    atualizado.capa
+                ),
+        };
+
+        emitirAtualizacaoRestaurante(
+            req,
+            resposta
         );
 
-    } catch (erro) {
+        res.json({
+            sucesso: true,
+            mensagem:
+                "Logo removida com sucesso.",
+            restaurante:
+                resposta,
+        });
 
+    } catch (error) {
         console.error(
-            "❌ ERRO AO ATUALIZAR RESTAURANTE:",
-            erro
+            "❌ ERRO AO REMOVER LOGO:",
+            error
         );
 
-        return res.status(500).json(
-            {
-                sucesso: false,
-                mensagem:
-                    erro.message ||
-                    "Erro ao atualizar restaurante.",
-            }
-        );
+        res.status(500).json({
+            sucesso: false,
+            mensagem:
+                "Erro ao remover logo.",
+            detalhes:
+                error.message,
+        });
     }
 };
 
@@ -1166,1101 +1065,329 @@ exports.update = async (
 // UPLOAD DA CAPA
 // ============================================================
 
-exports.uploadCapa = (
-    req,
-    res
-) => {
+exports.uploadCapa = [
+    uploadCapa.single("capa"),
 
-    uploadCapaMulter.single(
-        "capa"
-    )(
-        req,
-        res,
-        async (
-            erro
-        ) => {
+    async (req, res) => {
+        try {
+            validarCloudinary();
 
-            try {
+            const id =
+                req.params.id;
 
-                if (erro) {
-
-                    console.error(
-                        "❌ ERRO MULTER CAPA:",
-                        erro
-                    );
-
-                    if (
-                        erro.code ===
-                        "LIMIT_FILE_SIZE"
-                    ) {
-
-                        return res.status(
-                            400
-                        ).json(
-                            {
-                                sucesso:
-                                    false,
-                                mensagem:
-                                    "A capa deve ter no máximo 10 MB.",
-                            }
-                        );
-                    }
-
-                    return res.status(
-                        400
-                    ).json(
-                        {
-                            sucesso:
-                                false,
-                            mensagem:
-                                erro.message ||
-                                "Erro ao enviar capa.",
-                        }
-                    );
-                }
-
-                const id =
-                    String(
-                        req.params.id ||
-                            ""
-                    ).trim();
-
-                if (!req.file) {
-
-                    return res.status(
-                        400
-                    ).json(
-                        {
-                            sucesso:
-                                false,
-                            mensagem:
-                                "Nenhuma capa foi enviada.",
-                        }
-                    );
-                }
-
-                console.log(
-                    "========================================"
-                );
-
-                console.log(
-                    "📤 UPLOAD DE CAPA"
-                );
-
-                console.log(
-                    "ID:",
-                    id
-                );
-
-                console.log(
-                    "ARQUIVO:",
-                    req.file.filename
-                );
-
-                console.log(
-                    "CAMINHO:",
-                    req.file.path
-                );
-
-                console.log(
-                    "========================================"
-                );
-
-                const restaurante =
-                    await Restaurant.buscarPorId(
-                        id
-                    );
-
-                if (!restaurante) {
-
-                    try {
-                        fs.unlinkSync(
-                            req.file.path
-                        );
-                    } catch (_) {}
-
-                    return res.status(
-                        404
-                    ).json(
-                        {
-                            sucesso:
-                                false,
-                            mensagem:
-                                "Restaurante não encontrado.",
-                        }
-                    );
-                }
-
-                const capaAntiga =
-                    restaurante.capa ||
-                    restaurante.capaUrl ||
-                    null;
-
-                const capaUrl =
-                    `/uploads/capas/${req.file.filename}`;
-
-                const atualizado =
-                    await Restaurant.atualizar(
-                        id,
-                        {
-                            capa:
-                                capaUrl,
-                        }
-                    );
-
-                if (!atualizado) {
-
-                    removerArquivoCapa(
-                        capaUrl
-                    );
-
-                    return res.status(
-                        500
-                    ).json(
-                        {
-                            sucesso:
-                                false,
-                            mensagem:
-                                "Não foi possível salvar a capa.",
-                        }
-                    );
-                }
-
-                if (
-                    capaAntiga &&
-                    capaAntiga !== capaUrl
-                ) {
-
-                    removerArquivoCapa(
-                        capaAntiga
-                    );
-                }
-
-                console.log(
-                    "✅ CAPA SALVA:",
-                    capaUrl
-                );
-
-                if (
-                    global.io
-                ) {
-
-                    global.io.emit(
-                        "restaurante_atualizado",
-                        atualizado
-                    );
-                }
-
-                return res.json(
-                    {
-                        sucesso:
-                            true,
-
-                        mensagem:
-                            "Capa enviada com sucesso.",
-
-                        capa:
-                            capaUrl,
-
-                        restaurante:
-                            atualizado,
-                    }
-                );
-
-            } catch (erroInterno) {
-
-                console.error(
-                    "❌ ERRO NO UPLOAD DA CAPA:",
-                    erroInterno
-                );
-
-                if (
-                    req.file &&
-                    req.file.path
-                ) {
-
-                    try {
-                        fs.unlinkSync(
-                            req.file.path
-                        );
-                    } catch (_) {}
-                }
-
-                return res.status(
-                    500
-                ).json(
-                    {
-                        sucesso:
-                            false,
-                        mensagem:
-                            erroInterno.message ||
-                            "Erro ao enviar capa.",
-                    }
-                );
+            if (!id) {
+                return res.status(400).json({
+                    sucesso: false,
+                    mensagem:
+                        "ID do restaurante é obrigatório.",
+                });
             }
+
+            if (!req.file) {
+                return res.status(400).json({
+                    sucesso: false,
+                    mensagem:
+                        "Nenhuma capa foi enviada.",
+                });
+            }
+
+            const restaurante =
+                await Restaurant.buscarPorId(id);
+
+            if (!restaurante) {
+                return res.status(404).json({
+                    sucesso: false,
+                    mensagem:
+                        "Restaurante não encontrado.",
+                });
+            }
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "☁️ FOODJET - ENVIANDO CAPA PARA CLOUDINARY"
+            );
+
+            console.log(
+                "🏪 Restaurante:",
+                id
+            );
+
+            console.log(
+                "📁 Arquivo:",
+                req.file.originalname
+            );
+
+            console.log(
+                "📦 Tamanho:",
+                req.file.size
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            const resultadoCloudinary =
+                await enviarBufferCloudinary(
+                    req.file.buffer,
+                    "foodjet/restaurantes/capas",
+                    `capa_${id}`
+                );
+
+            const capaUrl =
+                resultadoCloudinary.secure_url;
+
+            // =================================================
+            // SALVAR NO CAMPO CAPA
+            // =================================================
+
+            const atualizado =
+                await Restaurant.atualizar(
+                    id,
+                    {
+                        capa: capaUrl,
+                    }
+                );
+
+            if (!atualizado) {
+                return res.status(404).json({
+                    sucesso: false,
+                    mensagem:
+                        "Restaurante não encontrado.",
+                });
+            }
+
+            const resposta = {
+                ...atualizado,
+
+                imagem:
+                    normalizarImagem(
+                        atualizado.imagem
+                    ),
+
+                logo:
+                    normalizarImagem(
+                        atualizado.imagem
+                    ),
+
+                capa: capaUrl,
+            };
+
+            emitirAtualizacaoRestaurante(
+                req,
+                resposta
+            );
+
+            console.log(
+                "✅ CAPA SALVA NO CLOUDINARY:"
+            );
+
+            console.log(
+                capaUrl
+            );
+
+            res.json({
+                sucesso: true,
+
+                mensagem:
+                    "Capa atualizada com sucesso.",
+
+                capa: capaUrl,
+
+                restaurante:
+                    resposta,
+            });
+
+        } catch (error) {
+            console.error(
+                "❌ ERRO AO ENVIAR CAPA:",
+                error
+            );
+
+            res.status(500).json({
+                sucesso: false,
+                mensagem:
+                    "Erro ao enviar capa.",
+                detalhes:
+                    error.message,
+            });
         }
-    );
-};
+    },
+];
 
 // ============================================================
 // REMOVER CAPA
 // ============================================================
 
-exports.deleteCapa =
-    async (
-        req,
-        res
-    ) => {
+exports.deleteCapa = async (req, res) => {
+    try {
+        validarCloudinary();
 
-        try {
+        const id =
+            req.params.id;
 
-            const id =
-                String(
-                    req.params.id ||
-                        ""
-                ).trim();
+        const restaurante =
+            await Restaurant.buscarPorId(id);
 
-            const restaurante =
-                await Restaurant.buscarPorId(
-                    id
-                );
+        if (!restaurante) {
+            return res.status(404).json({
+                sucesso: false,
+                mensagem:
+                    "Restaurante não encontrado.",
+            });
+        }
 
-            if (!restaurante) {
+        const capaAntiga =
+            restaurante.capa ||
+            null;
 
-                return res.status(
-                    404
-                ).json(
-                    {
-                        sucesso:
-                            false,
-                        mensagem:
-                            "Restaurante não encontrado.",
-                    }
-                );
-            }
+        const atualizado =
+            await Restaurant.atualizar(
+                id,
+                {
+                    capa: null,
+                }
+            );
 
-            const capaAntiga =
-                restaurante.capa ||
-                null;
-
-            const atualizado =
-                await Restaurant.atualizar(
-                    id,
-                    {
-                        capa:
-                            null,
-                    }
-                );
-
-            if (!atualizado) {
-
-                return res.status(
-                    500
-                ).json(
-                    {
-                        sucesso:
-                            false,
-                        mensagem:
-                            "Não foi possível remover a capa.",
-                    }
-                );
-            }
-
-            if (
+        if (capaAntiga) {
+            await removerImagemCloudinary(
                 capaAntiga
-            ) {
-
-                removerArquivoCapa(
-                    capaAntiga
-                );
-            }
-
-            if (
-                global.io
-            ) {
-
-                global.io.emit(
-                    "restaurante_atualizado",
-                    atualizado
-                );
-            }
-
-            return res.json(
-                {
-                    sucesso:
-                        true,
-                    mensagem:
-                        "Capa removida com sucesso.",
-                    restaurante:
-                        atualizado,
-                }
-            );
-
-        } catch (erro) {
-
-            console.error(
-                "❌ ERRO AO REMOVER CAPA:",
-                erro
-            );
-
-            return res.status(
-                500
-            ).json(
-                {
-                    sucesso:
-                        false,
-                    mensagem:
-                        erro.message ||
-                        "Erro ao remover capa.",
-                }
             );
         }
-    };
 
-// ============================================================
-// UPLOAD DO LOGO
-// ============================================================
+        const resposta = {
+            ...atualizado,
 
-exports.uploadLogo = (
-    req,
-    res
-) => {
+            imagem:
+                normalizarImagem(
+                    atualizado.imagem
+                ),
 
-    uploadLogoMulter.single(
-        "logo"
-    )(
-        req,
-        res,
-        async (
-            erro
-        ) => {
+            logo:
+                normalizarImagem(
+                    atualizado.imagem
+                ),
 
-            try {
+            capa: null,
+        };
 
-                if (erro) {
+        emitirAtualizacaoRestaurante(
+            req,
+            resposta
+        );
 
-                    console.error(
-                        "❌ ERRO MULTER LOGO:",
-                        erro
-                    );
+        res.json({
+            sucesso: true,
+            mensagem:
+                "Capa removida com sucesso.",
+            restaurante:
+                resposta,
+        });
 
-                    if (
-                        erro.code ===
-                        "LIMIT_FILE_SIZE"
-                    ) {
+    } catch (error) {
+        console.error(
+            "❌ ERRO AO REMOVER CAPA:",
+            error
+        );
 
-                        return res.status(
-                            400
-                        ).json(
-                            {
-                                sucesso:
-                                    false,
-                                mensagem:
-                                    "O logo deve ter no máximo 5 MB.",
-                            }
-                        );
-                    }
-
-                    return res.status(
-                        400
-                    ).json(
-                        {
-                            sucesso:
-                                false,
-                            mensagem:
-                                erro.message ||
-                                "Erro ao enviar logo.",
-                        }
-                    );
-                }
-
-                const id =
-                    String(
-                        req.params.id ||
-                            ""
-                    ).trim();
-
-                if (!req.file) {
-
-                    return res.status(
-                        400
-                    ).json(
-                        {
-                            sucesso:
-                                false,
-                            mensagem:
-                                "Nenhum logo foi enviado.",
-                        }
-                    );
-                }
-
-                console.log(
-                    "========================================"
-                );
-
-                console.log(
-                    "📤 FOODJET - UPLOAD LOGO"
-                );
-
-                console.log(
-                    "🏪 Restaurante:",
-                    id
-                );
-
-                console.log(
-                    "📁 Arquivo:",
-                    req.file.filename
-                );
-
-                console.log(
-                    "📁 Caminho:",
-                    req.file.path
-                );
-
-                console.log(
-                    "📦 Tamanho:",
-                    req.file.size
-                );
-
-                console.log(
-                    "========================================"
-                );
-
-                // --------------------------------------------
-                // VERIFICAR RESTAURANTE
-                // --------------------------------------------
-
-                const restaurante =
-                    await Restaurant.buscarPorId(
-                        id
-                    );
-
-                if (!restaurante) {
-
-                    try {
-                        fs.unlinkSync(
-                            req.file.path
-                        );
-                    } catch (_) {}
-
-                    return res.status(
-                        404
-                    ).json(
-                        {
-                            sucesso:
-                                false,
-                            mensagem:
-                                "Restaurante não encontrado.",
-                        }
-                    );
-                }
-
-                // --------------------------------------------
-                // LOGO ANTIGO
-                // --------------------------------------------
-
-                const logoAntigo =
-                    restaurante.logo ||
-                    restaurante.logoUrl ||
-                    restaurante.imagem ||
-                    restaurante.foto ||
-                    null;
-
-                // --------------------------------------------
-                // NOVO CAMINHO
-                // --------------------------------------------
-
-                const logoUrl =
-                    `/uploads/logos/${req.file.filename}`;
-
-                console.log(
-                    "💾 SALVANDO NO BANCO:",
-                    logoUrl
-                );
-
-                // --------------------------------------------
-                // ATUALIZAR POSTGRESQL
-                // --------------------------------------------
-
-                const atualizado =
-                    await Restaurant.atualizar(
-                        id,
-                        {
-                            logo:
-                                logoUrl,
-
-                            imagem:
-                                null,
-                        }
-                    );
-
-                if (!atualizado) {
-
-                    console.error(
-                        "❌ BANCO NÃO FOI ATUALIZADO"
-                    );
-
-                    removerArquivoLogo(
-                        logoUrl
-                    );
-
-                    return res.status(
-                        500
-                    ).json(
-                        {
-                            sucesso:
-                                false,
-                            mensagem:
-                                "Não foi possível salvar o logo no banco.",
-                        }
-                    );
-                }
-
-                // --------------------------------------------
-                // REMOVER LOGO ANTIGO
-                // --------------------------------------------
-
-                if (
-                    logoAntigo &&
-                    logoAntigo !== logoUrl
-                ) {
-
-                    removerArquivoLogo(
-                        logoAntigo
-                    );
-                }
-
-                console.log(
-                    "========================================"
-                );
-
-                console.log(
-                    "✅ LOGO SALVO COM SUCESSO"
-                );
-
-                console.log(
-                    "URL:",
-                    logoUrl
-                );
-
-                console.log(
-                    "ARQUIVO FÍSICO:",
-                    req.file.path
-                );
-
-                console.log(
-                    "========================================"
-                );
-
-                // --------------------------------------------
-                // SOCKET.IO
-                // --------------------------------------------
-
-                if (
-                    global.io
-                ) {
-
-                    global.io.emit(
-                        "restaurante_atualizado",
-                        atualizado
-                    );
-
-                    console.log(
-                        "📡 RESTAURANTE ATUALIZADO ENVIADO AOS CLIENTES"
-                    );
-                }
-
-                return res.json(
-                    {
-                        sucesso:
-                            true,
-
-                        mensagem:
-                            "Logo enviado com sucesso.",
-
-                        logo:
-                            logoUrl,
-
-                        restaurante:
-                            atualizado,
-                    }
-                );
-
-            } catch (erroInterno) {
-
-                console.error(
-                    "❌ ERRO NO UPLOAD DO LOGO:",
-                    erroInterno
-                );
-
-                if (
-                    req.file &&
-                    req.file.path
-                ) {
-
-                    try {
-                        fs.unlinkSync(
-                            req.file.path
-                        );
-                    } catch (_) {}
-                }
-
-                return res.status(
-                    500
-                ).json(
-                    {
-                        sucesso:
-                            false,
-                        mensagem:
-                            erroInterno.message ||
-                            "Erro ao enviar logo.",
-                    }
-                );
-            }
-        }
-    );
+        res.status(500).json({
+            sucesso: false,
+            mensagem:
+                "Erro ao remover capa.",
+            detalhes:
+                error.message,
+        });
+    }
 };
-
-// ============================================================
-// REMOVER LOGO
-// ============================================================
-
-exports.deleteLogo =
-    async (
-        req,
-        res
-    ) => {
-
-        try {
-
-            const id =
-                String(
-                    req.params.id ||
-                        ""
-                ).trim();
-
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "🗑️ REMOVENDO LOGO"
-            );
-
-            console.log(
-                "ID:",
-                id
-            );
-
-            console.log(
-                "========================================"
-            );
-
-            const restaurante =
-                await Restaurant.buscarPorId(
-                    id
-                );
-
-            if (!restaurante) {
-
-                return res.status(
-                    404
-                ).json(
-                    {
-                        sucesso:
-                            false,
-                        mensagem:
-                            "Restaurante não encontrado.",
-                    }
-                );
-            }
-
-            const logoAntigo =
-                restaurante.logo ||
-                restaurante.logoUrl ||
-                restaurante.imagem ||
-                restaurante.foto ||
-                null;
-
-            const atualizado =
-                await Restaurant.atualizar(
-                    id,
-                    {
-                        logo:
-                            null,
-
-                        imagem:
-                            null,
-                    }
-                );
-
-            if (!atualizado) {
-
-                return res.status(
-                    500
-                ).json(
-                    {
-                        sucesso:
-                            false,
-                        mensagem:
-                            "Não foi possível remover o logo.",
-                    }
-                );
-            }
-
-            if (
-                logoAntigo
-            ) {
-
-                removerArquivoLogo(
-                    logoAntigo
-                );
-            }
-
-            if (
-                global.io
-            ) {
-
-                global.io.emit(
-                    "restaurante_atualizado",
-                    atualizado
-                );
-            }
-
-            console.log(
-                "✅ LOGO REMOVIDO"
-            );
-
-            return res.json(
-                {
-                    sucesso:
-                        true,
-
-                    mensagem:
-                        "Logo removido com sucesso.",
-
-                    restaurante:
-                        atualizado,
-                }
-            );
-
-        } catch (erro) {
-
-            console.error(
-                "❌ ERRO AO REMOVER LOGO:",
-                erro
-            );
-
-            return res.status(
-                500
-            ).json(
-                {
-                    sucesso:
-                        false,
-                    mensagem:
-                        erro.message ||
-                        "Erro ao remover logo.",
-                }
-            );
-        }
-    };
 
 // ============================================================
 // EXCLUIR RESTAURANTE
 // ============================================================
 
-exports.delete =
-    async (
-        req,
-        res
-    ) => {
+exports.delete = async (req, res) => {
+    try {
+        const id =
+            req.params.id;
 
-        try {
+        if (!id) {
+            return res.status(400).json({
+                sucesso: false,
+                mensagem:
+                    "ID do restaurante é obrigatório.",
+            });
+        }
 
-            const id =
-                String(
-                    req.params.id ||
-                        ""
-                ).trim();
+        const restaurante =
+            await Restaurant.buscarPorId(id);
 
-            console.log(
-                "========================================"
+        if (!restaurante) {
+            return res.status(404).json({
+                sucesso: false,
+                mensagem:
+                    "Restaurante não encontrado.",
+            });
+        }
+
+        const imagem =
+            restaurante.imagem ||
+            null;
+
+        const capa =
+            restaurante.capa ||
+            null;
+
+        const resultado =
+            await Restaurant.excluir(id);
+
+        // ====================================================
+        // REMOVER IMAGENS DO CLOUDINARY
+        // ====================================================
+
+        if (imagem) {
+            await removerImagemCloudinary(
+                imagem
             );
+        }
 
-            console.log(
-                "🗑️ EXCLUINDO RESTAURANTE"
-            );
-
-            console.log(
-                "ID:",
-                id
-            );
-
-            console.log(
-                "========================================"
-            );
-
-            const restaurante =
-                await Restaurant.buscarPorId(
-                    id
-                );
-
-            if (!restaurante) {
-
-                return res.status(
-                    404
-                ).json(
-                    {
-                        sucesso:
-                            false,
-                        mensagem:
-                            "Restaurante não encontrado.",
-                    }
-                );
-            }
-
-            const logo =
-                restaurante.logo ||
-                restaurante.imagem ||
-                null;
-
-            const capa =
-                restaurante.capa ||
-                null;
-
-            let resultado;
-
-            if (
-                typeof Restaurant.excluir ===
-                "function"
-            ) {
-
-                resultado =
-                    await Restaurant.excluir(
-                        id
-                    );
-
-            } else if (
-                typeof Restaurant.delete ===
-                "function"
-            ) {
-
-                resultado =
-                    await Restaurant.delete(
-                        id
-                    );
-
-            } else if (
-                typeof Restaurant.remover ===
-                "function"
-            ) {
-
-                resultado =
-                    await Restaurant.remover(
-                        id
-                    );
-
-            } else {
-
-                return res.status(
-                    500
-                ).json(
-                    {
-                        sucesso:
-                            false,
-                        mensagem:
-                            "O model Restaurant não possui método para excluir restaurante.",
-                    }
-                );
-            }
-
-            if (
-                logo
-            ) {
-
-                removerArquivoLogo(
-                    logo
-                );
-            }
-
-            if (
+        if (capa) {
+            await removerImagemCloudinary(
                 capa
-            ) {
-
-                removerArquivoCapa(
-                    capa
-                );
-            }
-
-            if (
-                global.io
-            ) {
-
-                global.io.emit(
-                    "restaurante_excluido",
-                    {
-                        id,
-                    }
-                );
-            }
-
-            return res.json(
-                {
-                    sucesso:
-                        true,
-                    mensagem:
-                        "Restaurante excluído com sucesso.",
-                    resultado,
-                }
-            );
-
-        } catch (erro) {
-
-            console.error(
-                "❌ ERRO AO EXCLUIR RESTAURANTE:",
-                erro
-            );
-
-            return res.status(
-                500
-            ).json(
-                {
-                    sucesso:
-                        false,
-                    mensagem:
-                        erro.message ||
-                        "Erro ao excluir restaurante.",
-                }
             );
         }
-    };
+
+        res.json({
+            sucesso: true,
+
+            mensagem:
+                "Restaurante excluído com sucesso.",
+
+            ...resultado,
+        });
+
+    } catch (error) {
+        console.error(
+            "❌ ERRO AO EXCLUIR RESTAURANTE:",
+            error
+        );
+
+        res.status(500).json({
+            sucesso: false,
+            mensagem:
+                "Erro ao excluir restaurante.",
+            detalhes:
+                error.message,
+        });
+    }
+};
 
 // ============================================================
-// STATUS ONLINE / OFFLINE
+// EXPORTAR MIDDLEWARES CASO AS ROTAS UTILIZEM
 // ============================================================
 
-exports.updateStatus =
-    async (
-        req,
-        res
-    ) => {
+exports.uploadLogoMiddleware =
+    uploadLogo;
 
-        try {
-
-            const id =
-                String(
-                    req.params.id ||
-                        ""
-                ).trim();
-
-            const dados = {
-                ...req.body,
-            };
-
-            if (
-                dados.online !==
-                undefined
-            ) {
-
-                dados.online =
-                    dados.online ===
-                        true ||
-                    dados.online ===
-                        "true" ||
-                    dados.online ===
-                        1 ||
-                    dados.online ===
-                        "1";
-            }
-
-            if (
-                dados.aberto !==
-                undefined
-            ) {
-
-                dados.aberto =
-                    dados.aberto ===
-                        true ||
-                    dados.aberto ===
-                        "true" ||
-                    dados.aberto ===
-                        1 ||
-                    dados.aberto ===
-                        "1";
-            }
-
-            if (
-                dados.ativo !==
-                undefined
-            ) {
-
-                dados.ativo =
-                    dados.ativo ===
-                        true ||
-                    dados.ativo ===
-                        "true" ||
-                    dados.ativo ===
-                        1 ||
-                    dados.ativo ===
-                        "1";
-            }
-
-            const atualizado =
-                await Restaurant.atualizar(
-                    id,
-                    dados
-                );
-
-            if (!atualizado) {
-
-                return res.status(
-                    404
-                ).json(
-                    {
-                        sucesso:
-                            false,
-                        mensagem:
-                            "Restaurante não encontrado.",
-                    }
-                );
-            }
-
-            if (
-                global.io
-            ) {
-
-                global.io.emit(
-                    "restaurante_atualizado",
-                    atualizado
-                );
-            }
-
-            return res.json(
-                {
-                    sucesso:
-                        true,
-                    restaurante:
-                        atualizado,
-                }
-            );
-
-        } catch (erro) {
-
-            console.error(
-                "❌ ERRO AO ATUALIZAR STATUS:",
-                erro
-            );
-
-            return res.status(
-                500
-            ).json(
-                {
-                    sucesso:
-                        false,
-                    mensagem:
-                        erro.message ||
-                        "Erro ao atualizar status.",
-                }
-            );
-        }
-    };
+exports.uploadCapaMiddleware =
+    uploadCapa;
