@@ -1,505 +1,171 @@
-const { pool } = require("../config/database");
+const pool = require("../config/database");
 
-// ============================================================
-// NORMALIZAR ID
-// ============================================================
+// ======================================================
+// LISTAR FAVORITOS DO USUÁRIO
+// ======================================================
+exports.listar = async (req, res) => {
+  try {
+    const usuarioId = req.usuario?.id || req.params.usuarioId;
 
-function normalizarId(valor) {
-    if (valor === null || valor === undefined) {
-        return "";
-    }
+    const resultado = await pool.query(
+      `
+      SELECT *
+      FROM favoritos
+      WHERE usuario_id = $1
+      ORDER BY nome ASC
+      `,
+      [usuarioId]
+    );
 
-    return valor.toString().trim();
-}
+    const favoritos = resultado.rows.map((item) => ({
+      ...(item.dados || {}),
+      id: item.id,
+      usuarioId: item.usuario_id,
+      restauranteId: item.restaurante_id,
+      nome: item.nome,
+      descricao: item.descricao,
+      avaliacao: item.avaliacao,
+      logo: item.logo,
+      imagem: item.logo,
+    }));
 
-// ============================================================
-// MONTAR FAVORITO
-// ============================================================
+    return res.json(favoritos);
+  } catch (error) {
+    console.error("❌ Erro ao listar favoritos:", error);
+    return res.status(500).json({
+      erro: "Erro ao listar favoritos.",
+    });
+  }
+};
 
-function montarFavorito(row) {
-    if (!row) {
-        return null;
-    }
-
-    const dados =
-        row.dados &&
-        typeof row.dados === "object"
-            ? row.dados
-            : {};
-
-    return {
-        ...dados,
-
-        id: row.id,
-
-        usuarioId:
-            row.usuario_id,
-
-        restauranteId:
-            row.restaurante_id,
-
-        criadoEm:
-            row.criado_em
-                ? new Date(row.criado_em).toISOString()
-                : dados.criadoEm
-    };
-}
-
-// ============================================================
-// LISTAR FAVORITOS
-// ============================================================
-
-async function listar(req, res) {
-
-    try {
-
-        const usuarioId =
-            normalizarId(
-                req.usuario?.id ??
-                req.usuario?._id ??
-                req.usuario?.usuarioId
-            );
-
-        console.log(
-            "========================================"
-        );
-
-        console.log(
-            "❤️ FOODJET - LISTAR FAVORITOS"
-        );
-
-        console.log(
-            "USUÁRIO:",
-            usuarioId
-        );
-
-        console.log(
-            "========================================"
-        );
-
-        if (!usuarioId) {
-
-            return res.status(401).json({
-                erro:
-                    "Usuário não identificado."
-            });
-        }
-
-        const resultado =
-            await pool.query(
-                `
-                SELECT
-                    id,
-                    usuario_id,
-                    restaurante_id,
-                    criado_em,
-                    dados
-                FROM favoritos
-                WHERE usuario_id = $1
-                ORDER BY criado_em DESC
-                `,
-                [usuarioId]
-            );
-
-        const favoritos =
-            resultado.rows.map(
-                montarFavorito
-            );
-
-        console.log(
-            "TOTAL FAVORITOS:",
-            favoritos.length
-        );
-
-        return res.status(200).json(
-            favoritos
-        );
-
-    } catch (error) {
-
-        console.error(
-            "❌ ERRO AO LISTAR FAVORITOS:",
-            error
-        );
-
-        return res.status(500).json({
-            erro:
-                "Erro ao listar favoritos.",
-            detalhes:
-                error.message
-        });
-    }
-}
-
-// ============================================================
+// ======================================================
 // SALVAR FAVORITO
-// ============================================================
+// ======================================================
+exports.salvar = async (req, res) => {
+  try {
+    const usuarioId = req.usuario?.id || req.body.usuarioId;
 
-async function salvar(req, res) {
+    const favorito = req.body;
 
-    try {
+    const restauranteId =
+      favorito.restauranteId ||
+      favorito.restaurante_id ||
+      favorito.idRestaurante;
 
-        const usuarioId =
-            normalizarId(
-                req.usuario?.id ??
-                req.usuario?._id ??
-                req.usuario?.usuarioId
-            );
-
-        console.log(
-            "========================================"
-        );
-
-        console.log(
-            "❤️ FOODJET - SALVAR FAVORITO"
-        );
-
-        console.log(
-            "USUÁRIO:",
-            usuarioId
-        );
-
-        console.log(
-            "BODY:",
-            JSON.stringify(req.body)
-        );
-
-        // ------------------------------------------------------
-        // VERIFICAR USUÁRIO
-        // ------------------------------------------------------
-
-        if (!usuarioId) {
-
-            return res.status(401).json({
-                erro:
-                    "Usuário não identificado."
-            });
-        }
-
-        // ------------------------------------------------------
-        // DADOS DO RESTAURANTE
-        // ------------------------------------------------------
-
-        const restaurante =
-            req.body || {};
-
-        const restauranteId =
-            normalizarId(
-                restaurante.restauranteId ??
-                restaurante.restaurantId ??
-                restaurante.id ??
-                restaurante._id
-            );
-
-        console.log(
-            "RESTAURANTE ID:",
-            restauranteId
-        );
-
-        // ------------------------------------------------------
-        // VERIFICAR ID
-        // ------------------------------------------------------
-
-        if (!restauranteId) {
-
-            return res.status(400).json({
-                erro:
-                    "ID do restaurante obrigatório."
-            });
-        }
-
-        // ------------------------------------------------------
-        // VERIFICAR DUPLICADO
-        // ------------------------------------------------------
-
-        const existe =
-            await pool.query(
-                `
-                SELECT
-                    id
-                FROM favoritos
-                WHERE usuario_id = $1
-                  AND restaurante_id = $2
-                LIMIT 1
-                `,
-                [
-                    usuarioId,
-                    restauranteId
-                ]
-            );
-
-        if (
-            existe.rows.length > 0
-        ) {
-
-            console.log(
-                "❤️ RESTAURANTE JÁ É FAVORITO"
-            );
-
-            return res.status(200).json({
-                sucesso: true,
-                favorito: true,
-                mensagem:
-                    "Restaurante já está nos favoritos."
-            });
-        }
-
-        // ------------------------------------------------------
-        // CRIAR ID
-        // ------------------------------------------------------
-
-        const agora =
-            new Date().toISOString();
-
-        const novoFavorito = {
-
-            id:
-                `${usuarioId}_${restauranteId}`,
-
-            usuarioId:
-                usuarioId,
-
-            restauranteId:
-                restauranteId,
-
-            nome:
-                restaurante.nome
-                    ?.toString()
-                    .trim() ?? "",
-
-            descricao:
-                restaurante.descricao
-                    ?.toString()
-                    .trim() ?? "",
-
-            avaliacao:
-                restaurante.avaliacao
-                    ?.toString()
-                    .trim() || "5.0",
-
-            logo:
-                restaurante.logo
-                    ?.toString()
-                    .trim() ||
-                restaurante.imagem
-                    ?.toString()
-                    .trim() ||
-                "",
-
-            imagem:
-                restaurante.imagem
-                    ?.toString()
-                    .trim() ||
-                restaurante.logo
-                    ?.toString()
-                    .trim() ||
-                "",
-
-            imagemUrl:
-                restaurante.imagemUrl
-                    ?.toString()
-                    .trim() || "",
-
-            logoBase64:
-                restaurante.logoBase64
-                    ?.toString()
-                    .trim() || "",
-
-            criadoEm:
-                agora
-        };
-
-        // ------------------------------------------------------
-        // SALVAR NO POSTGRESQL
-        // ------------------------------------------------------
-
-        await pool.query(
-            `
-            INSERT INTO favoritos (
-                id,
-                usuario_id,
-                restaurante_id,
-                criado_em,
-                dados
-            )
-            VALUES (
-                $1,
-                $2,
-                $3,
-                $4,
-                $5::jsonb
-            )
-            ON CONFLICT (id)
-            DO UPDATE SET
-                dados = EXCLUDED.dados
-            `,
-            [
-                novoFavorito.id,
-
-                novoFavorito.usuarioId,
-
-                novoFavorito.restauranteId,
-
-                novoFavorito.criadoEm,
-
-                JSON.stringify(
-                    novoFavorito
-                )
-            ]
-        );
-
-        console.log(
-            "❤️ FAVORITO SALVO COM SUCESSO"
-        );
-
-        console.log(
-            "FAVORITO:",
-            JSON.stringify(
-                novoFavorito,
-                null,
-                2
-            )
-        );
-
-        console.log(
-            "========================================"
-        );
-
-        return res.status(201).json({
-            sucesso: true,
-            favorito: true,
-            mensagem:
-                "Favorito salvo com sucesso.",
-            dados:
-                novoFavorito
-        });
-
-    } catch (error) {
-
-        console.error(
-            "❌ ERRO AO SALVAR FAVORITO:"
-        );
-
-        console.error(error);
-
-        return res.status(500).json({
-            erro:
-                "Erro ao salvar favorito.",
-            detalhes:
-                error.message
-        });
+    if (!usuarioId || !restauranteId) {
+      return res.status(400).json({
+        erro: "Usuário ou restaurante não informado.",
+      });
     }
-}
 
-// ============================================================
+    favorito.id =
+      favorito.id ||
+      `fav_${usuarioId}_${restauranteId}`;
+
+    await pool.query(
+      `
+      INSERT INTO favoritos (
+          id,
+          usuario_id,
+          restaurante_id,
+          nome,
+          descricao,
+          avaliacao,
+          logo,
+          dados
+      )
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+      ON CONFLICT (usuario_id, restaurante_id)
+      DO UPDATE SET
+          nome = EXCLUDED.nome,
+          descricao = EXCLUDED.descricao,
+          avaliacao = EXCLUDED.avaliacao,
+          logo = EXCLUDED.logo,
+          dados = EXCLUDED.dados
+      `,
+      [
+        favorito.id,
+        usuarioId,
+        restauranteId,
+        favorito.nome || "",
+        favorito.descricao || "",
+        favorito.avaliacao || "0",
+        favorito.logo || favorito.imagem || null,
+        favorito,
+      ]
+    );
+
+    return res.json({
+      sucesso: true,
+      mensagem: "Favorito salvo com sucesso.",
+    });
+  } catch (error) {
+    console.error("❌ Erro ao salvar favorito:", error);
+    return res.status(500).json({
+      erro: "Erro ao salvar favorito.",
+      detalhe: error.message,
+    });
+  }
+};
+
+// ======================================================
 // REMOVER FAVORITO
-// ============================================================
+// ======================================================
+exports.remover = async (req, res) => {
+  try {
+    const usuarioId = req.usuario?.id || req.body.usuarioId;
 
-async function remover(req, res) {
+    const restauranteId =
+      req.params.restauranteId ||
+      req.body.restauranteId;
 
-    try {
+    await pool.query(
+      `
+      DELETE FROM favoritos
+      WHERE usuario_id = $1
+      AND restaurante_id = $2
+      `,
+      [usuarioId, restauranteId]
+    );
 
-        const usuarioId =
-            normalizarId(
-                req.usuario?.id ??
-                req.usuario?._id ??
-                req.usuario?.usuarioId
-            );
+    return res.json({
+      sucesso: true,
+      mensagem: "Favorito removido.",
+    });
+  } catch (error) {
+    console.error("❌ Erro ao remover favorito:", error);
+    return res.status(500).json({
+      erro: "Erro ao remover favorito.",
+    });
+  }
+};
 
-        const restauranteId =
-            normalizarId(
-                req.params.restauranteId
-            );
+// ======================================================
+// VERIFICAR SE É FAVORITO
+// ======================================================
+exports.verificar = async (req, res) => {
+  try {
+    const usuarioId = req.usuario?.id || req.params.usuarioId;
+    const restauranteId = req.params.restauranteId;
 
-        console.log(
-            "========================================"
-        );
+    const resultado = await pool.query(
+      `
+      SELECT 1
+      FROM favoritos
+      WHERE usuario_id = $1
+      AND restaurante_id = $2
+      LIMIT 1
+      `,
+      [usuarioId, restauranteId]
+    );
 
-        console.log(
-            "🤍 FOODJET - REMOVER FAVORITO"
-        );
-
-        console.log(
-            "USUÁRIO:",
-            usuarioId
-        );
-
-        console.log(
-            "RESTAURANTE:",
-            restauranteId
-        );
-
-        if (!usuarioId) {
-
-            return res.status(401).json({
-                erro:
-                    "Usuário não identificado."
-            });
-        }
-
-        if (!restauranteId) {
-
-            return res.status(400).json({
-                erro:
-                    "ID do restaurante obrigatório."
-            });
-        }
-
-        const resultado =
-            await pool.query(
-                `
-                DELETE FROM favoritos
-                WHERE usuario_id = $1
-                  AND restaurante_id = $2
-                `,
-                [
-                    usuarioId,
-                    restauranteId
-                ]
-            );
-
-        console.log(
-            "FAVORITOS REMOVIDOS:",
-            resultado.rowCount
-        );
-
-        console.log(
-            "🤍 FAVORITO REMOVIDO"
-        );
-
-        console.log(
-            "========================================"
-        );
-
-        return res.status(200).json({
-            sucesso: true,
-            favorito: false,
-            mensagem:
-                "Favorito removido."
-        });
-
-    } catch (error) {
-
-        console.error(
-            "❌ ERRO AO REMOVER FAVORITO:",
-            error
-        );
-
-        return res.status(500).json({
-            erro:
-                "Erro ao remover favorito.",
-            detalhes:
-                error.message
-        });
-    }
-}
-
-// ============================================================
-// EXPORTAR
-// ============================================================
-
-module.exports = {
-    listar,
-    salvar,
-    remover
+    return res.json({
+      favorito: resultado.rows.length > 0,
+    });
+  } catch (error) {
+    console.error("❌ Erro ao verificar favorito:", error);
+    return res.status(500).json({
+      erro: "Erro ao verificar favorito.",
+    });
+  }
 };
