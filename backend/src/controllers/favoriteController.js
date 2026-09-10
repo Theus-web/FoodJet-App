@@ -1,5 +1,4 @@
-const pool = require("../config/database");
-
+const { pool } = require("../config/database");
 // ======================================================
 // LISTAR FAVORITOS DO USUÁRIO
 // ======================================================
