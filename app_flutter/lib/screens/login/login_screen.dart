@@ -1,4 +1,6 @@
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -85,6 +87,9 @@ class _LoginScreenState extends State<LoginScreen> {
         if (salvo) {
           emailController.text = email;
           senhaController.text = senha;
+        } else {
+          emailController.clear();
+          senhaController.clear();
         }
       });
 
@@ -104,51 +109,78 @@ class _LoginScreenState extends State<LoginScreen> {
 
   Future<void> _salvarOuRemoverLogin() async {
     try {
-      final prefs =
-          await SharedPreferences.getInstance();
+      final prefs = await SharedPreferences.getInstance();
 
       if (salvarSenha) {
-        await prefs.setBool(
-          chaveSalvarSenha,
-          true,
-        );
+        final email = emailController.text.trim().toLowerCase();
+        final senha = senhaController.text;
 
-        await prefs.setString(
-          chaveEmailSalvo,
-          emailController.text
-              .trim()
-              .toLowerCase(),
-        );
+        await prefs.setBool(chaveSalvarSenha, true);
+        await prefs.setString(chaveEmailSalvo, email);
+        await prefs.setString(chaveSenhaSalva, senha);
 
-        await prefs.setString(
-          chaveSenhaSalva,
-          senhaController.text,
-        );
+        final confirmou =
+            prefs.getBool(chaveSalvarSenha) == true &&
+            prefs.getString(chaveEmailSalvo) == email &&
+            prefs.getString(chaveSenhaSalva) == senha;
 
-        debugPrint(
-          'LOGIN SALVO COM SUCESSO',
-        );
+        debugPrint('LOGIN SALVO COM SUCESSO: $confirmou');
       } else {
-        await prefs.remove(
-          chaveSalvarSenha,
-        );
-
-        await prefs.remove(
-          chaveEmailSalvo,
-        );
-
-        await prefs.remove(
-          chaveSenhaSalva,
-        );
-
-        debugPrint(
-          'LOGIN SALVO REMOVIDO',
-        );
+        await prefs.remove(chaveSalvarSenha);
+        await prefs.remove(chaveEmailSalvo);
+        await prefs.remove(chaveSenhaSalva);
+        debugPrint('LOGIN SALVO REMOVIDO');
       }
     } catch (e) {
+      debugPrint('ERRO AO SALVAR LOGIN: $e');
+    }
+  }
+
+  // ==================================================
+  // SALVAR SESSÃO DO CLIENTE
+  // ==================================================
+
+  Future<void> _salvarSessaoCliente(
+    Map<String, dynamic> resultado,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+
+      final usuario = resultado['usuario'];
+
+      if (usuario is Map) {
+        await prefs.setString(
+          'usuario',
+          jsonEncode(Map<String, dynamic>.from(usuario)),
+        );
+        await prefs.setBool('logado', true);
+      }
+
+      final token = resultado['token'] ??
+          resultado['jwt'] ??
+          resultado['access_token'] ??
+          resultado['accessToken'] ??
+          resultado['auth_token'];
+
+      if (token != null && token.toString().trim().isNotEmpty) {
+        final tokenString = token.toString().trim();
+
+        await prefs.setString('token', tokenString);
+        await prefs.setString('jwt', tokenString);
+        await prefs.setString('access_token', tokenString);
+        await prefs.setString('auth_token', tokenString);
+
+        debugPrint('TOKEN DO CLIENTE SALVO COM SUCESSO');
+      } else {
+        debugPrint('AVISO: LOGIN SEM TOKEN NO RESULTADO DO AUTH SERVICE');
+      }
+
       debugPrint(
-        'ERRO AO SALVAR LOGIN: $e',
+        'SESSÃO CLIENTE SALVA: '
+        '${prefs.getBool('logado') == true && prefs.getString('usuario') != null}',
       );
+    } catch (e) {
+      debugPrint('ERRO AO SALVAR SESSÃO CLIENTE: $e');
     }
   }
 
@@ -203,6 +235,14 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!mounted) return;
 
       if (resultado['usuario'] != null) {
+        // ==============================================
+        // SALVAR SESSÃO DO CLIENTE
+        // ==============================================
+
+        await _salvarSessaoCliente(
+          Map<String, dynamic>.from(resultado),
+        );
+
         // ==============================================
         // SALVAR OU REMOVER LOGIN
         // ==============================================
@@ -631,10 +671,33 @@ class _LoginScreenState extends State<LoginScreen> {
                             carregando
                                 ? null
                                 : (valor) {
+                                    final novoValor =
+                                        valor ?? false;
+
                                     setState(() {
                                       salvarSenha =
-                                          valor ??
-                                              false;
+                                          novoValor;
+                                    });
+
+                                    SharedPreferences
+                                        .getInstance()
+                                        .then((prefs) async {
+                                      if (novoValor) {
+                                        await prefs.setBool(
+                                          chaveSalvarSenha,
+                                          true,
+                                        );
+                                      } else {
+                                        await prefs.remove(
+                                          chaveSalvarSenha,
+                                        );
+                                        await prefs.remove(
+                                          chaveEmailSalvo,
+                                        );
+                                        await prefs.remove(
+                                          chaveSenhaSalva,
+                                        );
+                                      }
                                     });
                                   },
                       ),

@@ -5,48 +5,23 @@ const { pool } = require("../config/database");
 // ============================================================
 
 exports.criar = async (restaurante) => {
-
     if (!restaurante || typeof restaurante !== "object") {
-        throw new Error(
-            "Dados do restaurante são obrigatórios."
-        );
+        throw new Error("Dados do restaurante são obrigatórios.");
     }
-
-    // ========================================================
-    // ID
-    // ========================================================
 
     const id = restaurante.id
         ? String(restaurante.id)
         : `rest_${Date.now()}`;
 
-    // ========================================================
-    // DADOS PRINCIPAIS
-    // ========================================================
+    const nome = restaurante.nome ? String(restaurante.nome).trim() : null;
+    const cnpj = restaurante.cnpj ? String(restaurante.cnpj).trim() : null;
+    const categoria = restaurante.categoria
+        ? String(restaurante.categoria).trim()
+        : null;
 
-    const nome =
-        restaurante.nome !== undefined &&
-        restaurante.nome !== null
-            ? String(restaurante.nome).trim()
-            : null;
-
-    const cnpj =
-        restaurante.cnpj !== undefined &&
-        restaurante.cnpj !== null
-            ? String(restaurante.cnpj).trim()
-            : null;
-
-    const categoria =
-        restaurante.categoria !== undefined &&
-        restaurante.categoria !== null
-            ? String(restaurante.categoria).trim()
-            : null;
-
-    const status =
-        restaurante.status !== undefined &&
-        restaurante.status !== null
-            ? String(restaurante.status)
-            : null;
+    const status = restaurante.status
+        ? String(restaurante.status)
+        : "ABERTO";
 
     const online =
         restaurante.online !== undefined
@@ -58,23 +33,13 @@ exports.criar = async (restaurante) => {
             ? Boolean(restaurante.aberto)
             : status === "ABERTO";
 
-    // ========================================================
-    // DATAS
-    // ========================================================
+    const criadoEm = restaurante.criadoEm
+        ? new Date(restaurante.criadoEm)
+        : new Date();
 
-    const criadoEm =
-        restaurante.criadoEm
-            ? new Date(restaurante.criadoEm)
-            : new Date();
-
-    const atualizadoEm =
-        restaurante.atualizadoEm
-            ? new Date(restaurante.atualizadoEm)
-            : new Date();
-
-    // ========================================================
-    // PRESERVAR REGISTRO COMPLETO
-    // ========================================================
+    const atualizadoEm = restaurante.atualizadoEm
+        ? new Date(restaurante.atualizadoEm)
+        : new Date();
 
     const dados = {
         ...restaurante,
@@ -89,10 +54,6 @@ exports.criar = async (restaurante) => {
         atualizadoEm: atualizadoEm.toISOString(),
     };
 
-    // ========================================================
-    // INSERT
-    // ========================================================
-
     const resultado = await pool.query(
         `
         INSERT INTO restaurantes (
@@ -103,6 +64,7 @@ exports.criar = async (restaurante) => {
             endereco,
             pagamento,
             imagem,
+            capa,
             status,
             online,
             aberto,
@@ -111,19 +73,7 @@ exports.criar = async (restaurante) => {
             dados
         )
         VALUES (
-            $1,
-            $2,
-            $3,
-            $4,
-            $5,
-            $6,
-            $7,
-            $8,
-            $9,
-            $10,
-            $11,
-            $12,
-            $13
+            $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14
         )
         RETURNING
             id,
@@ -133,6 +83,7 @@ exports.criar = async (restaurante) => {
             endereco,
             pagamento,
             imagem,
+            capa,
             status,
             online,
             aberto,
@@ -145,35 +96,26 @@ exports.criar = async (restaurante) => {
             nome,
             cnpj,
             categoria,
-
             restaurante.endereco
                 ? JSON.stringify(restaurante.endereco)
                 : null,
-
             restaurante.pagamento
                 ? JSON.stringify(restaurante.pagamento)
                 : null,
-
             restaurante.imagem || null,
-
+            restaurante.capa || null,
             status,
             online,
             aberto,
-
             criadoEm,
             atualizadoEm,
-
             dados,
         ]
     );
 
-    const novoRestaurante =
-        montarRestaurante(resultado.rows[0]);
+    const novoRestaurante = montarRestaurante(resultado.rows[0]);
 
-    console.log(
-        "🏪 RESTAURANTE CRIADO:",
-        novoRestaurante.id
-    );
+    console.log("🏪 RESTAURANTE CRIADO:", novoRestaurante.id);
 
     return novoRestaurante;
 };
@@ -183,9 +125,7 @@ exports.criar = async (restaurante) => {
 // ============================================================
 
 exports.listar = async () => {
-
-    const resultado = await pool.query(
-        `
+    const resultado = await pool.query(`
         SELECT
             id,
             nome,
@@ -194,6 +134,7 @@ exports.listar = async () => {
             endereco,
             pagamento,
             imagem,
+            capa,
             status,
             online,
             aberto,
@@ -202,12 +143,9 @@ exports.listar = async () => {
             dados
         FROM restaurantes
         ORDER BY criado_em ASC NULLS LAST
-        `
-    );
+    `);
 
-    return resultado.rows.map(
-        montarRestaurante
-    );
+    return resultado.rows.map(montarRestaurante);
 };
 
 // ============================================================
@@ -215,14 +153,7 @@ exports.listar = async () => {
 // ============================================================
 
 exports.buscarPorId = async (id) => {
-
-    if (
-        id === undefined ||
-        id === null ||
-        String(id).trim() === ""
-    ) {
-        return null;
-    }
+    if (!id) return null;
 
     const resultado = await pool.query(
         `
@@ -234,6 +165,7 @@ exports.buscarPorId = async (id) => {
             endereco,
             pagamento,
             imagem,
+            capa,
             status,
             online,
             aberto,
@@ -244,58 +176,40 @@ exports.buscarPorId = async (id) => {
         WHERE id = $1
         LIMIT 1
         `,
-        [
-            String(id)
-        ]
+        [String(id)]
     );
 
-    if (resultado.rows.length === 0) {
-        return null;
-    }
+    if (!resultado.rows.length) return null;
 
-    return montarRestaurante(
-        resultado.rows[0]
-    );
+    return montarRestaurante(resultado.rows[0]);
 };
 
 // ============================================================
 // ATUALIZAR STATUS
 // ============================================================
 
-exports.atualizarStatus = async (
-    id,
-    status
-) => {
-
-    const restaurante =
-        await exports.buscarPorId(id);
+exports.atualizarStatus = async (id, status) => {
+    const restaurante = await exports.buscarPorId(id);
 
     if (!restaurante) {
         return null;
     }
 
     const novoStatus =
-        status !== undefined &&
-        status !== null
+        status !== undefined && status !== null
             ? String(status)
             : restaurante.status;
 
-    const online =
-        novoStatus === "ABERTO";
-
-    const aberto =
-        novoStatus === "ABERTO";
-
-    const atualizadoEm =
-        new Date();
+    const online = novoStatus === "ABERTO";
+    const aberto = novoStatus === "ABERTO";
+    const atualizadoEm = new Date();
 
     const dadosAtualizados = {
         ...(restaurante.dados || {}),
         status: novoStatus,
         online,
         aberto,
-        atualizadoEm:
-            atualizadoEm.toISOString(),
+        atualizadoEm: atualizadoEm.toISOString(),
     };
 
     const resultado = await pool.query(
@@ -316,6 +230,7 @@ exports.atualizarStatus = async (
             endereco,
             pagamento,
             imagem,
+            capa,
             status,
             online,
             aberto,
@@ -333,57 +248,37 @@ exports.atualizarStatus = async (
         ]
     );
 
-    if (resultado.rows.length === 0) {
+    if (!resultado.rows.length) {
         return null;
     }
 
-    return montarRestaurante(
-        resultado.rows[0]
-    );
+    return montarRestaurante(resultado.rows[0]);
 };
 
 // ============================================================
 // ATUALIZAR DADOS
 // ============================================================
 
-exports.atualizar = async (
-    id,
-    dados
-) => {
-
-    const restaurante =
-        await exports.buscarPorId(id);
+exports.atualizar = async (id, dados) => {
+    const restaurante = await exports.buscarPorId(id);
 
     if (!restaurante) {
         return null;
     }
 
-    if (
-        !dados ||
-        typeof dados !== "object"
-    ) {
+    if (!dados || typeof dados !== "object") {
         return restaurante;
     }
-
-    // ========================================================
-    // MESMO COMPORTAMENTO DO LOWDB:
-    // todos os campos definidos são atualizados
-    // ========================================================
 
     const restauranteAtualizado = {
         ...restaurante,
         ...dados,
     };
 
-    const atualizadoEm =
-        new Date();
+    const atualizadoEm = new Date();
 
     restauranteAtualizado.atualizadoEm =
         atualizadoEm.toISOString();
-
-    // ========================================================
-    // CAMPOS PRINCIPAIS
-    // ========================================================
 
     const nome =
         restauranteAtualizado.nome !== undefined &&
@@ -419,10 +314,6 @@ exports.atualizar = async (
             ? Boolean(restauranteAtualizado.aberto)
             : status === "ABERTO";
 
-    // ========================================================
-    // DADOS COMPLETOS
-    // ========================================================
-
     const dadosAtualizados = {
         ...(restaurante.dados || {}),
         ...restauranteAtualizado,
@@ -437,10 +328,6 @@ exports.atualizar = async (
             atualizadoEm.toISOString(),
     };
 
-    // ========================================================
-    // UPDATE
-    // ========================================================
-
     const resultado = await pool.query(
         `
         UPDATE restaurantes
@@ -451,12 +338,13 @@ exports.atualizar = async (
             endereco = $4,
             pagamento = $5,
             imagem = $6,
-            status = $7,
-            online = $8,
-            aberto = $9,
-            atualizado_em = $10,
-            dados = $11
-        WHERE id = $12
+            capa = $7,
+            status = $8,
+            online = $9,
+            aberto = $10,
+            atualizado_em = $11,
+            dados = $12
+        WHERE id = $13
         RETURNING
             id,
             nome,
@@ -465,6 +353,7 @@ exports.atualizar = async (
             endereco,
             pagamento,
             imagem,
+            capa,
             status,
             online,
             aberto,
@@ -489,6 +378,10 @@ exports.atualizar = async (
                 ? restauranteAtualizado.imagem
                 : null,
 
+            restauranteAtualizado.capa !== undefined
+                ? restauranteAtualizado.capa
+                : null,
+
             status,
             online,
             aberto,
@@ -498,13 +391,11 @@ exports.atualizar = async (
         ]
     );
 
-    if (resultado.rows.length === 0) {
+    if (!resultado.rows.length) {
         return null;
     }
 
-    return montarRestaurante(
-        resultado.rows[0]
-    );
+    return montarRestaurante(resultado.rows[0]);
 };
 
 // ============================================================
@@ -521,7 +412,6 @@ exports.excluir = async (id) => {
     // ========================================================
 
     if (!restauranteId) {
-
         throw new Error(
             "ID do restaurante é obrigatório."
         );
@@ -549,9 +439,7 @@ exports.excluir = async (id) => {
 
     try {
 
-        await client.query(
-            "BEGIN"
-        );
+        await client.query("BEGIN");
 
         // ====================================================
         // CONTADORES
@@ -576,102 +464,144 @@ exports.excluir = async (id) => {
         // PAGAMENTOS ASAAS
         // ====================================================
 
-        const pagamentosAsaas =
-            await client.query(
-                `
-                DELETE FROM pagamentos_asaas
-                WHERE restaurante_id = $1
-                `,
-                [
-                    restauranteId
-                ]
-            );
+        try {
 
-        removidos.pagamentos +=
-            pagamentosAsaas.rowCount;
+            const pagamentosAsaas =
+                await client.query(
+                    `
+                    DELETE FROM pagamentos_asaas
+                    WHERE restaurante_id = $1
+                    `,
+                    [
+                        restauranteId
+                    ]
+                );
+
+            removidos.pagamentos +=
+                pagamentosAsaas.rowCount;
+
+        } catch (error) {
+
+            console.log(
+                "⚠️ pagamentos_asaas não removido:",
+                error.message
+            );
+        }
 
         // ====================================================
         // PAGAMENTOS
         // ====================================================
 
-        const pagamentos =
-            await client.query(
-                `
-                DELETE FROM pagamentos
-                WHERE restaurante_id = $1
-                `,
-                [
-                    restauranteId
-                ]
-            );
+        try {
 
-        removidos.pagamentos +=
-            pagamentos.rowCount;
+            const pagamentos =
+                await client.query(
+                    `
+                    DELETE FROM pagamentos
+                    WHERE restaurante_id = $1
+                    `,
+                    [
+                        restauranteId
+                    ]
+                );
+
+            removidos.pagamentos +=
+                pagamentos.rowCount;
+
+        } catch (error) {
+
+            console.log(
+                "⚠️ pagamentos não removido:",
+                error.message
+            );
+        }
 
         // ====================================================
         // PEDIDOS
         // ====================================================
 
-        const pedidos =
-            await client.query(
-                `
-                DELETE FROM pedidos
-                WHERE restaurante_id = $1
-                `,
-                [
-                    restauranteId
-                ]
-            );
+        try {
 
-        removidos.pedidos =
-            pedidos.rowCount;
+            const pedidos =
+                await client.query(
+                    `
+                    DELETE FROM pedidos
+                    WHERE restaurante_id = $1
+                    `,
+                    [
+                        restauranteId
+                    ]
+                );
+
+            removidos.pedidos =
+                pedidos.rowCount;
+
+        } catch (error) {
+
+            console.log(
+                "⚠️ pedidos não removido:",
+                error.message
+            );
+        }
 
         // ====================================================
         // PRODUTOS
         // ====================================================
 
-        const produtos =
-            await client.query(
-                `
-                DELETE FROM produtos
-                WHERE restaurante_id = $1
-                `,
-                [
-                    restauranteId
-                ]
-            );
+        try {
 
-        removidos.produtos =
-            produtos.rowCount;
+            const produtos =
+                await client.query(
+                    `
+                    DELETE FROM produtos
+                    WHERE restaurante_id = $1
+                    `,
+                    [
+                        restauranteId
+                    ]
+                );
+
+            removidos.produtos =
+                produtos.rowCount;
+
+        } catch (error) {
+
+            console.log(
+                "⚠️ produtos não removido:",
+                error.message
+            );
+        }
 
         // ====================================================
         // USUÁRIOS
         // ====================================================
 
-        const usuarios =
-            await client.query(
-                `
-                DELETE FROM usuarios
-                WHERE restaurante_id = $1
-                   OR dados->>'restaurantId' = $1
-                   OR dados->'restaurante'->>'id' = $1
-                `,
-                [
-                    restauranteId
-                ]
+        try {
+
+            const usuarios =
+                await client.query(
+                    `
+                    DELETE FROM usuarios
+                    WHERE restaurante_id = $1
+                       OR dados->>'restaurantId' = $1
+                       OR dados->>'restauranteId' = $1
+                       OR dados->'restaurante'->>'id' = $1
+                    `,
+                    [
+                        restauranteId
+                    ]
+                );
+
+            removidos.usuarios =
+                usuarios.rowCount;
+
+        } catch (error) {
+
+            console.log(
+                "⚠️ usuários não removidos:",
+                error.message
             );
-
-        removidos.usuarios =
-            usuarios.rowCount;
-
-        // ====================================================
-        // OUTRAS COLEÇÕES
-        // ====================================================
-        //
-        // No momento as tabelas principais são as acima.
-        // As demais serão migradas individualmente.
-        //
-        // ====================================================
+        }
 
         // ====================================================
         // RESTAURANTE
@@ -695,9 +625,7 @@ exports.excluir = async (id) => {
         // COMMIT
         // ====================================================
 
-        await client.query(
-            "COMMIT"
-        );
+        await client.query("COMMIT");
 
         // ====================================================
         // LOG
@@ -761,9 +689,7 @@ exports.excluir = async (id) => {
 
     } catch (error) {
 
-        await client.query(
-            "ROLLBACK"
-        );
+        await client.query("ROLLBACK");
 
         console.error(
             "❌ ERRO AO EXCLUIR RESTAURANTE:"
@@ -789,15 +715,27 @@ function montarRestaurante(row) {
         return null;
     }
 
+    // ========================================================
+    // DADOS JSON
+    // ========================================================
+
     const dados =
         row.dados &&
         typeof row.dados === "object"
             ? row.dados
             : {};
 
+    // ========================================================
+    // RESTAURANTE FINAL
+    // ========================================================
+
     return {
 
         ...dados,
+
+        // ====================================================
+        // IDENTIFICAÇÃO
+        // ====================================================
 
         id: row.id,
 
@@ -807,17 +745,37 @@ function montarRestaurante(row) {
 
         categoria: row.categoria,
 
+        // ====================================================
+        // DADOS DE CONTATO / PAGAMENTO
+        // ====================================================
+
         endereco: row.endereco,
 
         pagamento: row.pagamento,
 
+        // ====================================================
+        // IMAGENS
+        // ====================================================
+
+        // Logo
         imagem: row.imagem,
+
+        // Capa
+        capa: row.capa,
+
+        // ====================================================
+        // STATUS
+        // ====================================================
 
         status: row.status,
 
         online: row.online,
 
         aberto: row.aberto,
+
+        // ====================================================
+        // DATAS
+        // ====================================================
 
         criadoEm:
             row.criadoEm
