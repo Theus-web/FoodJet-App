@@ -1,3 +1,4 @@
+
 const Restaurant = require("../models/restaurant");
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
@@ -31,7 +32,7 @@ function validarCloudinary() {
         faltando.push("CLOUDINARY_API_SECRET");
     }
 
-    if (faltando.length) {
+    if (faltando.length > 0) {
         throw new Error(
             `Cloudinary não configurado. Variáveis ausentes: ${faltando.join(", ")}`
         );
@@ -53,7 +54,6 @@ function normalizarImagem(valor) {
         return null;
     }
 
-    // Cloudinary / URL HTTPS
     if (
         texto.startsWith("https://") ||
         texto.startsWith("http://") ||
@@ -76,25 +76,79 @@ function normalizarImagem(valor) {
 
 const storage = multer.memoryStorage();
 
+// ============================================================
+// FILTRO DE IMAGEM
+// ============================================================
+
 function filtroImagem(req, file, cb) {
     const tiposPermitidos = [
         "image/jpeg",
         "image/jpg",
         "image/png",
         "image/webp",
+        "image/pjpeg",
+        "image/x-png",
     ];
 
-    if (tiposPermitidos.includes(file.mimetype)) {
+    const mimetype = String(file.mimetype || "")
+        .toLowerCase()
+        .trim();
+
+    const nomeArquivo = String(file.originalname || "")
+        .toLowerCase()
+        .trim();
+
+    const extensaoPermitida =
+        nomeArquivo.endsWith(".jpg") ||
+        nomeArquivo.endsWith(".jpeg") ||
+        nomeArquivo.endsWith(".png") ||
+        nomeArquivo.endsWith(".webp");
+
+    console.log("========================================");
+    console.log("🔎 FOODJET - VALIDANDO IMAGEM");
+    console.log("📁 Arquivo:", file.originalname);
+    console.log("📦 MIME:", file.mimetype);
+    console.log("📎 Extensão válida:", extensaoPermitida);
+    console.log("========================================");
+
+    // MIME conhecido
+    if (tiposPermitidos.includes(mimetype)) {
+        cb(null, true);
+        return;
+    }
+
+    // Flutter Web/navegador pode não informar MIME
+    if (!mimetype && extensaoPermitida) {
+        console.log("⚠️ MIME vazio, aceitando pela extensão.");
+        cb(null, true);
+        return;
+    }
+
+    // Alguns navegadores enviam octet-stream
+    if (
+        mimetype === "application/octet-stream" &&
+        extensaoPermitida
+    ) {
+        console.log(
+            "⚠️ application/octet-stream, aceitando pela extensão."
+        );
+
         cb(null, true);
         return;
     }
 
     cb(
         new Error(
-            "Formato de imagem não permitido. Use JPG, JPEG, PNG ou WEBP."
+            `Formato de imagem não permitido. MIME recebido: ${
+                file.mimetype || "vazio"
+            }. Use JPG, JPEG, PNG ou WEBP.`
         )
     );
 }
+
+// ============================================================
+// MULTER LOGO
+// ============================================================
 
 const uploadLogo = multer({
     storage,
@@ -103,6 +157,10 @@ const uploadLogo = multer({
         fileSize: 5 * 1024 * 1024,
     },
 });
+
+// ============================================================
+// MULTER CAPA
+// ============================================================
 
 const uploadCapa = multer({
     storage,
@@ -113,15 +171,68 @@ const uploadCapa = multer({
 });
 
 // ============================================================
+// TRATAMENTO DE ERRO DO MULTER
+// ============================================================
+
+function tratarErroUpload(error, res, tipo) {
+    if (!error) {
+        return false;
+    }
+
+    console.error("========================================");
+    console.error(`❌ ERRO NO UPLOAD DA ${tipo.toUpperCase()}`);
+    console.error("Tipo:", error.name);
+    console.error("Mensagem:", error.message);
+    console.error("Código:", error.code || "N/A");
+    console.error("========================================");
+
+    if (error instanceof multer.MulterError) {
+        let mensagem = error.message;
+
+        if (error.code === "LIMIT_FILE_SIZE") {
+            mensagem =
+                tipo === "logo"
+                    ? "A logo não pode ultrapassar 5 MB."
+                    : "A capa não pode ultrapassar 10 MB.";
+        }
+
+        res.status(400).json({
+            sucesso: false,
+            mensagem,
+            erro: "MULTER_ERROR",
+            codigo: error.code,
+        });
+
+        return true;
+    }
+
+    res.status(400).json({
+        sucesso: false,
+        mensagem: error.message || "Erro ao processar imagem.",
+        erro: "UPLOAD_ERROR",
+    });
+
+    return true;
+}
+
+// ============================================================
 // UPLOAD BUFFER PARA CLOUDINARY
 // ============================================================
 
-function enviarBufferCloudinary(
-    buffer,
-    pasta,
-    publicId
-) {
+function enviarBufferCloudinary(buffer, pasta, publicId) {
     return new Promise((resolve, reject) => {
+        validarCloudinary();
+
+        if (!buffer || !Buffer.isBuffer(buffer)) {
+            reject(
+                new Error(
+                    "Buffer da imagem inválido ou vazio."
+                )
+            );
+
+            return;
+        }
+
         const stream =
             cloudinary.uploader.upload_stream(
                 {
@@ -200,15 +311,10 @@ function obterPublicIdCloudinary(url) {
 
     try {
         const urlObj = new URL(url);
+        const caminho = urlObj.pathname;
 
-        const caminho =
-            urlObj.pathname;
-
-        const marcador =
-            "/image/upload/";
-
-        const posicao =
-            caminho.indexOf(marcador);
+        const marcador = "/image/upload/";
+        const posicao = caminho.indexOf(marcador);
 
         if (posicao === -1) {
             return null;
@@ -219,39 +325,33 @@ function obterPublicIdCloudinary(url) {
                 posicao + marcador.length
             );
 
+        const partes = publicId.split("/");
+
         // Remove transformações Cloudinary
-        // caso existam antes do public_id.
-        const partes =
-            publicId.split("/");
+        if (partes.length > 0) {
+            const primeiro = partes[0] || "";
 
-        const primeiro =
-            partes[0] || "";
-
-        if (
-            primeiro.includes(",") ||
-            primeiro.includes("_") &&
-            (
+            if (
+                primeiro.includes(",") ||
                 primeiro.includes("w_") ||
                 primeiro.includes("h_") ||
                 primeiro.includes("c_") ||
                 primeiro.includes("q_") ||
                 primeiro.includes("f_")
-            )
-        ) {
-            partes.shift();
-            publicId =
-                partes.join("/");
+            ) {
+                partes.shift();
+
+                publicId = partes.join("/");
+            }
         }
 
         // Remove extensão
-        publicId =
-            publicId.replace(
-                /\.[^/.]+$/,
-                ""
-            );
+        publicId = publicId.replace(
+            /\.[^/.]+$/,
+            ""
+        );
 
         return publicId || null;
-
     } catch (error) {
         console.log(
             "⚠️ Não foi possível obter public_id:",
@@ -293,7 +393,6 @@ async function removerImagemCloudinary(url) {
             "🗑️ IMAGEM REMOVIDA DO CLOUDINARY:",
             publicId
         );
-
     } catch (error) {
         console.log(
             "⚠️ Erro ao remover imagem do Cloudinary:",
@@ -311,8 +410,7 @@ function emitirAtualizacaoRestaurante(
     restaurante
 ) {
     try {
-        const io =
-            req.app.get("io");
+        const io = req.app.get("io");
 
         if (!io || !restaurante) {
             return;
@@ -332,7 +430,6 @@ function emitirAtualizacaoRestaurante(
             "restaurante_atualizado",
             restaurante
         );
-
     } catch (error) {
         console.log(
             "⚠️ Erro ao emitir atualização:",
@@ -347,8 +444,7 @@ function emitirAtualizacaoRestaurante(
 
 exports.create = async (req, res) => {
     try {
-        const body =
-            req.body || {};
+        const body = req.body || {};
 
         const id =
             body.id
@@ -439,7 +535,6 @@ exports.create = async (req, res) => {
             sucesso: true,
             restaurante,
         });
-
     } catch (error) {
         console.error(
             "❌ ERRO AO CRIAR RESTAURANTE:",
@@ -467,7 +562,7 @@ exports.list = async (req, res) => {
 
         const resultado =
             restaurantes.map(
-                restaurante => ({
+                (restaurante) => ({
                     ...restaurante,
 
                     imagem:
@@ -491,7 +586,6 @@ exports.list = async (req, res) => {
             sucesso: true,
             restaurantes: resultado,
         });
-
     } catch (error) {
         console.error(
             "❌ ERRO AO LISTAR RESTAURANTES:",
@@ -514,8 +608,7 @@ exports.list = async (req, res) => {
 
 exports.getById = async (req, res) => {
     try {
-        const id =
-            req.params.id;
+        const id = req.params.id;
 
         if (!id) {
             return res.status(400).json({
@@ -559,7 +652,6 @@ exports.getById = async (req, res) => {
             sucesso: true,
             restaurante: resultado,
         });
-
     } catch (error) {
         console.error(
             "❌ ERRO AO BUSCAR RESTAURANTE:",
@@ -582,8 +674,7 @@ exports.getById = async (req, res) => {
 
 exports.update = async (req, res) => {
     try {
-        const id =
-            req.params.id;
+        const id = req.params.id;
 
         if (!id) {
             return res.status(400).json({
@@ -717,7 +808,6 @@ exports.update = async (req, res) => {
                 "Restaurante atualizado com sucesso.",
             restaurante: resultado,
         });
-
     } catch (error) {
         console.error(
             "❌ ERRO AO ATUALIZAR RESTAURANTE:",
@@ -740,9 +830,7 @@ exports.update = async (req, res) => {
 
 exports.updateStatus = async (req, res) => {
     try {
-        const id =
-            req.params.id;
-
+        const id = req.params.id;
         const status =
             req.body?.status;
 
@@ -806,7 +894,6 @@ exports.updateStatus = async (req, res) => {
                 "Status atualizado com sucesso.",
             restaurante: resultado,
         });
-
     } catch (error) {
         console.error(
             "❌ ERRO AO ATUALIZAR STATUS:",
@@ -828,7 +915,24 @@ exports.updateStatus = async (req, res) => {
 // ============================================================
 
 exports.uploadLogo = [
-    uploadLogo.single("logo"),
+    function (req, res, next) {
+        uploadLogo.single("logo")(
+            req,
+            res,
+            function (error) {
+                if (error) {
+                    tratarErroUpload(
+                        error,
+                        res,
+                        "logo"
+                    );
+                    return;
+                }
+
+                next();
+            }
+        );
+    },
 
     async (req, res) => {
         try {
@@ -883,6 +987,11 @@ exports.uploadLogo = [
             );
 
             console.log(
+                "📦 MIME:",
+                req.file.mimetype
+            );
+
+            console.log(
                 "📦 Tamanho:",
                 req.file.size
             );
@@ -901,8 +1010,19 @@ exports.uploadLogo = [
             const logoUrl =
                 resultadoCloudinary.secure_url;
 
+            if (!logoUrl) {
+                throw new Error(
+                    "Cloudinary não retornou a URL da logo."
+                );
+            }
+
+            console.log(
+                "☁️ URL CLOUDINARY:",
+                logoUrl
+            );
+
             // =================================================
-            // SALVAR NO CAMPO IMAGEM
+            // SALVAR NO POSTGRESQL
             // =================================================
 
             const atualizado =
@@ -940,27 +1060,29 @@ exports.uploadLogo = [
             );
 
             console.log(
-                "✅ LOGO SALVA NO CLOUDINARY:"
+                "========================================"
+            );
+
+            console.log(
+                "✅ LOGO SALVA NO CLOUDINARY"
             );
 
             console.log(
                 logoUrl
             );
 
+            console.log(
+                "========================================"
+            );
+
             res.json({
                 sucesso: true,
-
                 mensagem:
                     "Logo atualizada com sucesso.",
-
                 logo: logoUrl,
-
                 imagem: logoUrl,
-
-                restaurante:
-                    resposta,
+                restaurante: resposta,
             });
-
         } catch (error) {
             console.error(
                 "❌ ERRO AO ENVIAR LOGO:",
@@ -1044,7 +1166,6 @@ exports.deleteLogo = async (req, res) => {
             restaurante:
                 resposta,
         });
-
     } catch (error) {
         console.error(
             "❌ ERRO AO REMOVER LOGO:",
@@ -1066,7 +1187,24 @@ exports.deleteLogo = async (req, res) => {
 // ============================================================
 
 exports.uploadCapa = [
-    uploadCapa.single("capa"),
+    function (req, res, next) {
+        uploadCapa.single("capa")(
+            req,
+            res,
+            function (error) {
+                if (error) {
+                    tratarErroUpload(
+                        error,
+                        res,
+                        "capa"
+                    );
+                    return;
+                }
+
+                next();
+            }
+        );
+    },
 
     async (req, res) => {
         try {
@@ -1121,6 +1259,11 @@ exports.uploadCapa = [
             );
 
             console.log(
+                "📦 MIME:",
+                req.file.mimetype
+            );
+
+            console.log(
                 "📦 Tamanho:",
                 req.file.size
             );
@@ -1139,8 +1282,19 @@ exports.uploadCapa = [
             const capaUrl =
                 resultadoCloudinary.secure_url;
 
+            if (!capaUrl) {
+                throw new Error(
+                    "Cloudinary não retornou a URL da capa."
+                );
+            }
+
+            console.log(
+                "☁️ URL CLOUDINARY:",
+                capaUrl
+            );
+
             // =================================================
-            // SALVAR NO CAMPO CAPA
+            // SALVAR NO POSTGRESQL
             // =================================================
 
             const atualizado =
@@ -1181,25 +1335,29 @@ exports.uploadCapa = [
             );
 
             console.log(
-                "✅ CAPA SALVA NO CLOUDINARY:"
+                "========================================"
+            );
+
+            console.log(
+                "✅ CAPA SALVA NO CLOUDINARY"
             );
 
             console.log(
                 capaUrl
             );
 
+            console.log(
+                "========================================"
+            );
+
             res.json({
                 sucesso: true,
-
                 mensagem:
                     "Capa atualizada com sucesso.",
-
                 capa: capaUrl,
-
                 restaurante:
                     resposta,
             });
-
         } catch (error) {
             console.error(
                 "❌ ERRO AO ENVIAR CAPA:",
@@ -1285,7 +1443,6 @@ exports.deleteCapa = async (req, res) => {
             restaurante:
                 resposta,
         });
-
     } catch (error) {
         console.error(
             "❌ ERRO AO REMOVER CAPA:",
@@ -1359,13 +1516,10 @@ exports.delete = async (req, res) => {
 
         res.json({
             sucesso: true,
-
             mensagem:
                 "Restaurante excluído com sucesso.",
-
             ...resultado,
         });
-
     } catch (error) {
         console.error(
             "❌ ERRO AO EXCLUIR RESTAURANTE:",
@@ -1383,7 +1537,7 @@ exports.delete = async (req, res) => {
 };
 
 // ============================================================
-// EXPORTAR MIDDLEWARES CASO AS ROTAS UTILIZEM
+// EXPORTAR MIDDLEWARES
 // ============================================================
 
 exports.uploadLogoMiddleware =
@@ -1391,3 +1545,4 @@ exports.uploadLogoMiddleware =
 
 exports.uploadCapaMiddleware =
     uploadCapa;
+
