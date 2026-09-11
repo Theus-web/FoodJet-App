@@ -1049,162 +1049,111 @@ function parseDados(valor) {
 
 // ============================================================
 // PIX
+// AGORA O PEDIDO SÓ É CRIADO PELO WEBHOOK ASAAS
 // ============================================================
 
 async function gerarPix(req, res) {
-
-    let pedido = null;
-
     try {
+        const usuario = await buscarUsuarioAutenticado(req);
+        const body = req.body || {};
 
-        const usuario =
-            await buscarUsuarioAutenticado(req);
+        // NÃO CRIA PEDIDO AQUI
+        const referencia = gerarReferenciaCheckout(usuario.id);
 
-        const body =
-            req.body || {};
-
-        const resultadoPedido =
-            await criarPedidoSeNecessario(
-                usuario,
-                body
-            );
-
-        pedido =
-            resultadoPedido.pedido;
-
-        validarClienteDoPedido(
-            pedido,
-            usuario
+        const valorFinal = validarValor(
+            body.valor ?? body.total
         );
 
-        const referencia =
-            obterReferencia(pedido);
+        const dadosCliente = prepararDadosCliente(usuario, body);
+        validarDadosCliente(dadosCliente);
 
-        const valorFinal =
-            validarValor(
-                body.valor ??
-                pedido.total
-            );
+        // Salva os dados do pedido temporariamente
+        const checkout = {
+            clienteId: String(usuario.id),
+            restauranteId: String(
+                body.restauranteId || body.restaurantId
+            ),
+            itens: Array.isArray(body.itens) ? body.itens : [],
+            endereco: body.endereco || {},
+            pagamento: "PIX",
+            subtotal: Number(body.subtotal ?? valorFinal),
+            taxaServico: Number(body.taxaServico ?? 0),
+            taxaEntrega: Number(body.taxaEntrega ?? 0),
+            total: valorFinal,
+            precisaTroco: false,
+            trocoPara: null,
+            valorTroco: 0,
+            status: "AGUARDANDO_RESTAURANTE",
+            pagamentoStatus: "PENDENTE",
+            statusPagamento: "pending",
+            pagamentoAprovado: false,
+            checkoutCriadoEm: new Date().toISOString(),
+        };
 
-        const dadosCliente =
-            prepararDadosCliente(
-                usuario,
-                body
-            );
+        // Guarda o checkout na tabela pagamentos_asaas
+        await salvarCheckoutPendente({
+            referencia,
+            usuario,
+            checkout,
+        });
 
-        validarDadosCliente(
-            dadosCliente
-        );
+        console.log("💾 CHECKOUT PIX SALVO:", referencia);
 
-        const pagamento =
-            await criarPix({
-
-                valor:
-                    valorFinal,
-
-                email:
-                    dadosCliente.email,
-
-                referencia,
-
-                descricao:
-                    `Pedido FoodJet #${referencia}`,
-
-                nome:
-                    dadosCliente.nomeCliente,
-
-                cpf:
-                    dadosCliente.documento,
-
-                telefone:
-                    dadosCliente.telefoneCliente,
-
-                usuarioId:
-                    String(usuario.id),
-            });
+        const pagamento = await criarPix({
+            valor: valorFinal,
+            email: dadosCliente.email,
+            referencia,
+            descricao: `Pedido FoodJet PIX ${referencia}`,
+            nome: dadosCliente.nomeCliente,
+            cpf: dadosCliente.documento,
+            telefone: dadosCliente.telefoneCliente,
+            usuarioId: String(usuario.id),
+        });
 
         if (!pagamento?.id) {
-            throw new Error(
-                "O Asaas não retornou o ID da cobrança."
-            );
+            throw new Error("O Asaas não retornou o ID da cobrança PIX.");
         }
 
-        pedido =
-            await vincularPagamentoAoPedido(
-                pedido,
-                pagamento
-            );
+        // Atualiza o checkout com o ID do pagamento Asaas
+        await vincularCheckoutAoPagamento(referencia, pagamento);
 
-        const pix =
-            await obterQrCodePix(
-                pagamento.id
-            );
+        const pix = await obterQrCodePix(pagamento.id);
 
-        if (
-            !pix ||
-            !pix.payload
-        ) {
+        if (!pix || !pix.payload) {
             throw new Error(
-                "O Asaas criou a cobrança, mas não retornou o código PIX."
+                "O Asaas criou a cobrança, mas não retornou o QR Code PIX."
             );
         }
 
         return res.status(201).json({
-
             sucesso: true,
 
-            pagamentoId:
-                pagamento.id,
+            pagamentoId: pagamento.id,
+            paymentId: pagamento.id,
 
-            paymentId:
-                pagamento.id,
-
-            pedidoId:
-                pedido.id,
+            // IMPORTANTE: ainda não existe pedido
+            pedidoId: null,
 
             externalReference:
-                pagamento.externalReference ||
-                referencia,
+                pagamento.externalReference || referencia,
 
-            status:
-                pagamento.status ||
-                "PENDING",
+            status: pagamento.status || "PENDING",
 
-            totalAmount:
-                Number(
-                    pagamento.value ??
-                    valorFinal
-                ),
+            totalAmount: Number(
+                pagamento.value ?? valorFinal
+            ),
 
-            billingType:
-                pagamento.billingType ||
-                "PIX",
+            billingType: "PIX",
 
             pix: {
-
-                qrCode:
-                    pix.payload,
-
-                qrCodeBase64:
-                    pix.encodedImage ||
-                    "",
-
-                ticketUrl:
-                    pix.ticketUrl ||
-                    "",
-
-                expiracao:
-                    pix.expirationDate ||
-                    "",
+                qrCode: pix.payload,
+                qrCodeBase64: pix.encodedImage || "",
+                ticketUrl: pix.ticketUrl || "",
+                expiracao: pix.expirationDate || "",
             },
         });
-
     } catch (erro) {
-
-        console.error(
-            "❌ ERRO GERANDO PIX:",
-            erro?.message || erro
-        );
+        console.error("❌ ERRO GERANDO PIX:", erro);
 
         const status =
             erro?.response?.status >= 400 &&
@@ -1213,18 +1162,13 @@ async function gerarPix(req, res) {
                 : 500;
 
         const mensagem =
-            erro?.response?.data
-                ?.errors?.[0]
-                ?.description ||
-            erro?.message ||
+            erro?.response?.data?.errors?.[0]?.description ||
+            erro.message ||
             "Não foi possível gerar o PIX.";
 
         return res.status(status).json({
-
             sucesso: false,
-
-            erro:
-                mensagem,
+            erro: mensagem,
         });
     }
 }

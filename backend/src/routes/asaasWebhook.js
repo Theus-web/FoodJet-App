@@ -1611,41 +1611,30 @@ async function webhook(
     req,
     res
 ) {
-
     console.log("");
-
     console.log(
         "========================================"
     );
-
     console.log(
         "🔔 FOODJET - ASAAS WEBHOOK"
     );
-
     console.log(
         "========================================"
     );
 
     // ========================================================
-    // TOKEN
+    // VALIDAR TOKEN
     // ========================================================
 
     if (
         !validarTokenWebhook(req)
     ) {
-
         console.error(
             "❌ WEBHOOK ASAAS RECUSADO"
         );
 
-        console.log(
-            "========================================"
-        );
-
         return res.status(401).json({
-
             sucesso: false,
-
             erro:
                 "Token do webhook inválido.",
         });
@@ -1687,6 +1676,11 @@ async function webhook(
     );
 
     console.log(
+        "💳 TIPO:",
+        payment?.billingType
+    );
+
+    console.log(
         "🔖 REFERÊNCIA:",
         payment?.externalReference
     );
@@ -1696,17 +1690,13 @@ async function webhook(
     // ========================================================
 
     if (!evento) {
-
         console.warn(
             "⚠️ Webhook recebido sem evento."
         );
 
         return res.status(200).json({
-
             sucesso: true,
-
             processado: false,
-
             mensagem:
                 "Evento não informado.",
         });
@@ -1720,17 +1710,13 @@ async function webhook(
         !payment ||
         !payment.id
     ) {
-
         console.warn(
             "⚠️ Webhook sem payment.id."
         );
 
         return res.status(200).json({
-
             sucesso: true,
-
             processado: false,
-
             mensagem:
                 "Pagamento não informado.",
         });
@@ -1739,31 +1725,463 @@ async function webhook(
     try {
 
         // ====================================================
-        // PRIMEIRO:
-        // SALVAR/ATUALIZAR O PAGAMENTO
+        // IDENTIFICAR PIX
         // ====================================================
 
-        await salvarPagamentoPendente(
-            payment,
-            evento,
-            null,
-            null
+        const billingType =
+            normalizarId(
+                payment.billingType
+            ).toUpperCase();
+
+        const ehPix =
+            billingType === "PIX";
+
+        console.log(
+            "💠 É PIX:",
+            ehPix ? "SIM" : "NÃO"
         );
 
         // ====================================================
-        // LOCALIZAR PEDIDO EXISTENTE
+        // ====================================================
+        // PIX
+        //
+        // IMPORTANTE:
+        //
+        // O PIX NÃO CRIA PEDIDO ANTES DO PAGAMENTO.
+        //
+        // O pedido só será criado quando o Asaas enviar:
+        //
+        // PAYMENT_RECEIVED
+        // ou
+        // PAYMENT_CONFIRMED
+        //
+        // ====================================================
         // ====================================================
 
-        let resultado =
+        if (
+            ehPix &&
+            (
+                evento ===
+                    "PAYMENT_RECEIVED" ||
+                evento ===
+                    "PAYMENT_CONFIRMED"
+            )
+        ) {
+
+            console.log("");
+            console.log(
+                "========================================"
+            );
+            console.log(
+                "💰 FOODJET - PIX CONFIRMADO"
+            );
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "🆔 ASAAS:",
+                payment.id
+            );
+
+            console.log(
+                "🔖 REFERÊNCIA:",
+                payment.externalReference
+            );
+
+            // ==================================================
+            // 1. ATUALIZAR PAGAMENTO ASAAS
+            //
+            // O registro ainda pode não possuir pedido.
+            // ==================================================
+
+            await salvarPagamentoPendente(
+                payment,
+                evento,
+                null,
+                null
+            );
+
+            console.log(
+                "💾 PAGAMENTO PIX REGISTRADO."
+            );
+
+            // ==================================================
+            // 2. VERIFICAR SE JÁ EXISTE PEDIDO
+            //
+            // Isso evita duplicação quando o Asaas reenviar
+            // PAYMENT_RECEIVED / PAYMENT_CONFIRMED.
+            // ==================================================
+
+            const resultadoExistente =
+                await localizarPedido(
+                    payment
+                );
+
+            let pedido =
+                resultadoExistente?.pedido ||
+                null;
+
+            if (pedido) {
+
+                console.log(
+                    "♻️ PEDIDO PIX JÁ EXISTE:",
+                    pedido.id
+                );
+
+                // ----------------------------------------------
+                // Atualizar dados do pagamento
+                // ----------------------------------------------
+
+                pedido =
+                    await atualizarPedido(
+                        pedido,
+                        payment,
+                        evento
+                    );
+
+                // ----------------------------------------------
+                // Garantir vínculo no pagamento
+                // ----------------------------------------------
+
+                await salvarPagamentoPendente(
+                    payment,
+                    evento,
+                    pedido.id,
+                    null
+                );
+
+                // ----------------------------------------------
+                // Socket
+                // ----------------------------------------------
+
+                emitirAtualizacao(
+                    pedido,
+                    evento
+                );
+
+                console.log(
+                    "✅ WEBHOOK PIX JÁ PROCESSADO."
+                );
+
+                return res.status(200).json({
+                    sucesso: true,
+                    processado: true,
+                    pedidoEncontrado: true,
+                    pedidoCriadoAgora: false,
+
+                    pagamentoId:
+                        payment.id,
+
+                    pedidoId:
+                        pedido.id,
+
+                    statusPagamento:
+                        pedido.statusPagamento,
+
+                    statusPedido:
+                        pedido.status,
+                });
+            }
+
+            // ==================================================
+            // 3. PEDIDO NÃO EXISTE
+            //
+            // Agora procuramos o checkout salvo antes da
+            // criação da cobrança PIX.
+            // ==================================================
+
+            console.log(
+                "📦 PEDIDO AINDA NÃO EXISTE."
+            );
+
+            console.log(
+                "🔎 BUSCANDO CHECKOUT PIX..."
+            );
+
+            const checkoutResultado =
+                await buscarCheckoutPendente(
+                    normalizarId(
+                        payment.externalReference
+                    ),
+                    normalizarId(
+                        payment.id
+                    )
+                );
+
+            if (
+                !checkoutResultado ||
+                !checkoutResultado.checkout
+            ) {
+
+                console.error(
+                    "❌ CHECKOUT PIX NÃO ENCONTRADO."
+                );
+
+                console.error(
+                    "🔖 REFERÊNCIA:",
+                    payment.externalReference
+                );
+
+                console.error(
+                    "🆔 PAYMENT:",
+                    payment.id
+                );
+
+                /*
+                 * O pagamento já foi confirmado.
+                 *
+                 * Não retornamos erro para o Asaas ficar
+                 * reenviando indefinidamente.
+                 *
+                 * O registro do pagamento permanece salvo.
+                 */
+
+                return res.status(200).json({
+                    sucesso: true,
+                    processado: false,
+
+                    pagamentoRegistrado:
+                        true,
+
+                    pedidoEncontrado:
+                        false,
+
+                    pedidoCriado:
+                        false,
+
+                    pagamentoAprovado:
+                        true,
+
+                    pagamentoId:
+                        payment.id,
+
+                    externalReference:
+                        payment.externalReference ||
+                        "",
+                });
+            }
+
+            const checkout =
+                checkoutResultado.checkout;
+
+            console.log(
+                "✅ CHECKOUT PIX ENCONTRADO."
+            );
+
+            console.log(
+                "👤 CLIENTE:",
+                checkout.clienteId
+            );
+
+            console.log(
+                "🍽️ RESTAURANTE:",
+                checkout.restauranteId
+            );
+
+            console.log(
+                "📦 ITENS:",
+                Array.isArray(
+                    checkout.itens
+                )
+                    ? checkout.itens.length
+                    : 0
+            );
+
+            console.log(
+                "💰 TOTAL:",
+                checkout.total
+            );
+
+            // ==================================================
+            // 4. CRIAR PEDIDO
+            //
+            // SOMENTE AGORA.
+            //
+            // O PIX já foi confirmado pelo Asaas.
+            // ==================================================
+
+            console.log("");
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "💰 PIX RECEBIDO"
+            );
+
+            console.log(
+                "📦 CRIANDO PEDIDO AGORA"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            pedido =
+                await criarPedidoDoCheckout(
+                    checkout,
+                    payment,
+                    evento
+                );
+
+            // ==================================================
+            // 5. VINCULAR PEDIDO AO PAGAMENTO
+            // ==================================================
+
+            await vincularPedidoAoPagamento(
+                normalizarId(
+                    payment.id
+                ),
+
+                normalizarId(
+                    payment.externalReference
+                ),
+
+                pedido.id,
+
+                checkout,
+
+                payment,
+
+                evento
+            );
+
+            // ==================================================
+            // 6. GARANTIR STATUS FINAL DO PEDIDO
+            // ==================================================
+
+            pedido =
+                await atualizarPedido(
+                    pedido,
+                    payment,
+                    evento
+                );
+
+            // ==================================================
+            // 7. SALVAR PAGAMENTO COM pedido_id
+            // ==================================================
+
+            await salvarPagamentoPendente(
+                payment,
+                evento,
+                pedido.id,
+                checkout
+            );
+
+            console.log(
+                "💾 PAGAMENTO VINCULADO AO PEDIDO:",
+                pedido.id
+            );
+
+            // ==================================================
+            // 8. SOCKET
+            //
+            // O RESTAURANTE SÓ RECEBE O NOVO PEDIDO AGORA.
+            // ==================================================
+
+            emitirAtualizacao(
+                pedido,
+                evento
+            );
+
+            console.log("");
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "🎉 PEDIDO PIX CRIADO APÓS PAGAMENTO"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "🆔 PEDIDO:",
+                pedido.id
+            );
+
+            console.log(
+                "🆔 ASAAS:",
+                payment.id
+            );
+
+            console.log(
+                "🔖 REFERÊNCIA:",
+                payment.externalReference
+            );
+
+            console.log(
+                "📊 STATUS ASAAS:",
+                payment.status
+            );
+
+            console.log(
+                "💳 STATUS PAGAMENTO:",
+                pedido.statusPagamento
+            );
+
+            console.log(
+                "📦 STATUS PEDIDO:",
+                pedido.status
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            // ==================================================
+            // 9. RESPOSTA PARA ASAAS
+            // ==================================================
+
+            return res.status(200).json({
+                sucesso: true,
+
+                processado: true,
+
+                pedidoEncontrado:
+                    false,
+
+                pedidoCriadoAgora:
+                    true,
+
+                pagamentoId:
+                    payment.id,
+
+                pedidoId:
+                    pedido.id,
+
+                statusPagamento:
+                    pedido.statusPagamento,
+
+                statusPedido:
+                    pedido.status,
+            });
+        }
+
+        // ====================================================
+        // ====================================================
+        // DEMAIS PAGAMENTOS
+        //
+        // CARTÃO / OUTROS
+        //
+        // NÃO ALTERAR O FLUXO EXISTENTE.
+        // ====================================================
+        // ====================================================
+
+        const resultado =
             await localizarPedido(
                 payment
             );
 
         let pedido =
-            resultado.pedido;
+            resultado?.pedido ||
+            null;
 
         // ====================================================
-        // SE PEDIDO JÁ EXISTE
+        // PEDIDO JÁ EXISTE
         // ====================================================
 
         if (pedido) {
@@ -1820,14 +2238,15 @@ async function webhook(
             );
 
             return res.status(200).json({
-
                 sucesso: true,
 
                 processado: true,
 
-                pedidoEncontrado: true,
+                pedidoEncontrado:
+                    true,
 
-                pedidoCriadoAgora: false,
+                pedidoCriadoAgora:
+                    false,
 
                 pagamentoId:
                     payment.id,
@@ -1844,24 +2263,6 @@ async function webhook(
         }
 
         // ====================================================
-        // PEDIDO NÃO EXISTE
-        // ====================================================
-
-        console.warn(
-            "⚠️ PEDIDO AINDA NÃO EXISTE NO POSTGRESQL."
-        );
-
-        console.warn(
-            "🔖 REFERÊNCIA:",
-            payment.externalReference
-        );
-
-        console.warn(
-            "🆔 PAYMENT:",
-            payment.id
-        );
-
-        // ====================================================
         // PAGAMENTO AINDA NÃO APROVADO
         // ====================================================
 
@@ -1875,27 +2276,30 @@ async function webhook(
                 "⏳ PAGAMENTO AINDA NÃO APROVADO."
             );
 
-            console.log(
-                "💾 Checkout/pagamento permanecerá pendente."
-            );
-
-            console.log(
-                "========================================"
+            await salvarPagamentoPendente(
+                payment,
+                evento,
+                null,
+                null
             );
 
             return res.status(200).json({
-
                 sucesso: true,
 
-                processado: false,
+                processado:
+                    false,
 
-                pagamentoRegistrado: true,
+                pagamentoRegistrado:
+                    true,
 
-                pedidoEncontrado: false,
+                pedidoEncontrado:
+                    false,
 
-                pedidoCriado: false,
+                pedidoCriado:
+                    false,
 
-                pagamentoAprovado: false,
+                pagamentoAprovado:
+                    false,
 
                 pagamentoId:
                     payment.id,
@@ -1907,28 +2311,18 @@ async function webhook(
         }
 
         // ====================================================
-        // PAGAMENTO APROVADO
+        // CARTÃO / OUTROS APROVADOS
+        //
+        // Mantém o fluxo atual.
         // ====================================================
 
         console.log(
-            "========================================"
+            "💰 PAGAMENTO APROVADO."
         );
 
         console.log(
-            "💰 PAGAMENTO APROVADO"
+            "📦 RECUPERANDO CHECKOUT..."
         );
-
-        console.log(
-            "📦 INICIANDO CRIAÇÃO DO PEDIDO"
-        );
-
-        console.log(
-            "========================================"
-        );
-
-        // ====================================================
-        // RECUPERAR CHECKOUT
-        // ====================================================
 
         const checkoutResultado =
             await buscarCheckoutPendente(
@@ -1941,27 +2335,13 @@ async function webhook(
             );
 
         if (
-            !checkoutResultado
+            !checkoutResultado ||
+            !checkoutResultado.checkout
         ) {
 
             console.error(
                 "❌ CHECKOUT NÃO ENCONTRADO."
             );
-
-            console.error(
-                "🔖 REFERÊNCIA:",
-                payment.externalReference
-            );
-
-            console.error(
-                "🆔 PAYMENT:",
-                payment.id
-            );
-
-            // ------------------------------------------------
-            // Mantemos o pagamento registrado.
-            // Não criamos pedido sem os dados do checkout.
-            // ------------------------------------------------
 
             await salvarPagamentoPendente(
                 payment,
@@ -1971,56 +2351,34 @@ async function webhook(
             );
 
             return res.status(200).json({
-
                 sucesso: true,
 
-                processado: false,
+                processado:
+                    false,
 
-                pagamentoRegistrado: true,
+                pagamentoRegistrado:
+                    true,
 
-                pedidoEncontrado: false,
+                pedidoEncontrado:
+                    false,
 
-                pedidoCriado: false,
+                pedidoCriado:
+                    false,
 
-                erro:
-                    "Pagamento aprovado, mas checkout não encontrado para criação do pedido.",
+                pagamentoAprovado:
+                    true,
+
+                pagamentoId:
+                    payment.id,
+
+                externalReference:
+                    payment.externalReference ||
+                    "",
             });
         }
 
         const checkout =
             checkoutResultado.checkout;
-
-        console.log(
-            "✅ CHECKOUT ENCONTRADO"
-        );
-
-        console.log(
-            "👤 CLIENTE:",
-            checkout.clienteId
-        );
-
-        console.log(
-            "🍽️ RESTAURANTE:",
-            checkout.restauranteId
-        );
-
-        console.log(
-            "📦 ITENS:",
-            Array.isArray(
-                checkout.itens
-            )
-                ? checkout.itens.length
-                : 0
-        );
-
-        console.log(
-            "💰 TOTAL:",
-            checkout.total
-        );
-
-        // ====================================================
-        // CRIAR PEDIDO
-        // ====================================================
 
         pedido =
             await criarPedidoDoCheckout(
@@ -2029,26 +2387,23 @@ async function webhook(
                 evento
             );
 
-        // ====================================================
-        // VINCULAR PAGAMENTO AO PEDIDO
-        // ====================================================
-
         await vincularPedidoAoPagamento(
             normalizarId(
                 payment.id
             ),
+
             normalizarId(
                 payment.externalReference
             ),
+
             pedido.id,
+
             checkout,
+
             payment,
+
             evento
         );
-
-        // ====================================================
-        // GARANTIR DADOS FINAIS NO PEDIDO
-        // ====================================================
 
         pedido =
             await atualizarPedido(
@@ -2057,10 +2412,6 @@ async function webhook(
                 evento
             );
 
-        // ====================================================
-        // SALVAR PAGAMENTO FINAL
-        // ====================================================
-
         await salvarPagamentoPendente(
             payment,
             evento,
@@ -2068,18 +2419,10 @@ async function webhook(
             checkout
         );
 
-        // ====================================================
-        // SOCKET
-        // ====================================================
-
         emitirAtualizacao(
             pedido,
             evento
         );
-
-        // ====================================================
-        // FINAL
-        // ====================================================
 
         console.log(
             "========================================"
@@ -2087,10 +2430,6 @@ async function webhook(
 
         console.log(
             "🎉 WEBHOOK CONCLUÍDO COM SUCESSO"
-        );
-
-        console.log(
-            "========================================"
         );
 
         console.log(
@@ -2104,18 +2443,8 @@ async function webhook(
         );
 
         console.log(
-            "🔖 REFERÊNCIA:",
-            payment.externalReference
-        );
-
-        console.log(
-            "📊 STATUS ASAAS:",
+            "📊 STATUS:",
             payment.status
-        );
-
-        console.log(
-            "💳 STATUS PAGAMENTO:",
-            pedido.statusPagamento
         );
 
         console.log(
@@ -2128,14 +2457,16 @@ async function webhook(
         );
 
         return res.status(200).json({
-
             sucesso: true,
 
-            processado: true,
+            processado:
+                true,
 
-            pedidoEncontrado: false,
+            pedidoEncontrado:
+                false,
 
-            pedidoCriadoAgora: true,
+            pedidoCriadoAgora:
+                true,
 
             pagamentoId:
                 payment.id,
@@ -2183,7 +2514,6 @@ async function webhook(
         );
 
         return res.status(500).json({
-
             sucesso: false,
 
             erro:
