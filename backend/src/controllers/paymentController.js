@@ -156,37 +156,161 @@ async function statusContaAsaas(req, res) {
     }
 }
 
+// ============================================================
+// ENDEREÇO DE COBRANÇA DO CLIENTE
+// IMPORTANTE:
+// NÃO usa body.endereco.
+// Busca exclusivamente os dados retornados pelo PostgreSQL.
+// ============================================================
+
+function obterEnderecoCobrancaDoUsuario(usuario) {
+
+    if (!usuario) {
+        throw new Error(
+            "Cliente não identificado."
+        );
+    }
+
+    let enderecoInterno = {};
+
+    // --------------------------------------------------------
+    // Caso endereco venha como objeto
+    // --------------------------------------------------------
+
+    if (
+        usuario.endereco &&
+        typeof usuario.endereco === "object" &&
+        !Array.isArray(usuario.endereco)
+    ) {
+        enderecoInterno = usuario.endereco;
+    }
+
+    // --------------------------------------------------------
+    // Caso endereco venha como JSON salvo no banco
+    // --------------------------------------------------------
+
+    else if (
+        usuario.endereco &&
+        typeof usuario.endereco === "string"
+    ) {
+
+        try {
+
+            const enderecoConvertido =
+                JSON.parse(usuario.endereco);
+
+            if (
+                enderecoConvertido &&
+                typeof enderecoConvertido === "object"
+            ) {
+                enderecoInterno =
+                    enderecoConvertido;
+            }
+
+        } catch (erro) {
+
+            // Se não for JSON, simplesmente ignora.
+            enderecoInterno = {};
+        }
+    }
+
+    // --------------------------------------------------------
+    // Junta dados do usuário + endereço interno
+    // --------------------------------------------------------
+
+    const origem = {
+        ...usuario,
+        ...enderecoInterno,
+    };
+
+    // --------------------------------------------------------
+    // CEP
+    // --------------------------------------------------------
+
+    const cep =
+        origem.cep ||
+        origem.CEP ||
+        origem.codigoPostal ||
+        origem.codigo_postal ||
+        origem.postalCode ||
+        origem.cepCodigo ||
+        origem.cep_codigo_postal ||
+        origem.enderecoCep ||
+        origem.endereco_cep ||
+        "";
+
+    // --------------------------------------------------------
+    // NÚMERO
+    // --------------------------------------------------------
+
+    const numero =
+        origem.numero ||
+        origem.numeroEndereco ||
+        origem.numero_endereco ||
+        origem.number ||
+        origem.addressNumber ||
+        origem.address_number ||
+        "";
+
+    // --------------------------------------------------------
+    // COMPLEMENTO
+    // --------------------------------------------------------
+
+    const complemento =
+        origem.complemento ||
+        origem.complement ||
+        origem.addressComplement ||
+        origem.address_complement ||
+        origem.enderecoComplemento ||
+        origem.endereco_complemento ||
+        "";
+
+    return {
+
+        cep:
+            String(cep || "")
+                .replace(/\D/g, "")
+                .trim(),
+
+        numero:
+            String(numero || "")
+                .trim(),
+
+        complemento:
+            String(complemento || "")
+                .trim(),
+    };
+}
+
+
 
 
 
 // ============================================================
-// PREPARAR DADOS DO CLIENTE
+// DADOS DO CLIENTE — SEM CONFIAR NO FLUTTER
+// Busca os dados do usuário diretamente do PostgreSQL
 // ============================================================
 
-function prepararDadosCliente(usuario, body = {}) {
+function prepararDadosCliente(usuario) {
 
-    const endereco =
-        body.endereco || {};
+    if (!usuario) {
+        throw new Error(
+            "Cliente não identificado. Faça login novamente."
+        );
+    }
 
     const nomeCliente =
         usuario.nome ||
         usuario.nomeCompleto ||
-        body.nome ||
-        body.nomeCliente ||
-        "Cliente FoodJet";
+        usuario.nome_completo ||
+        "";
 
     const email =
         usuario.email
             ? String(usuario.email)
                 .trim()
                 .toLowerCase()
-            : (
-                body.email
-                    ? String(body.email)
-                        .trim()
-                        .toLowerCase()
-                    : ""
-            );
+            : "";
 
     const telefoneCliente =
         usuario.telefone ||
@@ -194,74 +318,37 @@ function prepararDadosCliente(usuario, body = {}) {
         usuario.phone ||
         usuario.mobilePhone ||
         usuario.telefoneCelular ||
-        body.telefone ||
-        body.celular ||
-        body.phone ||
-        body.mobilePhone ||
-        endereco.telefone ||
-        endereco.celular ||
-        endereco.phone ||
+        usuario.telefone_celular ||
         "";
 
     const cpfCliente =
         usuario.cpf ||
         usuario.cpfCnpj ||
+        usuario.cpf_cnpj ||
         usuario.documento ||
-        body.cpf ||
-        body.cpfCnpj ||
-        body.documento ||
+        usuario.document ||
         "";
 
     const documento =
-        String(cpfCliente)
+        String(cpfCliente || "")
             .replace(/\D/g, "")
             .trim();
 
     return {
+        nomeCliente: String(nomeCliente).trim(),
 
-        nomeCliente:
-            String(nomeCliente).trim(),
-
-        email,
+        email: String(email).trim().toLowerCase(),
 
         telefoneCliente:
-            String(telefoneCliente).trim(),
+            String(telefoneCliente)
+                .replace(/\D/g, "")
+                .trim(),
 
         documento,
     };
 }
 
 
-// ============================================================
-// VALIDAR CLIENTE
-// ============================================================
-
-function validarDadosCliente({
-    email,
-    documento,
-}) {
-
-    if (!email) {
-        throw new Error(
-            "E-mail do cliente não encontrado."
-        );
-    }
-
-    if (!documento) {
-        throw new Error(
-            "CPF não cadastrado. Atualize seu cadastro antes de realizar o pagamento."
-        );
-    }
-
-    if (
-        documento.length !== 11 &&
-        documento.length !== 14
-    ) {
-        throw new Error(
-            "CPF ou CNPJ inválido."
-        );
-    }
-}
 
 
 // ============================================================
@@ -1415,16 +1502,9 @@ async function gerarPix(req, res) {
 }
 
 
+
 // ============================================================
-// CARTÃO DE CRÉDITO
-// ============================================================
-//
-// IMPORTANTE:
-//
-// NÃO CRIA PEDIDO NO POSTGRESQL.
-//
-// Primeiro cria a cobrança no ASAAS.
-// O pedido será criado somente após aprovação.
+// GERAR PAGAMENTO COM CARTÃO
 // ============================================================
 
 async function gerarCartao(req, res) {
@@ -1432,130 +1512,169 @@ async function gerarCartao(req, res) {
     try {
 
         console.log("");
-        console.log(
-            "========================================"
-        );
-        console.log(
-            "💳 POST /pagamentos/cartao"
-        );
-        console.log(
-            "💳 MODO: PAGAR PRIMEIRO / PEDIDO DEPOIS"
-        );
-        console.log(
-            "========================================"
-        );
+        console.log("==============================================");
+        console.log("💳 FOODJET - PAGAMENTO COM CARTÃO");
+        console.log("==============================================");
+
+        // ====================================================
+        // 1. CLIENTE AUTENTICADO PELO JWT
+        // ====================================================
 
         const usuario =
             await buscarUsuarioAutenticado(req);
 
+        console.log(
+            "👤 CLIENTE:",
+            usuario.id
+        );
+
+        // ====================================================
+        // 2. BODY
+        // ====================================================
+
         const body =
             req.body || {};
 
+        // ====================================================
+        // 3. VALOR
+        // ====================================================
+
+        const valorInformado =
+            body.valor !== undefined &&
+            body.valor !== null
+                ? Number(body.valor)
+                : Number(body.total);
+
+        if (
+            !Number.isFinite(valorInformado) ||
+            valorInformado <= 0
+        ) {
+            return res.status(400).json({
+                sucesso: false,
+                erro: "Valor do pagamento inválido.",
+            });
+        }
+
         const valorFinal =
-            validarValor(
-                body.valor ??
-                body.total
-            );
+            Number(valorInformado.toFixed(2));
 
         // ====================================================
-        // CLIENTE
+        // 4. DADOS DO CLIENTE
+        //    TODOS VÊM DO POSTGRESQL
         // ====================================================
-
-        const dadosCliente =
-            prepararDadosCliente(
-                usuario,
-                body
-            );
-
-        validarDadosCliente(
-            dadosCliente
-        );
 
         const {
             nomeCliente,
             email,
             telefoneCliente,
             documento,
-        } = dadosCliente;
+        } =
+            prepararDadosCliente(usuario);
+
+        console.log("👤 NOME:", nomeCliente);
+        console.log("📧 E-MAIL:", email);
+        console.log("📱 TELEFONE:", telefoneCliente);
+        console.log(
+            "📄 DOCUMENTO:",
+            documento ? "OK" : "NÃO ENCONTRADO"
+        );
 
         // ====================================================
-        // TELEFONE
+        // 5. VALIDAR DADOS DO CLIENTE
         // ====================================================
 
-        const telefone =
-            String(
-                telefoneCliente || ""
-            )
-                .replace(/\D/g, "")
-                .trim();
+        validarDadosCliente({
+            email,
+            documento,
+        });
+
+        if (!telefoneCliente) {
+
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "Telefone não cadastrado. Atualize seu cadastro antes de realizar o pagamento.",
+            });
+        }
 
         if (
-            telefone.length < 10 ||
-            telefone.length > 11
+            telefoneCliente.length < 10 ||
+            telefoneCliente.length > 11
         ) {
-            throw new Error(
-                "Número de contato com DDD do titular do cartão é obrigatório."
-            );
+
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "Telefone cadastrado inválido.",
+            });
         }
 
         // ====================================================
-        // ENDEREÇO
+        // 6. ENDEREÇO DE COBRANÇA
+        //
+        // ATENÇÃO:
+        // NÃO USA body.endereco.
+        //
+        // O endereço usado pelo ASAAS vem do PostgreSQL.
         // ====================================================
 
-        const enderecoOriginal =
-            body.endereco || {};
-
-        const endereco = {
-
-            cep:
-                enderecoOriginal.cep ||
-                enderecoOriginal.CEP ||
-                enderecoOriginal.codigoPostal ||
-                enderecoOriginal.postalCode ||
-                "",
-
-            numero:
-                enderecoOriginal.numero ||
-                enderecoOriginal.numeroEndereco ||
-                enderecoOriginal.number ||
-                enderecoOriginal.addressNumber ||
-                "",
-
-            complemento:
-                enderecoOriginal.complemento ||
-                enderecoOriginal.complement ||
-                enderecoOriginal.addressComplement ||
-                "",
-        };
+        const endereco =
+            obterEnderecoCobrancaDoUsuario(
+                usuario
+            );
 
         const cep =
-            String(
-                endereco.cep || ""
-            )
+            String(endereco.cep || "")
                 .replace(/\D/g, "")
                 .trim();
 
-        if (
-            cep.length !== 8
-        ) {
-            throw new Error(
-                "CEP do titular do cartão é obrigatório."
-            );
-        }
-
         const numeroEndereco =
-            String(
-                endereco.numero || ""
-            ).trim();
+            String(endereco.numero || "")
+                .trim();
 
-        if (!numeroEndereco) {
-            throw new Error(
-                "Número do endereço é obrigatório para pagamento com cartão."
-            );
+        const complemento =
+            String(endereco.complemento || "")
+                .trim();
+
+        console.log("🏠 ENDEREÇO ASAAS");
+        console.log("📮 CEP:", cep);
+        console.log("🔢 NÚMERO:", numeroEndereco);
+        console.log(
+            "🏢 COMPLEMENTO:",
+            complemento || "NÃO INFORMADO"
+        );
+
+        // ====================================================
+        // 7. VALIDAR CEP
+        // ====================================================
+
+        if (cep.length !== 8) {
+
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "CEP não cadastrado ou inválido. Atualize seu endereço antes de realizar o pagamento.",
+            });
         }
 
         // ====================================================
-        // CARTÃO
+        // 8. VALIDAR NÚMERO
+        // ====================================================
+
+        if (!numeroEndereco) {
+
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "Número do endereço não cadastrado. Atualize seu endereço antes de realizar o pagamento.",
+            });
+        }
+
+        // ====================================================
+        // 9. DADOS DO CARTÃO
+        //
+        // Estes são os ÚNICOS dados que continuam vindo
+        // do Flutter.
         // ====================================================
 
         const cartao =
@@ -1563,224 +1682,268 @@ async function gerarCartao(req, res) {
 
         const numero =
             String(
-                cartao.numero || ""
+                cartao.numero ||
+                cartao.number ||
+                ""
             )
-                .replace(/\D/g, "");
+                .replace(/\D/g, "")
+                .trim();
+
+        const nomeCartao =
+            String(
+                cartao.nome ||
+                cartao.nomeCartao ||
+                cartao.holderName ||
+                ""
+            )
+                .trim();
+
+        const validade =
+            String(
+                cartao.validade ||
+                cartao.expiry ||
+                ""
+            )
+                .replace(/\D/g, "")
+                .trim();
+
+        const cvv =
+            String(
+                cartao.cvv ||
+                cartao.ccv ||
+                ""
+            )
+                .replace(/\D/g, "")
+                .trim();
+
+        // ====================================================
+        // 10. VALIDAR NÚMERO DO CARTÃO
+        // ====================================================
 
         if (
             numero.length < 13 ||
             numero.length > 19
         ) {
-            throw new Error(
-                "Número do cartão inválido."
-            );
+
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "Número do cartão inválido.",
+            });
         }
 
-        const nomeCartao =
-            String(
-                cartao.nome || ""
-            ).trim();
+        // ====================================================
+        // 11. VALIDAR NOME DO CARTÃO
+        // ====================================================
 
         if (!nomeCartao) {
-            throw new Error(
-                "Nome do titular do cartão é obrigatório."
-            );
+
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "Informe o nome impresso no cartão.",
+            });
         }
 
-        const validade =
-            String(
-                cartao.validade || ""
-            )
-                .replace(/\D/g, "");
+        // ====================================================
+        // 12. VALIDAR VALIDADE
+        // Aceita MMYY ou MM/YY
+        // ====================================================
 
-        if (
-            !/^\d{4}$/.test(validade)
-        ) {
-            throw new Error(
-                "Validade do cartão inválida. Use MM/AA."
-            );
-        }
+        if (validade.length !== 4) {
 
-        const mes =
-            Number(
-                validade.substring(0, 2)
-            );
-
-        if (
-            mes < 1 ||
-            mes > 12
-        ) {
-            throw new Error(
-                "Mês de validade do cartão inválido."
-            );
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "Validade do cartão inválida.",
+            });
         }
 
         const mesExpiracao =
             validade.substring(0, 2);
 
         const anoExpiracao =
-            `20${validade.substring(2, 4)}`;
+            validade.substring(2, 4);
 
-        const cvv =
-            String(
-                cartao.cvv || ""
-            )
-                .replace(/\D/g, "");
+        const mesNumero =
+            Number(mesExpiracao);
+
+        if (
+            mesNumero < 1 ||
+            mesNumero > 12
+        ) {
+
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "Mês de validade do cartão inválido.",
+            });
+        }
+
+        // ====================================================
+        // 13. CVV
+        // ====================================================
 
         if (
             cvv.length < 3 ||
             cvv.length > 4
         ) {
-            throw new Error(
-                "CVV do cartão inválido."
-            );
+
+            return res.status(400).json({
+                sucesso: false,
+                erro:
+                    "CVV inválido.",
+            });
         }
 
         // ====================================================
-        // IP
+        // 14. IP DO CLIENTE
         // ====================================================
-
-        const forwardedFor =
-            req.headers["x-forwarded-for"];
 
         const remoteIp =
-            forwardedFor
-                ? String(
-                    forwardedFor
-                )
-                    .split(",")[0]
-                    .trim()
-                : String(
-                    req.socket?.remoteAddress ||
-                    ""
-                ).trim();
-
-        if (!remoteIp) {
-            throw new Error(
-                "Não foi possível identificar o IP do cliente."
-            );
-        }
+            req.headers["x-forwarded-for"]
+                ?.split(",")[0]
+                ?.trim() ||
+            req.socket?.remoteAddress ||
+            req.ip ||
+            null;
 
         // ====================================================
-        // CHECKOUT
+        // 15. REFERÊNCIA TEMPORÁRIA
+        //
+        // O PEDIDO AINDA NÃO É CRIADO AQUI.
+        // O pagamento é criado primeiro.
         // ====================================================
-
-        const referencia =
-            gerarReferenciaCheckout(
-                usuario.id
-            );
 
         const checkout =
-            prepararCheckoutCartao(
+            await prepararCheckoutCartao(
                 usuario,
                 body,
                 valorFinal
             );
 
-        // ====================================================
-        // SALVAR CHECKOUT ANTES DO ASAAS
-        // ====================================================
-
-        await salvarCheckoutPendente({
-
-            referencia,
-
-            usuario,
-
-            checkout,
-
-        });
+        const referencia =
+            String(
+                checkout.referencia ||
+                checkout.externalReference ||
+                checkout.id ||
+                `FOODJET-${Date.now()}`
+            );
 
         console.log(
-            "🧾 CHECKOUT CRIADO:",
+            "🔖 REFERÊNCIA:",
             referencia
         );
 
-        console.log(
-            "📦 PEDIDO AINDA NÃO FOI CRIADO."
-        );
-
         // ====================================================
-        // ASAAS
+        // 16. CRIAR REGISTRO TEMPORÁRIO DO PAGAMENTO
         // ====================================================
-
-        let pagamento;
 
         try {
 
-            pagamento =
-                await criarCartao({
-
-                    valor:
-                        valorFinal,
-
-                    email,
-
+            await pool.query(
+                `
+                INSERT INTO pagamentos_asaas
+                (
                     referencia,
-
-                    descricao:
-                        `Pagamento FoodJet ${referencia}`,
-
-                    nome:
-                        nomeCliente,
-
-                    cpf:
-                        documento,
-
-                    telefone,
-
-                    usuarioId:
-                        String(usuario.id),
-
-                    cartao: {
-
-                        numero,
-
-                        nome:
-                            nomeCartao,
-
-                        mesExpiracao,
-
-                        anoExpiracao,
-
-                        cvv,
-                    },
-
-                    endereco: {
-
-                        cep,
-
-                        numero:
-                            numeroEndereco,
-
-                        complemento:
-                            endereco.complemento,
-                    },
-
-                    remoteIp,
-                });
-
-        } catch (asaasErro) {
-
-            // O checkout continua registrado apenas
-            // como tentativa, mas nenhum pedido existe.
-
-            console.error(
-                "❌ ASAAS RECUSOU/ERROU A COBRANÇA."
+                    usuario_id,
+                    status,
+                    valor,
+                    metodo
+                )
+                VALUES
+                ($1, $2, $3, $4, $5)
+                ON CONFLICT (referencia)
+                DO UPDATE SET
+                    usuario_id = EXCLUDED.usuario_id,
+                    status = EXCLUDED.status,
+                    valor = EXCLUDED.valor,
+                    metodo = EXCLUDED.metodo
+                `,
+                [
+                    referencia,
+                    usuario.id,
+                    "PENDING",
+                    valorFinal,
+                    "CREDIT_CARD",
+                ]
             );
 
-            throw asaasErro;
-        }
+        } catch (erroBanco) {
 
-        if (!pagamento?.id) {
-
-            throw new Error(
-                "O Asaas não retornou o ID do pagamento com cartão."
+            console.log(
+                "⚠️ Não foi possível registrar pagamento temporário:",
+                erroBanco.message
             );
+
+            // Não interrompe o pagamento caso sua tabela
+            // possua estrutura diferente.
         }
 
         // ====================================================
-        // VINCULAR ASAAS AO CHECKOUT
+        // 17. CRIAR PAGAMENTO NO ASAAS
+        // ====================================================
+
+        console.log(
+            "💳 Enviando pagamento para ASAAS..."
+        );
+
+        const pagamento =
+            await criarCartao({
+
+                valor: valorFinal,
+
+                // Dados vindos do PostgreSQL
+                email,
+
+                referencia,
+
+                descricao:
+                    `Pagamento FoodJet ${referencia}`,
+
+                nome:
+                    nomeCliente,
+
+                cpf:
+                    documento,
+
+                telefone:
+                    telefoneCliente,
+
+                usuarioId:
+                    String(usuario.id),
+
+                // Dados do cartão
+                cartao: {
+
+                    numero,
+
+                    nome:
+                        nomeCartao,
+
+                    mesExpiracao,
+
+                    anoExpiracao,
+
+                    cvv,
+                },
+
+                // ENDEREÇO VINDO DO POSTGRESQL
+                endereco: {
+
+                    cep,
+
+                    numero:
+                        numeroEndereco,
+
+                    complemento,
+                },
+
+                remoteIp,
+            });
+
+        // ====================================================
+        // 18. VINCULAR ASAAS AO CHECKOUT
         // ====================================================
 
         await vincularCheckoutAoPagamento(
@@ -1789,17 +1952,12 @@ async function gerarCartao(req, res) {
         );
 
         console.log(
-            "✅ COBRANÇA ASAAS CRIADA:"
+            "✅ PAGAMENTO ASAAS CRIADO"
         );
 
         console.log(
-            "💳 PAGAMENTO:",
+            "🆔 ASAAS:",
             pagamento.id
-        );
-
-        console.log(
-            "🔖 CHECKOUT:",
-            referencia
         );
 
         console.log(
@@ -1808,106 +1966,70 @@ async function gerarCartao(req, res) {
         );
 
         // ====================================================
-        // IMPORTANTE
-        // ====================================================
+        // 19. RESPOSTA
         //
-        // Não retornamos pedidoId aqui.
-        //
-        // O pedido só existirá depois da aprovação.
+        // pedidoId continua null porque o pedido só será
+        // criado depois da confirmação do pagamento.
         // ====================================================
 
-        return res.status(201).json({
+        return res.status(200).json({
 
             sucesso: true,
 
             pagamentoId:
                 pagamento.id,
 
-            paymentId:
+            id:
                 pagamento.id,
 
             pedidoId:
                 null,
 
-            externalReference:
-                pagamento.externalReference ||
-                referencia,
-
             status:
-                pagamento.status ||
-                "PENDING",
+                pagamento.status,
 
-            totalAmount:
-                Number(
-                    pagamento.value ??
-                    valorFinal
-                ),
+            statusPagamento:
+                pagamento.status,
 
-            billingType:
-                pagamento.billingType ||
+            metodo:
                 "CREDIT_CARD",
 
-            invoiceUrl:
-                pagamento.invoiceUrl ||
-                "",
+            valor:
+                valorFinal,
+
+            mensagem:
+                "Pagamento com cartão enviado para processamento.",
         });
 
     } catch (erro) {
 
         console.error("");
         console.error(
-            "========================================"
-        );
-        console.error(
-            "❌ ERRO GERANDO CARTÃO"
-        );
-        console.error(
-            "========================================"
+            "❌ ERRO AO PROCESSAR CARTÃO"
         );
 
         console.error(
-            erro?.message || erro
-        );
-
-        if (erro?.response?.data) {
-
-            console.error(
-                "ASAAS:",
-                JSON.stringify(
-                    erro.response.data,
-                    null,
-                    2
-                )
-            );
-        }
-
-        const status =
-            erro?.response?.status >= 400 &&
-            erro?.response?.status < 600
-                ? erro.response.status
-                : 500;
-
-        const mensagem =
-            erro?.response?.data
-                ?.errors?.[0]
-                ?.description ||
+            erro?.response?.data ||
             erro?.message ||
-            "Não foi possível gerar o pagamento com cartão.";
+            erro
+        );
 
-        return res.status(status).json({
+        return res.status(
+            erro?.response?.status || 500
+        ).json({
 
             sucesso: false,
 
             erro:
-                mensagem,
-
-            detalhe:
-                erro?.response?.data
-                    ?.errors ||
-                null,
+                erro?.response?.data?.errors?.[0]?.description ||
+                erro?.response?.data?.message ||
+                erro?.message ||
+                "Erro ao processar pagamento com cartão.",
         });
     }
 }
+
+
 
 
 // ============================================================

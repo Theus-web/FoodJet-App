@@ -21,75 +21,33 @@ class OrderTrackingScreen extends StatefulWidget {
       _OrderTrackingScreenState();
 }
 
-class _OrderTrackingScreenState
-    extends State<OrderTrackingScreen> {
-
-  // =====================================================
-  // TIMER DE FALLBACK
-  // =====================================================
-
+class _OrderTrackingScreenState extends State<OrderTrackingScreen> {
   Timer? timer;
-
-  // =====================================================
-  // SOCKET.IO
-  // =====================================================
-
   IO.Socket? socket;
 
   bool socketConectado = false;
-
-  // =====================================================
-  // ESTADO DA TELA
-  // =====================================================
-
   bool carregando = true;
-
-  String statusPedido =
-      'AGUARDANDO_RESTAURANTE';
-
-  Map<String, dynamic>? pedido;
-
   bool buscando = false;
 
-  // =====================================================
-  // INIT
-  // =====================================================
+  // IMPORTANTE:
+  // Assim que o pedido chegar nesta tela, o estado inicial
+  // já será "Aguardando confirmação do restaurante".
+  String statusPedido = 'AGUARDANDO_RESTAURANTE';
+
+  Map<String, dynamic>? pedido;
 
   @override
   void initState() {
     super.initState();
 
-    print(
-      '==============================================',
-    );
-
-    print(
-      '📦 ORDER TRACKING INICIADO',
-    );
-
-    print(
-      '📦 PEDIDO: ${widget.pedidoId}',
-    );
-
-    print(
-      '==============================================',
-    );
-
-    // =================================================
-    // BUSCA INICIAL
-    // =================================================
+    debugPrint('==============================================');
+    debugPrint('📦 ORDER TRACKING INICIADO');
+    debugPrint('📦 PEDIDO: ${widget.pedidoId}');
+    debugPrint('📦 STATUS INICIAL: AGUARDANDO_RESTAURANTE');
+    debugPrint('==============================================');
 
     buscarPedido();
-
-    // =================================================
-    // SOCKET.IO
-    // =================================================
-
     conectarSocket();
-
-    // =================================================
-    // POLLING DE SEGURANÇA
-    // =================================================
 
     timer = Timer.periodic(
       const Duration(seconds: 3),
@@ -99,72 +57,25 @@ class _OrderTrackingScreenState
     );
   }
 
-  // =====================================================
-  // DISPOSE
-  // =====================================================
-
   @override
   void dispose() {
-
     timer?.cancel();
-
     desconectarSocket();
-
     super.dispose();
   }
 
-  // =====================================================
-  // CONECTAR SOCKET.IO
-  // =====================================================
+  // ============================================================
+  // SOCKET.IO
+  // ============================================================
 
   void conectarSocket() {
-
     try {
-
-      print('');
-      print(
-        '==============================================',
-      );
-
-      print(
-        '🔌 CONECTANDO SOCKET.IO',
-      );
-
-      print(
-        '📦 PEDIDO: ${widget.pedidoId}',
-      );
-
-      print(
-        '🌐 SERVIDOR: https://foodjet-backend.onrender.com',
-      );
-
-      print(
-        '==============================================',
-      );
-
-
-      // =================================================
-      // URL DO SOCKET
-      // =================================================
-      //
-      // IMPORTANTE:
-      //
-      // Não colocar /api aqui.
-      //
-      // API:
-      // https://foodjet-backend.onrender.com/api
-      //
-      // SOCKET:
-      // https://foodjet-backend.onrender.com
-      //
-      // =================================================
+      debugPrint('🔌 CONECTANDO SOCKET.IO...');
 
       socket = IO.io(
         'https://foodjet-backend.onrender.com',
         IO.OptionBuilder()
-            .setTransports([
-              'websocket',
-            ])
+            .setTransports(['websocket'])
             .disableAutoConnect()
             .enableReconnection()
             .setReconnectionAttempts(10)
@@ -173,2604 +84,1326 @@ class _OrderTrackingScreenState
             .build(),
       );
 
-
-      // =================================================
-      // CONECTOU
-      // =================================================
-
       socket!.onConnect((_) {
-
-        print('');
-        print(
-          '==============================================',
-        );
-
-        print(
-          '🟢 SOCKET.IO CONECTADO',
-        );
-
-        print(
-          '📦 PEDIDO: ${widget.pedidoId}',
-        );
-
-        print(
-          '==============================================',
-        );
-
+        debugPrint('🟢 SOCKET.IO CONECTADO');
+        debugPrint('📦 PEDIDO: ${widget.pedidoId}');
 
         if (mounted) {
-
           setState(() {
-
             socketConectado = true;
-
           });
-
         }
-
-
-        // =================================================
-        // ENTRAR NA SALA DO PEDIDO
-        // =================================================
-
-        final salaPedido =
-            widget.pedidoId.toString();
-
-        print(
-          '📡 ENTRANDO NA SALA:',
-        );
-
-        print(
-          'pedido_$salaPedido',
-        );
-
 
         socket!.emit(
           'entrar_pedido',
-          salaPedido,
+          widget.pedidoId.toString(),
         );
 
-
-        print(
-          '✅ SALA DO PEDIDO SOLICITADA',
+        debugPrint(
+          '📡 ENTRANDO NA SALA pedido_${widget.pedidoId}',
         );
-
       });
-
-
-      // =================================================
-      // EVENTO DE STATUS DO PEDIDO
-      // =================================================
 
       socket!.on(
         'status_pedido_atualizado',
         (dados) {
+          debugPrint('📡 STATUS DO PEDIDO RECEBIDO VIA SOCKET');
+          debugPrint('📦 $dados');
 
-          print('');
-          print(
-            '==============================================',
-          );
-
-          print(
-            '📡 SOCKET.IO → STATUS PEDIDO',
-          );
-
-          print(
-            '📦 DADOS RECEBIDOS:',
-          );
-
-          print(
-            dados,
-          );
-
-          print(
-            '==============================================',
-          );
-
-
-          processarAtualizacaoSocket(
-            dados,
-          );
-
+          processarAtualizacaoSocket(dados);
         },
       );
-
-
-      // =================================================
-      // CONEXÃO RESTABELECIDA
-      // =================================================
 
       socket!.on(
-        'reconnect',
-        (_) {
+        'pagamento_atualizado',
+        (dados) {
+          debugPrint('💳 PAGAMENTO ATUALIZADO VIA SOCKET');
+          debugPrint('📦 $dados');
 
-          print(
-            '🔄 SOCKET.IO RECONectado',
-          );
-
-          if (mounted) {
-
-            setState(() {
-
-              socketConectado = true;
-
-            });
-
-          }
-
-          // O onConnect normalmente entra novamente
-          // na sala quando a conexão é restabelecida.
+          // O pagamento pode ser aprovado antes de o pedido
+          // estar disponível. Neste caso o polling continua.
+          buscarPedido();
         },
       );
-
-
-      // =================================================
-      // ERRO DE CONEXÃO
-      // =================================================
 
       socket!.on(
         'connect_error',
         (erro) {
-
-          print(
-            '❌ SOCKET.IO CONNECT ERROR: $erro',
-          );
-
+          debugPrint('❌ SOCKET CONNECT ERROR: $erro');
         },
       );
 
+      socket!.onDisconnect((_) {
+        debugPrint('🔴 SOCKET.IO DESCONECTADO');
 
-      // =================================================
-      // DESCONEXÃO
-      // =================================================
+        if (mounted) {
+          setState(() {
+            socketConectado = false;
+          });
+        }
+      });
 
-      socket!.onDisconnect(
+      socket!.on(
+        'reconnect',
         (_) {
-
-          print(
-            '🔴 SOCKET.IO DESCONECTADO',
-          );
-
-          if (mounted) {
-
-            setState(() {
-
-              socketConectado = false;
-
-            });
-
-          }
-
+          debugPrint('🔄 SOCKET.IO RECONECTADO');
         },
       );
-
-
-      // =================================================
-      // ERRO
-      // =================================================
 
       socket!.on(
         'error',
         (erro) {
-
-          print(
-            '❌ SOCKET.IO ERROR: $erro',
-          );
-
+          debugPrint('❌ SOCKET ERROR: $erro');
         },
       );
 
-
-      // =================================================
-      // CONECTAR
-      // =================================================
-
       socket!.connect();
-
     } catch (erro) {
-
-      print(
+      debugPrint(
         '❌ ERRO AO CONFIGURAR SOCKET.IO: $erro',
       );
 
       if (mounted) {
-
         setState(() {
-
           socketConectado = false;
-
         });
-
       }
-
     }
-
   }
-
-
-  // =====================================================
-  // DESCONECTAR SOCKET.IO
-  // =====================================================
 
   void desconectarSocket() {
-
     try {
+      socket?.off('status_pedido_atualizado');
+      socket?.off('pagamento_atualizado');
+      socket?.off('connect');
+      socket?.off('disconnect');
+      socket?.off('connect_error');
+      socket?.off('reconnect');
+      socket?.off('error');
 
-      if (socket == null) {
-        return;
-      }
-
-      print(
-        '🔌 DESCONECTANDO SOCKET.IO...',
-      );
-
-
-      socket!.off(
-        'status_pedido_atualizado',
-      );
-
-      socket!.off(
-        'connect',
-      );
-
-      socket!.off(
-        'disconnect',
-      );
-
-      socket!.off(
-        'connect_error',
-      );
-
-      socket!.off(
-        'reconnect',
-      );
-
-      socket!.off(
-        'error',
-      );
-
-
-      socket!.disconnect();
-
-      socket!.dispose();
+      socket?.disconnect();
+      socket?.dispose();
 
       socket = null;
-
-      print(
-        '✅ SOCKET.IO DESCONECTADO',
-      );
-
     } catch (erro) {
-
-      print(
-        '⚠️ ERRO AO DESCONECTAR SOCKET.IO: $erro',
+      debugPrint(
+        '⚠️ ERRO AO DESCONECTAR SOCKET: $erro',
       );
-
     }
-
   }
 
+  // ============================================================
+  // EXTRAIR PEDIDO DO SOCKET
+  // ============================================================
 
-  // =====================================================
-  // PROCESSAR ATUALIZAÇÃO DO SOCKET
-  // =====================================================
+  Map<String, dynamic>? extrairPedido(dynamic dados) {
+    if (dados is Map) {
+      final mapa = Map<String, dynamic>.from(dados);
 
-  void processarAtualizacaoSocket(
-    dynamic dados,
-  ) {
+      if (mapa['pedido'] is Map) {
+        return Map<String, dynamic>.from(
+          mapa['pedido'],
+        );
+      }
 
+      if (mapa['order'] is Map) {
+        return Map<String, dynamic>.from(
+          mapa['order'],
+        );
+      }
+
+      if (mapa['data'] is Map) {
+        final data = Map<String, dynamic>.from(
+          mapa['data'],
+        );
+
+        if (data['pedido'] is Map) {
+          return Map<String, dynamic>.from(
+            data['pedido'],
+          );
+        }
+
+        if (data['order'] is Map) {
+          return Map<String, dynamic>.from(
+            data['order'],
+          );
+        }
+
+        return data;
+      }
+
+      return mapa;
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // PROCESSAR SOCKET
+  // ============================================================
+
+  void processarAtualizacaoSocket(dynamic dados) {
     try {
-
-      Map<String, dynamic>? pedidoRecebido;
-
-
-      // =================================================
-      // SOCKET PODE ENVIAR MAP DIRETAMENTE
-      // =================================================
-
-      if (dados is Map) {
-
-        pedidoRecebido =
-            Map<String, dynamic>.from(
-          dados,
-        );
-
-      }
-
-
-      // =================================================
-      // PODE VIR COMO:
-      //
-      // {
-      //   pedido: {...}
-      // }
-      //
-      // =================================================
-
-      if (
-        dados is Map &&
-        dados['pedido'] is Map
-      ) {
-
-        pedidoRecebido =
-            Map<String, dynamic>.from(
-          dados['pedido'],
-        );
-
-      }
-
+      final pedidoRecebido = extrairPedido(dados);
 
       if (pedidoRecebido == null) {
-
-        print(
-          '⚠️ SOCKET: dados do pedido inválidos.',
+        debugPrint(
+          '⚠️ SOCKET: pedido inválido.',
         );
-
         return;
-
       }
-
-
-      // =================================================
-      // CONFERIR ID
-      // =================================================
 
       final idRecebido =
           pedidoRecebido['id'] ??
           pedidoRecebido['pedidoId'] ??
-          pedidoRecebido['pedido_id'];
-
+          pedidoRecebido['pedido_id'] ??
+          pedidoRecebido['orderId'] ??
+          pedidoRecebido['order_id'];
 
       if (idRecebido != null) {
-
-        final idString =
-            idRecebido.toString().trim();
-
-        if (
-          idString !=
-          widget.pedidoId.toString()
-        ) {
-
-          print(
-            '⚠️ SOCKET: atualização de outro pedido ignorada.',
+        if (idRecebido.toString() !=
+            widget.pedidoId.toString()) {
+          debugPrint(
+            '⚠️ SOCKET: pedido diferente ignorado.',
           );
-
-          print(
-            '📦 PEDIDO ESPERADO: ${widget.pedidoId}',
-          );
-
-          print(
-            '📦 PEDIDO RECEBIDO: $idString',
-          );
-
           return;
+        }
+      }
 
+      final statusRecebido = extrairStatus(
+        pedidoRecebido,
+      );
+
+      final novoStatus = normalizarStatus(
+        statusRecebido,
+      );
+
+      debugPrint(
+        '📦 SOCKET STATUS ORIGINAL: $statusRecebido',
+      );
+
+      debugPrint(
+        '📦 SOCKET STATUS NORMALIZADO: $novoStatus',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        pedido = pedidoRecebido;
+        statusPedido = novoStatus;
+        carregando = false;
+      });
+
+      if (novoStatus == 'AGUARDANDO_RESTAURANTE') {
+        debugPrint(
+          '🟠 PEDIDO AGUARDANDO CONFIRMAÇÃO DO RESTAURANTE',
+        );
+      }
+
+      if (novoStatus == 'CONFIRMADO') {
+        debugPrint(
+          '🟢 RESTAURANTE ACEITOU O PEDIDO',
+        );
+      }
+
+      if (novoStatus == 'CANCELADO') {
+        debugPrint(
+          '🔴 PEDIDO CANCELADO/RECUSADO',
+        );
+      }
+    } catch (erro) {
+      debugPrint(
+        '❌ ERRO PROCESSANDO SOCKET: $erro',
+      );
+    }
+  }
+
+  // ============================================================
+  // EXTRAIR STATUS
+  // ============================================================
+
+  dynamic extrairStatus(
+    Map<String, dynamic> dados,
+  ) {
+    final possibilidades = [
+      'status',
+      'statusPedido',
+      'status_pedido',
+      'situacao',
+      'situacaoPedido',
+      'situacao_pedido',
+      'estado',
+    ];
+
+    for (final campo in possibilidades) {
+      if (dados[campo] != null) {
+        return dados[campo];
+      }
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // NORMALIZAR STATUS
+  // ============================================================
+
+  String normalizarStatus(dynamic valor) {
+    if (valor == null) {
+      return 'AGUARDANDO_RESTAURANTE';
+    }
+
+    final status = valor
+        .toString()
+        .trim()
+        .toUpperCase()
+        .replaceAll(' ', '_')
+        .replaceAll('-', '_');
+
+    // ==========================================================
+    // AGUARDANDO RESTAURANTE
+    // ==========================================================
+
+    if ([
+      'AGUARDANDO_RESTAURANTE',
+      'AGUARDANDO_CONFIRMACAO',
+      'AGUARDANDO_CONFIRMAR',
+      'AGUARDANDO_CONFIRMACAO_RESTAURANTE',
+      'AGUARDANDO_CONFIRMAR_RESTAURANTE',
+      'AGUARDANDO_ACEITE',
+      'AGUARDANDO_ACEITACAO',
+      'PENDENTE_RESTAURANTE',
+      'PENDENTE_ACEITACAO',
+      'WAITING_RESTAURANT',
+      'WAITING_CONFIRMATION',
+    ].contains(status)) {
+      return 'AGUARDANDO_RESTAURANTE';
+    }
+
+    // ==========================================================
+    // CONFIRMADO
+    // ==========================================================
+
+    if ([
+      'ACEITO',
+      'ACEITADO',
+      'CONFIRMADO',
+      'CONFIRMADO_RESTAURANTE',
+      'RESTAURANTE_ACEITOU',
+      'PEDIDO_ACEITO',
+      'ACEITO_RESTAURANTE',
+    ].contains(status)) {
+      return 'CONFIRMADO';
+    }
+
+    // ==========================================================
+    // PREPARANDO
+    // ==========================================================
+
+    if ([
+      'EM_PREPARO',
+      'PREPARANDO',
+      'PREPARO',
+      'EM_PREPARACAO',
+    ].contains(status)) {
+      return 'PREPARANDO';
+    }
+
+    // ==========================================================
+    // PRONTO
+    // ==========================================================
+
+    if ([
+      'PRONTO',
+      'PRONTO_PARA_ENTREGA',
+      'AGUARDANDO_ENTREGADOR',
+    ].contains(status)) {
+      return 'PRONTO';
+    }
+
+    // ==========================================================
+    // ENTREGA
+    // ==========================================================
+
+    if ([
+      'SAIU_PARA_ENTREGA',
+      'EM_ENTREGA',
+      'A_CAMINHO',
+      'EM_ROTA',
+    ].contains(status)) {
+      return 'EM_ENTREGA';
+    }
+
+    // ==========================================================
+    // ENTREGUE
+    // ==========================================================
+
+    if ([
+      'ENTREGUE',
+      'FINALIZADO',
+      'CONCLUIDO',
+    ].contains(status)) {
+      return 'ENTREGUE';
+    }
+
+    // ==========================================================
+    // CANCELADO
+    // ==========================================================
+
+    if ([
+      'CANCELADO',
+      'CANCELADA',
+      'CANCELLED',
+      'RECUSADO',
+      'RECUSADA',
+      'REJEITADO',
+      'REJEITADA',
+    ].contains(status)) {
+      return 'CANCELADO';
+    }
+
+    return status;
+  }
+
+  // ============================================================
+  // BUSCAR PEDIDO
+  // ============================================================
+
+  Future<void> buscarPedido() async {
+    if (buscando) return;
+
+    buscando = true;
+
+    try {
+      final url =
+          '${Api.baseUrl}/orders/${widget.pedidoId}';
+
+      debugPrint(
+        '📡 BUSCANDO PEDIDO: $url',
+      );
+
+      final resposta = await http.get(
+        Uri.parse(url),
+      );
+
+      debugPrint(
+        '📡 HTTP PEDIDO: ${resposta.statusCode}',
+      );
+
+      debugPrint(
+        '📦 RESPOSTA: ${resposta.body}',
+      );
+
+      if (resposta.statusCode != 200) {
+        debugPrint(
+          '⚠️ PEDIDO AINDA NÃO DISPONÍVEL: '
+          '${resposta.statusCode}',
+        );
+
+        // Não troca o status inicial.
+        // Continua mostrando:
+        // "Aguardando confirmação do restaurante"
+        if (mounted) {
+          setState(() {
+            carregando = false;
+          });
         }
 
+        return;
       }
 
+      final dados = jsonDecode(
+        resposta.body,
+      );
 
-      // =================================================
-      // STATUS
-      // =================================================
+      Map<String, dynamic>? pedidoRecebido;
 
-      dynamic statusRecebido;
+      if (dados is Map) {
+        final mapa = Map<String, dynamic>.from(
+          dados,
+        );
 
+        if (mapa['pedido'] is Map) {
+          pedidoRecebido =
+              Map<String, dynamic>.from(
+            mapa['pedido'],
+          );
+        } else if (mapa['order'] is Map) {
+          pedidoRecebido =
+              Map<String, dynamic>.from(
+            mapa['order'],
+          );
+        } else if (mapa['data'] is Map) {
+          final data =
+              Map<String, dynamic>.from(
+            mapa['data'],
+          );
 
-      if (
-        pedidoRecebido['status'] != null
-      ) {
-
-        statusRecebido =
-            pedidoRecebido['status'];
-
-      } else if (
-        pedidoRecebido['statusPedido'] != null
-      ) {
-
-        statusRecebido =
-            pedidoRecebido['statusPedido'];
-
-      } else if (
-        pedidoRecebido['situacao'] != null
-      ) {
-
-        statusRecebido =
-            pedidoRecebido['situacao'];
-
+          if (data['pedido'] is Map) {
+            pedidoRecebido =
+                Map<String, dynamic>.from(
+              data['pedido'],
+            );
+          } else {
+            pedidoRecebido = data;
+          }
+        } else {
+          pedidoRecebido = mapa;
+        }
       }
 
+      if (pedidoRecebido == null) {
+        debugPrint(
+          '⚠️ PEDIDO NÃO ENCONTRADO NA RESPOSTA.',
+        );
+
+        if (mounted) {
+          setState(() {
+            carregando = false;
+          });
+        }
+
+        return;
+      }
+
+      final statusRecebido =
+          extrairStatus(
+        pedidoRecebido,
+      );
 
       final novoStatus =
           normalizarStatus(
         statusRecebido,
       );
 
-
-      print(
-        '📦 STATUS SOCKET RECEBIDO: $statusRecebido',
+      debugPrint('==============================================');
+      debugPrint(
+        '📦 PEDIDO ${widget.pedidoId}',
       );
-
-      print(
-        '📦 STATUS SOCKET NORMALIZADO: $novoStatus',
+      debugPrint(
+        '📦 STATUS ORIGINAL: $statusRecebido',
       );
+      debugPrint(
+        '📦 STATUS NORMALIZADO: $novoStatus',
+      );
+      debugPrint('==============================================');
 
-
-      if (!mounted) {
-        return;
-      }
-
-
-      // =================================================
-      // ATUALIZAR IMEDIATAMENTE
-      // =================================================
+      if (!mounted) return;
 
       setState(() {
-
-        pedido =
-            pedidoRecebido;
-
-        statusPedido =
-            novoStatus;
-
+        pedido = pedidoRecebido;
+        statusPedido = novoStatus;
         carregando = false;
-
       });
-
-
-      // =================================================
-      // LOGS
-      // =================================================
-
-      if (
-        novoStatus ==
-        'CONFIRMADO'
-      ) {
-
-        print(
-          '==============================================',
-        );
-
-        print(
-          '✅ RESTAURANTE ACEITOU O PEDIDO!',
-        );
-
-        print(
-          '📦 PEDIDO: ${widget.pedidoId}',
-        );
-
-        print(
-          '==============================================',
-        );
-
-      }
-
-
-      if (
-        novoStatus ==
-        'CANCELADO'
-      ) {
-
-        print(
-          '❌ PEDIDO CANCELADO',
-        );
-
-      }
-
     } catch (erro) {
-
-      print(
-        '❌ ERRO PROCESSANDO SOCKET.IO: $erro',
-      );
-
-    }
-
-  }
-
-
-  // =====================================================
-  // NORMALIZAR STATUS
-  // =====================================================
-
-  String normalizarStatus(
-    dynamic valor,
-  ) {
-
-    if (valor == null) {
-
-      return 'AGUARDANDO_RESTAURANTE';
-
-    }
-
-
-    String status =
-        valor
-            .toString()
-            .trim()
-            .toUpperCase();
-
-
-    // ===================================================
-    // ACEITO
-    // ===================================================
-
-    if (
-      status == 'ACEITO' ||
-      status == 'ACEITADO' ||
-      status == 'CONFIRMADO' ||
-      status == 'CONFIRMADO_RESTAURANTE' ||
-      status == 'RESTAURANTE_ACEITOU'
-    ) {
-
-      return 'CONFIRMADO';
-
-    }
-
-
-    // ===================================================
-    // PREPARAÇÃO
-    // ===================================================
-
-    if (
-      status == 'EM_PREPARO' ||
-      status == 'PREPARANDO'
-    ) {
-
-      return 'PREPARANDO';
-
-    }
-
-
-    // ===================================================
-    // ENTREGA
-    // ===================================================
-
-    if (
-      status == 'SAIU_PARA_ENTREGA' ||
-      status == 'EM_ENTREGA'
-    ) {
-
-      return 'EM_ENTREGA';
-
-    }
-
-
-    // ===================================================
-    // PRONTO
-    // ===================================================
-
-    if (
-      status == 'PRONTO' ||
-      status == 'PRONTO_PARA_ENTREGA'
-    ) {
-
-      return 'PRONTO';
-
-    }
-
-
-    // ===================================================
-    // ENTREGUE
-    // ===================================================
-
-    if (
-      status == 'ENTREGUE'
-    ) {
-
-      return 'ENTREGUE';
-
-    }
-
-
-    // ===================================================
-    // CANCELADO
-    // ===================================================
-
-    if (
-      status == 'CANCELADO' ||
-      status == 'CANCELADA' ||
-      status == 'CANCELLED' ||
-      status == 'RECUSADO'
-    ) {
-
-      return 'CANCELADO';
-
-    }
-
-
-    return status;
-
-  }
-
-
-  // =====================================================
-  // BUSCAR PEDIDO NA API
-  // =====================================================
-
-  Future<void> buscarPedido() async {
-
-    if (buscando) {
-      return;
-    }
-
-
-    buscando = true;
-
-
-    try {
-
-      final url =
-          '${Api.baseUrl}/orders/${widget.pedidoId}';
-
-
-      print(
-        '📡 BUSCANDO PEDIDO: $url',
-      );
-
-
-      final resposta =
-          await http.get(
-        Uri.parse(url),
-      );
-
-
-      print(
-        '📡 STATUS HTTP PEDIDO: ${resposta.statusCode}',
-      );
-
-
-      print(
-        '📦 RESPOSTA PEDIDO: ${resposta.body}',
-      );
-
-
-      if (
-        resposta.statusCode == 200
-      ) {
-
-        final dados =
-            jsonDecode(
-          resposta.body,
-        );
-
-
-        Map<String, dynamic>?
-            pedidoRecebido;
-
-
-        // =================================================
-        // FORMATO:
-        //
-        // { "pedido": {...} }
-        //
-        // =================================================
-
-        if (
-          dados is Map<String, dynamic>
-        ) {
-
-          if (
-            dados['pedido'] is Map
-          ) {
-
-            pedidoRecebido =
-                Map<String, dynamic>.from(
-              dados['pedido'],
-            );
-
-          } else {
-
-            pedidoRecebido =
-                dados;
-
-          }
-
-        }
-
-
-        if (
-          pedidoRecebido == null
-        ) {
-
-          print(
-            '⚠️ PEDIDO NÃO ENCONTRADO NA RESPOSTA',
-          );
-
-
-          if (mounted) {
-
-            setState(() {
-
-              carregando = false;
-
-            });
-
-          }
-
-
-          return;
-
-        }
-
-
-        // =================================================
-        // PEGAR STATUS
-        // =================================================
-
-        dynamic statusRecebido;
-
-
-        if (
-          pedidoRecebido['status'] != null
-        ) {
-
-          statusRecebido =
-              pedidoRecebido['status'];
-
-        } else if (
-          pedidoRecebido['statusPedido'] != null
-        ) {
-
-          statusRecebido =
-              pedidoRecebido['statusPedido'];
-
-        } else if (
-          pedidoRecebido['situacao'] != null
-        ) {
-
-          statusRecebido =
-              pedidoRecebido['situacao'];
-
-        }
-
-
-        final novoStatus =
-            normalizarStatus(
-          statusRecebido,
-        );
-
-
-        print(
-          '==============================================',
-        );
-
-        print(
-          '📦 PEDIDO ${widget.pedidoId}',
-        );
-
-        print(
-          '📦 STATUS RECEBIDO: $statusRecebido',
-        );
-
-        print(
-          '📦 STATUS NORMALIZADO: $novoStatus',
-        );
-
-        print(
-          '==============================================',
-        );
-
-
-        if (!mounted) {
-          return;
-        }
-
-
-        setState(() {
-
-          pedido =
-              pedidoRecebido;
-
-          statusPedido =
-              novoStatus;
-
-          carregando = false;
-
-        });
-
-
-        // =================================================
-        // RESTAURANTE ACEITOU
-        // =================================================
-
-        if (
-          novoStatus ==
-          'CONFIRMADO'
-        ) {
-
-          print(
-            '✅ RESTAURANTE ACEITOU O PEDIDO ${widget.pedidoId}',
-          );
-
-        }
-
-
-        // =================================================
-        // CANCELADO
-        // =================================================
-
-        if (
-          novoStatus ==
-          'CANCELADO'
-        ) {
-
-          print(
-            '❌ PEDIDO ${widget.pedidoId} FOI CANCELADO',
-          );
-
-        }
-
-      } else {
-
-        print(
-          '❌ ERRO HTTP AO BUSCAR PEDIDO: ${resposta.statusCode}',
-        );
-
-
-        if (!mounted) {
-          return;
-        }
-
-
-        setState(() {
-
-          carregando = false;
-
-        });
-
-      }
-
-    } catch (erro) {
-
-      print(
+      debugPrint(
         '❌ ERRO AO BUSCAR PEDIDO: $erro',
       );
 
-
-      if (!mounted) {
-        return;
+      if (mounted) {
+        setState(() {
+          carregando = false;
+        });
       }
-
-
-      setState(() {
-
-        carregando = false;
-
-      });
-
     } finally {
-
       buscando = false;
-
     }
-
   }
 
-
-  // =====================================================
-  // TEXTO DO STATUS PRINCIPAL
-  // =====================================================
+  // ============================================================
+  // TEXTO
+  // ============================================================
 
   String textoStatus() {
-
     switch (statusPedido) {
-
       case 'AGUARDANDO_RESTAURANTE':
-
         return 'Aguardando confirmação do restaurante';
 
-
       case 'CONFIRMADO':
-
         return 'Pedido confirmado pelo restaurante';
 
-
       case 'PREPARANDO':
-
         return 'Restaurante preparando';
 
-
       case 'PRONTO':
-
         return 'Pedido pronto';
 
-
       case 'EM_ENTREGA':
-
         return 'Saiu para entrega';
 
-
       case 'ENTREGUE':
-
         return 'Pedido entregue';
 
-
       case 'CANCELADO':
-
         return 'Pedido cancelado';
 
-
       default:
-
         return statusPedido;
-
     }
-
   }
 
-
-  // =====================================================
-  // ÍCONE DO STATUS
-  // =====================================================
+  // ============================================================
+  // ÍCONE
+  // ============================================================
 
   IconData iconeStatus() {
-
     switch (statusPedido) {
-
       case 'AGUARDANDO_RESTAURANTE':
-
-        return Icons.receipt_long;
-
+        return Icons.hourglass_top_rounded;
 
       case 'CONFIRMADO':
-
         return Icons.check_circle;
 
-
       case 'PREPARANDO':
-
         return Icons.restaurant;
 
-
       case 'PRONTO':
-
         return Icons.inventory_2;
 
-
       case 'EM_ENTREGA':
-
         return Icons.delivery_dining;
 
-
       case 'ENTREGUE':
-
         return Icons.done_all;
 
-
       case 'CANCELADO':
-
         return Icons.cancel;
 
-
       default:
-
         return Icons.receipt_long;
-
     }
-
   }
 
-
-  // =====================================================
-  // COR DO STATUS
-  // =====================================================
+  // ============================================================
+  // COR
+  // ============================================================
 
   Color corStatus() {
-
     switch (statusPedido) {
-
       case 'ENTREGUE':
-
         return Colors.green;
-
 
       case 'CANCELADO':
-
         return Colors.red;
 
-
       case 'EM_ENTREGA':
-
         return Colors.blue;
 
-
       case 'PREPARANDO':
-
         return Colors.orange;
 
-
       case 'PRONTO':
-
         return Colors.green;
-
 
       case 'CONFIRMADO':
-
         return Colors.green;
 
-
       default:
-
         return const Color(0xFFF97316);
-
     }
-
   }
 
-
-  // =====================================================
+  // ============================================================
   // STATUS ATIVO
-  // =====================================================
+  // ============================================================
 
-  bool statusAtivo(
-    String status,
-  ) {
-
+  bool statusAtivo(String status) {
     final ordem = [
-
       'AGUARDANDO_RESTAURANTE',
-
       'CONFIRMADO',
-
       'PREPARANDO',
-
       'PRONTO',
-
       'EM_ENTREGA',
-
       'ENTREGUE',
-
     ];
 
-
-    final atual =
-        ordem.indexOf(
-      statusPedido,
-    );
-
-
-    final item =
-        ordem.indexOf(
-      status,
-    );
-
-
-    if (
-      statusPedido ==
-      'CANCELADO'
-    ) {
-
+    if (statusPedido == 'CANCELADO') {
       return false;
-
     }
 
+    final atual = ordem.indexOf(statusPedido);
+    final item = ordem.indexOf(status);
 
-    if (
-      atual == -1 ||
-      item == -1
-    ) {
-
+    if (atual == -1 || item == -1) {
       return false;
-
     }
-
 
     return item <= atual;
-
   }
 
+  // ============================================================
+  // PREÇO
+  // ============================================================
 
-  // =====================================================
-  // FORMATAR PREÇO
-  // =====================================================
-
-  String formatarPreco(
-    double valor,
-  ) {
-
-    return
-        'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
-
+  String formatarPreco(double valor) {
+    return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
   }
 
-
-  // =====================================================
+  // ============================================================
   // BUILD
-  // =====================================================
+  // ============================================================
 
   @override
-  Widget build(
-    BuildContext context,
-  ) {
-
-    const laranja =
-        Color(0xFFF97316);
-
+  Widget build(BuildContext context) {
+    const laranja = Color(0xFFF97316);
 
     return Scaffold(
-
-      backgroundColor:
-          const Color(0xFFF5F5F5),
-
-
-      // =================================================
-      // APP BAR
-      // =================================================
+      backgroundColor: const Color(0xFFF5F5F5),
 
       appBar: AppBar(
-
-        backgroundColor:
-            laranja,
-
-        foregroundColor:
-            Colors.white,
-
+        backgroundColor: laranja,
+        foregroundColor: Colors.white,
         title: const Text(
-
           'Acompanhar Pedido',
-
           style: TextStyle(
-
-            fontWeight:
-                FontWeight.bold,
-
+            fontWeight: FontWeight.bold,
           ),
-
         ),
-
         actions: [
-
-          // =============================================
-          // INDICADOR SOCKET
-          // =============================================
-
           Padding(
-
-            padding:
-                const EdgeInsets.only(
+            padding: const EdgeInsets.only(
               right: 15,
             ),
-
             child: Row(
-
               children: [
-
                 Container(
-
                   width: 9,
-
                   height: 9,
-
-                  decoration:
-                      BoxDecoration(
-
-                    color:
-                        socketConectado
-                            ? Colors.greenAccent
-                            : Colors.white54,
-
-                    shape:
-                        BoxShape.circle,
-
+                  decoration: BoxDecoration(
+                    color: socketConectado
+                        ? Colors.greenAccent
+                        : Colors.white54,
+                    shape: BoxShape.circle,
                   ),
-
                 ),
-
-                const SizedBox(
-                  width: 6,
-                ),
-
+                const SizedBox(width: 6),
                 Text(
-
                   socketConectado
                       ? 'ONLINE'
                       : 'OFFLINE',
-
-                  style:
-                      const TextStyle(
-
-                    fontSize:
-                        10,
-
-                    fontWeight:
-                        FontWeight.bold,
-
+                  style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
                   ),
-
                 ),
-
               ],
-
             ),
-
           ),
-
         ],
-
       ),
 
-
-      // =================================================
-      // BODY
-      // =================================================
-
       body: carregando
-
           ? const Center(
-
-              child:
-                  CircularProgressIndicator(),
-
+              child: CircularProgressIndicator(),
             )
-
           : RefreshIndicator(
-
-              onRefresh:
-                  buscarPedido,
-
-              child:
-                  SingleChildScrollView(
-
+              onRefresh: buscarPedido,
+              child: SingleChildScrollView(
                 physics:
                     const AlwaysScrollableScrollPhysics(),
-
                 padding:
-                    const EdgeInsets.all(
-                  20,
-                ),
-
-                child:
-                    Column(
-
+                    const EdgeInsets.all(20),
+                child: Column(
                   crossAxisAlignment:
                       CrossAxisAlignment.start,
-
                   children: [
+                    _cardStatus(),
 
-                    // ===================================
-                    // STATUS PRINCIPAL
-                    // ===================================
-
-                    Card(
-
-                      color:
-                          Colors.white,
-
-                      elevation:
-                          1,
-
-                      shape:
-                          RoundedRectangleBorder(
-
-                        borderRadius:
-                            BorderRadius.circular(
-                          20,
-                        ),
-
-                      ),
-
-                      child:
-                          Padding(
-
-                        padding:
-                            const EdgeInsets.all(
-                          20,
-                        ),
-
-                        child:
-                            Column(
-
-                          children: [
-
-                            Container(
-
-                              width:
-                                  90,
-
-                              height:
-                                  90,
-
-                              decoration:
-                                  BoxDecoration(
-
-                                color:
-                                    corStatus()
-                                        .withValues(
-                                  alpha:
-                                      .10,
-                                ),
-
-                                shape:
-                                    BoxShape.circle,
-
-                              ),
-
-                              child:
-                                  Icon(
-
-                                iconeStatus(),
-
-                                size:
-                                    50,
-
-                                color:
-                                    corStatus(),
-
-                              ),
-
-                            ),
-
-
-                            const SizedBox(
-                              height: 15,
-                            ),
-
-
-                            Text(
-
-                              textoStatus(),
-
-                              textAlign:
-                                  TextAlign.center,
-
-                              style:
-                                  TextStyle(
-
-                                fontSize:
-                                    23,
-
-                                fontWeight:
-                                    FontWeight.bold,
-
-                                color:
-                                    corStatus(),
-
-                              ),
-
-                            ),
-
-
-                            const SizedBox(
-                              height: 8,
-                            ),
-
-
-                            Text(
-
-                              'Pedido #${widget.pedidoId}',
-
-                              style:
-                                  const TextStyle(
-
-                                color:
-                                    Colors.grey,
-
-                                fontSize:
-                                    16,
-
-                              ),
-
-                            ),
-
-
-                            // =================================
-                            // PEDIDO CONFIRMADO
-                            // =================================
-
-                            if (
-                              statusPedido ==
-                              'CONFIRMADO'
-                            ) ...[
-
-                              const SizedBox(
-                                height: 18,
-                              ),
-
-
-                              Container(
-
-                                width:
-                                    double.infinity,
-
-                                padding:
-                                    const EdgeInsets.all(
-                                  14,
-                                ),
-
-                                decoration:
-                                    BoxDecoration(
-
-                                  color:
-                                      const Color(
-                                    0xFFECFDF5,
-                                  ),
-
-                                  borderRadius:
-                                      BorderRadius.circular(
-                                    15,
-                                  ),
-
-                                  border:
-                                      Border.all(
-
-                                    color:
-                                        const Color(
-                                      0xFFBBF7D0,
-                                    ),
-
-                                  ),
-
-                                ),
-
-                                child:
-                                    const Row(
-
-                                  children: [
-
-                                    Icon(
-
-                                      Icons.check_circle,
-
-                                      color:
-                                          Color(
-                                        0xFF16A34A,
-                                      ),
-
-                                      size:
-                                          28,
-
-                                    ),
-
-                                    SizedBox(
-                                      width: 12,
-                                    ),
-
-                                    Expanded(
-
-                                      child:
-                                          Column(
-
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-
-                                        children: [
-
-                                          Text(
-
-                                            'Pedido aceito!',
-
-                                            style:
-                                                TextStyle(
-
-                                              color:
-                                                  Color(
-                                                0xFF15803D,
-                                              ),
-
-                                              fontWeight:
-                                                  FontWeight.bold,
-
-                                              fontSize:
-                                                  14,
-
-                                            ),
-
-                                          ),
-
-                                          SizedBox(
-                                            height: 3,
-                                          ),
-
-                                          Text(
-
-                                            'O restaurante aceitou seu pedido e vai começar a preparar.',
-
-                                            style:
-                                                TextStyle(
-
-                                              color:
-                                                  Colors.black87,
-
-                                              fontSize:
-                                                  12,
-
-                                            ),
-
-                                          ),
-
-                                        ],
-
-                                      ),
-
-                                    ),
-
-                                  ],
-
-                                ),
-
-                              ),
-
-                            ],
-
-
-                            // =================================
-                            // EM ENTREGA
-                            // =================================
-
-                            if (
-                              statusPedido ==
-                              'EM_ENTREGA'
-                            ) ...[
-
-                              const SizedBox(
-                                height: 18,
-                              ),
-
-
-                              Container(
-
-                                width:
-                                    double.infinity,
-
-                                padding:
-                                    const EdgeInsets.all(
-                                  14,
-                                ),
-
-                                decoration:
-                                    BoxDecoration(
-
-                                  color:
-                                      const Color(
-                                    0xFFEFF6FF,
-                                  ),
-
-                                  borderRadius:
-                                      BorderRadius.circular(
-                                    15,
-                                  ),
-
-                                  border:
-                                      Border.all(
-
-                                    color:
-                                        const Color(
-                                      0xFFBFDBFE,
-                                    ),
-
-                                  ),
-
-                                ),
-
-                                child:
-                                    const Row(
-
-                                  children: [
-
-                                    Icon(
-
-                                      Icons.delivery_dining,
-
-                                      color:
-                                          Color(
-                                        0xFF2563EB,
-                                      ),
-
-                                      size:
-                                          28,
-
-                                    ),
-
-                                    SizedBox(
-                                      width: 12,
-                                    ),
-
-                                    Expanded(
-
-                                      child:
-                                          Column(
-
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-
-                                        children: [
-
-                                          Text(
-
-                                            'Seu pedido está a caminho!',
-
-                                            style:
-                                                TextStyle(
-
-                                              color:
-                                                  Color(
-                                                0xFF1D4ED8,
-                                              ),
-
-                                              fontWeight:
-                                                  FontWeight.bold,
-
-                                              fontSize:
-                                                  14,
-
-                                            ),
-
-                                          ),
-
-                                          SizedBox(
-                                            height: 3,
-                                          ),
-
-                                          Text(
-
-                                            'O entregador está levando seu pedido até você.',
-
-                                            style:
-                                                TextStyle(
-
-                                              color:
-                                                  Colors.black87,
-
-                                              fontSize:
-                                                  12,
-
-                                            ),
-
-                                          ),
-
-                                        ],
-
-                                      ),
-
-                                    ),
-
-                                  ],
-
-                                ),
-
-                              ),
-
-                            ],
-
-                          ],
-
-                        ),
-
-                      ),
-
-                    ),
-
-
-                    const SizedBox(
-                      height: 20,
-                    ),
-
-
-                    // ===================================
-                    // TÍTULO
-                    // ===================================
+                    const SizedBox(height: 20),
 
                     const Text(
-
                       'Status do pedido',
-
-                      style:
-                          TextStyle(
-
-                        fontSize:
-                            20,
-
-                        fontWeight:
-                            FontWeight.bold,
-
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
                       ),
-
                     ),
 
+                    const SizedBox(height: 15),
 
-                    const SizedBox(
-                      height: 15,
-                    ),
+                    _timeline(),
 
+                    const SizedBox(height: 20),
 
-                    // ===================================
-                    // LINHA DO TEMPO
-                    // ===================================
+                    if (pedido != null)
+                      _informacoesPedido(),
 
-                    Card(
-
-                      color:
-                          Colors.white,
-
-                      elevation:
-                          1,
-
-                      shape:
-                          RoundedRectangleBorder(
-
-                        borderRadius:
-                            BorderRadius.circular(
-                          20,
-                        ),
-
-                      ),
-
-                      child:
-                          Padding(
-
-                        padding:
-                            const EdgeInsets.all(
-                          20,
-                        ),
-
-                        child:
-                            Column(
-
-                          children: [
-
-                            _statusItem(
-
-                              titulo:
-                                  'Aguardando confirmação do restaurante',
-
-                              status:
-                                  'AGUARDANDO_RESTAURANTE',
-
-                              icone:
-                                  Icons.receipt_long,
-
-                              primeiro:
-                                  true,
-
-                            ),
-
-
-                            _statusItem(
-
-                              titulo:
-                                  'Pedido confirmado',
-
-                              status:
-                                  'CONFIRMADO',
-
-                              icone:
-                                  Icons.check_circle,
-
-                            ),
-
-
-                            _statusItem(
-
-                              titulo:
-                                  'Restaurante preparando',
-
-                              status:
-                                  'PREPARANDO',
-
-                              icone:
-                                  Icons.restaurant,
-
-                            ),
-
-
-                            _statusItem(
-
-                              titulo:
-                                  'Pedido pronto',
-
-                              status:
-                                  'PRONTO',
-
-                              icone:
-                                  Icons.inventory_2,
-
-                            ),
-
-
-                            _statusEntrega(),
-
-
-                            _statusItem(
-
-                              titulo:
-                                  'Pedido entregue',
-
-                              status:
-                                  'ENTREGUE',
-
-                              icone:
-                                  Icons.done_all,
-
-                              ultimo:
-                                  true,
-
-                            ),
-
-                          ],
-
-                        ),
-
-                      ),
-
-                    ),
-
-
-                    const SizedBox(
-                      height: 20,
-                    ),
-
-
-                    // ===================================
-                    // INFORMAÇÕES
-                    // ===================================
-
-                    if (
-                      pedido != null
-                    )
-
-                      Card(
-
-                        color:
-                            Colors.white,
-
-                        elevation:
-                            1,
-
-                        shape:
-                            RoundedRectangleBorder(
-
-                          borderRadius:
-                              BorderRadius.circular(
-                            20,
-                          ),
-
-                        ),
-
-                        child:
-                            Padding(
-
-                          padding:
-                              const EdgeInsets.all(
-                            20,
-                          ),
-
-                          child:
-                              Column(
-
-                            crossAxisAlignment:
-                                CrossAxisAlignment.start,
-
-                            children: [
-
-                              const Text(
-
-                                'Informações do pedido',
-
-                                style:
-                                    TextStyle(
-
-                                  fontSize:
-                                      18,
-
-                                  fontWeight:
-                                      FontWeight.bold,
-
-                                ),
-
-                              ),
-
-
-                              const SizedBox(
-                                height: 15,
-                              ),
-
-
-                              if (
-                                pedido!['total'] !=
-                                null
-                              )
-
-                                Row(
-
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-
-                                  children: [
-
-                                    const Text(
-
-                                      'Total',
-
-                                      style:
-                                          TextStyle(
-
-                                        color:
-                                            Colors.grey,
-
-                                      ),
-
-                                    ),
-
-
-                                    Text(
-
-                                      formatarPreco(
-
-                                        double.tryParse(
-
-                                              pedido![
-                                                      'total']
-                                                  .toString(),
-
-                                            ) ??
-                                            0,
-
-                                      ),
-
-                                      style:
-                                          const TextStyle(
-
-                                        fontWeight:
-                                            FontWeight.bold,
-
-                                        fontSize:
-                                            18,
-
-                                      ),
-
-                                    ),
-
-                                  ],
-
-                                ),
-
-
-                              const SizedBox(
-                                height: 12,
-                              ),
-
-
-                              if (
-                                pedido![
-                                      'pagamento'] !=
-                                    null
-                              )
-
-                                Row(
-
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-
-                                  children: [
-
-                                    const Text(
-
-                                      'Pagamento',
-
-                                      style:
-                                          TextStyle(
-
-                                        color:
-                                            Colors.grey,
-
-                                      ),
-
-                                    ),
-
-
-                                    Text(
-
-                                      pedido![
-                                              'pagamento']
-                                          .toString(),
-
-                                      style:
-                                          const TextStyle(
-
-                                        fontWeight:
-                                            FontWeight.bold,
-
-                                      ),
-
-                                    ),
-
-                                  ],
-
-                                ),
-
-                            ],
-
-                          ),
-
-                        ),
-
-                      ),
-
-
-                    const SizedBox(
-                      height: 25,
-                    ),
-
-
-                    // ===================================
-                    // BOTÃO
-                    // ===================================
+                    const SizedBox(height: 25),
 
                     SizedBox(
-
-                      width:
-                          double.infinity,
-
-                      child:
-                          ElevatedButton.icon(
-
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
                         onPressed:
                             buscando
                                 ? null
                                 : buscarPedido,
-
-                        icon:
-                            const Icon(
+                        icon: const Icon(
                           Icons.refresh,
                         ),
-
-                        label:
-                            Text(
-
+                        label: Text(
                           buscando
                               ? 'ATUALIZANDO...'
                               : 'ATUALIZAR PEDIDO',
-
                         ),
-
                         style:
                             ElevatedButton.styleFrom(
-
                           backgroundColor:
                               laranja,
-
                           foregroundColor:
                               Colors.white,
-
                           padding:
                               const EdgeInsets.symmetric(
-
-                            vertical:
-                                16,
-
+                            vertical: 16,
                           ),
-
                           shape:
                               RoundedRectangleBorder(
-
                             borderRadius:
                                 BorderRadius.circular(
                               12,
                             ),
-
                           ),
-
                         ),
-
                       ),
-
                     ),
-
                   ],
-
                 ),
-
               ),
-
             ),
-
     );
-
   }
 
+  // ============================================================
+  // CARD PRINCIPAL
+  // ============================================================
 
-  // =====================================================
-  // STATUS ESPECIAL - ENTREGA
-  // =====================================================
-
-  Widget _statusEntrega() {
-
-    if (
-      statusPedido !=
-      'EM_ENTREGA'
-    ) {
-
-      return _statusItem(
-
-        titulo:
-            'Saiu para entrega',
-
-        status:
-            'EM_ENTREGA',
-
-        icone:
-            Icons.delivery_dining,
-
-      );
-
-    }
-
-
-    return Container(
-
-      width:
-          double.infinity,
-
-      margin:
-          const EdgeInsets.symmetric(
-        vertical: 8,
-      ),
-
-      padding:
-          const EdgeInsets.all(
-        16,
-      ),
-
-      decoration:
-          BoxDecoration(
-
-        color:
-            const Color(
-          0xFFEFF6FF,
-        ),
-
+  Widget _cardStatus() {
+    return Card(
+      color: Colors.white,
+      elevation: 1,
+      shape: RoundedRectangleBorder(
         borderRadius:
-            BorderRadius.circular(
-          18,
-        ),
-
-        border:
-            Border.all(
-
-          color:
-              const Color(
-            0xFFBFDBFE,
-          ),
-
-          width:
-              1,
-
-        ),
-
+            BorderRadius.circular(20),
       ),
+      child: Padding(
+        padding:
+            const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                color: corStatus().withValues(
+                  alpha: .10,
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                iconeStatus(),
+                size: 50,
+                color: corStatus(),
+              ),
+            ),
 
-      child:
-          Column(
+            const SizedBox(height: 15),
 
+            Text(
+              textoStatus(),
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 23,
+                fontWeight:
+                    FontWeight.bold,
+                color: corStatus(),
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            Text(
+              'Pedido #${widget.pedidoId}',
+              style: const TextStyle(
+                color: Colors.grey,
+                fontSize: 16,
+              ),
+            ),
+
+            if (statusPedido ==
+                'AGUARDANDO_RESTAURANTE')
+              _cardAguardando(),
+
+            if (statusPedido ==
+                'CONFIRMADO')
+              _cardConfirmado(),
+
+            if (statusPedido ==
+                'EM_ENTREGA')
+              _cardEntrega(),
+
+            if (statusPedido ==
+                'CANCELADO')
+              _cardCancelado(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // AGUARDANDO
+  // ============================================================
+
+  Widget _cardAguardando() {
+    return Container(
+      width: double.infinity,
+      margin:
+          const EdgeInsets.only(top: 18),
+      padding:
+          const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFFF7ED),
+        borderRadius:
+            BorderRadius.circular(15),
+        border: Border.all(
+          color: const Color(0xFFFED7AA),
+        ),
+      ),
+      child: const Row(
         children: [
-
-          Container(
-
-            width:
-                64,
-
-            height:
-                64,
-
-            decoration:
-                const BoxDecoration(
-
-              color:
-                  Color(
-                0xFF2563EB,
-              ),
-
-              shape:
-                  BoxShape.circle,
-
-            ),
-
-            child:
-                const Icon(
-
-              Icons.delivery_dining,
-
-              color:
-                  Colors.white,
-
-              size:
-                  34,
-
-            ),
-
+          Icon(
+            Icons.storefront,
+            color: Color(0xFFF97316),
+            size: 28,
           ),
-
-
-          const SizedBox(
-            height: 12,
-          ),
-
-
-          const Text(
-
-            'Saiu para entrega!',
-
-            textAlign:
-                TextAlign.center,
-
-            style:
-                TextStyle(
-
-              fontSize:
-                  20,
-
-              fontWeight:
-                  FontWeight.bold,
-
-              color:
-                  Color(
-                0xFF1D4ED8,
-              ),
-
-            ),
-
-          ),
-
-
-          const SizedBox(
-            height: 5,
-          ),
-
-
-          const Text(
-
-            'Seu pedido está a caminho.',
-
-            textAlign:
-                TextAlign.center,
-
-            style:
-                TextStyle(
-
-              fontSize:
-                  14,
-
-              color:
-                  Colors.black87,
-
-            ),
-
-          ),
-
-
-          const SizedBox(
-            height: 14,
-          ),
-
-
-          Container(
-
-            width:
-                double.infinity,
-
-            padding:
-                const EdgeInsets.symmetric(
-
-              horizontal:
-                  12,
-
-              vertical:
-                  11,
-
-            ),
-
-            decoration:
-                BoxDecoration(
-
-              color:
-                  Colors.white,
-
-              borderRadius:
-                  BorderRadius.circular(
-                12,
-              ),
-
-            ),
-
-            child:
-                const Row(
-
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
-
-                Icon(
-
-                  Icons.location_on_outlined,
-
-                  color:
-                      Color(
-                    0xFF2563EB,
-                  ),
-
-                  size:
-                      20,
-
-                ),
-
-                SizedBox(
-                  width: 8,
-                ),
-
-                Expanded(
-
-                  child:
-                      Text(
-
-                    'O entregador está levando seu pedido até você.',
-
-                    style:
-                        TextStyle(
-
-                      fontSize:
-                          13,
-
-                      color:
-                          Colors.black87,
-
-                    ),
-
-                  ),
-
-                ),
-
-              ],
-
-            ),
-
-          ),
-
-
-          const SizedBox(
-            height: 12,
-          ),
-
-
-          Container(
-
-            padding:
-                const EdgeInsets.symmetric(
-
-              horizontal:
-                  12,
-
-              vertical:
-                  7,
-
-            ),
-
-            decoration:
-                BoxDecoration(
-
-              color:
-                  const Color(
-                0xFFDBEAFE,
-              ),
-
-              borderRadius:
-                  BorderRadius.circular(
-                20,
-              ),
-
-            ),
-
-            child:
-                const Row(
-
-              mainAxisSize:
-                  MainAxisSize.min,
-
-              children: [
-
-                Icon(
-
-                  Icons.access_time_rounded,
-
-                  size:
-                      16,
-
-                  color:
-                      Color(
-                    0xFF1D4ED8,
-                  ),
-
-                ),
-
-                SizedBox(
-                  width: 6,
-                ),
-
                 Text(
-
-                  'Em rota de entrega',
-
-                  style:
-                      TextStyle(
-
-                    color:
-                        Color(
-                      0xFF1D4ED8,
-                    ),
-
-                    fontSize:
-                        12,
-
+                  'Pedido enviado!',
+                  style: TextStyle(
+                    color: Color(0xFFC2410C),
                     fontWeight:
                         FontWeight.bold,
-
+                    fontSize: 14,
                   ),
-
                 ),
-
+                SizedBox(height: 4),
+                Text(
+                  'Estamos aguardando o restaurante confirmar seu pedido.',
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 12,
+                  ),
+                ),
               ],
-
             ),
-
           ),
-
         ],
-
       ),
-
     );
-
   }
 
+  // ============================================================
+  // CONFIRMADO
+  // ============================================================
 
-  // =====================================================
-  // ITEM DA LINHA DO TEMPO
-  // =====================================================
-
-  Widget _statusItem({
-
-    required String titulo,
-
-    required String status,
-
-    required IconData icone,
-
-    bool primeiro = false,
-
-    bool ultimo = false,
-
-  }) {
-
-    final ativo =
-        statusAtivo(
-      status,
+  Widget _cardConfirmado() {
+    return Container(
+      width: double.infinity,
+      margin:
+          const EdgeInsets.only(top: 18),
+      padding:
+          const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFECFDF5),
+        borderRadius:
+            BorderRadius.circular(15),
+        border: Border.all(
+          color: const Color(0xFFBBF7D0),
+        ),
+      ),
+      child: const Row(
+        children: [
+          Icon(
+            Icons.check_circle,
+            color: Color(0xFF16A34A),
+            size: 28,
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Pedido aceito!',
+                  style: TextStyle(
+                    color: Color(0xFF15803D),
+                    fontWeight:
+                        FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'O restaurante aceitou seu pedido e vai começar a preparar.',
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
+  }
 
+  // ============================================================
+  // ENTREGA
+  // ============================================================
 
-    const laranja =
-        Color(
-      0xFFF97316,
+  Widget _cardEntrega() {
+    return Container(
+      width: double.infinity,
+      margin:
+          const EdgeInsets.only(top: 18),
+      padding:
+          const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEFF6FF),
+        borderRadius:
+            BorderRadius.circular(15),
+        border: Border.all(
+          color: const Color(0xFFBFDBFE),
+        ),
+      ),
+      child: const Row(
+        children: [
+          Icon(
+            Icons.delivery_dining,
+            color: Color(0xFF2563EB),
+            size: 28,
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Seu pedido está a caminho!',
+                  style: TextStyle(
+                    color: Color(0xFF1D4ED8),
+                    fontWeight:
+                        FontWeight.bold,
+                    fontSize: 14,
+                  ),
+                ),
+                SizedBox(height: 3),
+                Text(
+                  'O entregador está levando seu pedido até você.',
+                  style: TextStyle(
+                    color: Colors.black87,
+                    fontSize: 12,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
+  }
 
+  // ============================================================
+  // CANCELADO
+  // ============================================================
 
-    return Row(
+  Widget _cardCancelado() {
+    return Container(
+      width: double.infinity,
+      margin:
+          const EdgeInsets.only(top: 18),
+      padding:
+          const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEF2F2),
+        borderRadius:
+            BorderRadius.circular(15),
+        border: Border.all(
+          color: const Color(0xFFFECACA),
+        ),
+      ),
+      child: const Row(
+        children: [
+          Icon(
+            Icons.cancel,
+            color: Colors.red,
+            size: 28,
+          ),
+          SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Este pedido foi cancelado ou recusado.',
+              style: TextStyle(
+                color: Colors.red,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-      crossAxisAlignment:
-          CrossAxisAlignment.start,
+  // ============================================================
+  // TIMELINE
+  // ============================================================
 
-      children: [
-
-        Column(
-
+  Widget _timeline() {
+    return Card(
+      color: Colors.white,
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding:
+            const EdgeInsets.all(20),
+        child: Column(
           children: [
-
-            Container(
-
-              width:
-                  45,
-
-              height:
-                  45,
-
-              decoration:
-                  BoxDecoration(
-
-                shape:
-                    BoxShape.circle,
-
-                color:
-                    ativo
-                        ? laranja
-                        : Colors.grey.shade300,
-
-              ),
-
-              child:
-                  Icon(
-
-                icone,
-
-                color:
-                    ativo
-                        ? Colors.white
-                        : Colors.grey,
-
-                size:
-                    22,
-
-              ),
-
+            _statusItem(
+              titulo:
+                  'Aguardando confirmação do restaurante',
+              status:
+                  'AGUARDANDO_RESTAURANTE',
+              icone:
+                  Icons.hourglass_top_rounded,
             ),
 
+            _statusItem(
+              titulo:
+                  'Pedido confirmado',
+              status: 'CONFIRMADO',
+              icone:
+                  Icons.check_circle,
+            ),
+
+            _statusItem(
+              titulo:
+                  'Restaurante preparando',
+              status: 'PREPARANDO',
+              icone:
+                  Icons.restaurant,
+            ),
+
+            _statusItem(
+              titulo:
+                  'Pedido pronto',
+              status: 'PRONTO',
+              icone:
+                  Icons.inventory_2,
+            ),
+
+            _statusItem(
+              titulo:
+                  'Saiu para entrega',
+              status: 'EM_ENTREGA',
+              icone:
+                  Icons.delivery_dining,
+            ),
+
+            _statusItem(
+              titulo:
+                  'Pedido entregue',
+              status: 'ENTREGUE',
+              icone:
+                  Icons.done_all,
+              ultimo: true,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // INFORMAÇÕES
+  // ============================================================
+
+  Widget _informacoesPedido() {
+    final total = double.tryParse(
+          (pedido!['total'] ??
+                  pedido!['valor'] ??
+                  pedido!['valorTotal'] ??
+                  0)
+              .toString(),
+        ) ??
+        0;
+
+    final pagamento =
+        pedido!['pagamento'] ??
+            pedido!['formaPagamento'] ??
+            pedido!['forma_pagamento'];
+
+    return Card(
+      color: Colors.white,
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius:
+            BorderRadius.circular(20),
+      ),
+      child: Padding(
+        padding:
+            const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Informações do pedido',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight:
+                    FontWeight.bold,
+              ),
+            ),
+
+            const SizedBox(height: 15),
+
+            Row(
+              mainAxisAlignment:
+                  MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Total',
+                  style: TextStyle(
+                    color: Colors.grey,
+                  ),
+                ),
+                Text(
+                  formatarPreco(total),
+                  style: const TextStyle(
+                    fontWeight:
+                        FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+              ],
+            ),
+
+            if (pagamento != null) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment:
+                    MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Pagamento',
+                    style: TextStyle(
+                      color: Colors.grey,
+                    ),
+                  ),
+                  Text(
+                    pagamento.toString(),
+                    style: const TextStyle(
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // ITEM TIMELINE
+  // ============================================================
+
+  Widget _statusItem({
+    required String titulo,
+    required String status,
+    required IconData icone,
+    bool ultimo = false,
+  }) {
+    final ativo =
+        statusAtivo(status);
+
+    const laranja =
+        Color(0xFFF97316);
+
+    return Row(
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Container(
+              width: 45,
+              height: 45,
+              decoration:
+                  BoxDecoration(
+                shape:
+                    BoxShape.circle,
+                color: ativo
+                    ? laranja
+                    : Colors.grey.shade300,
+              ),
+              child: Icon(
+                icone,
+                color: ativo
+                    ? Colors.white
+                    : Colors.grey,
+                size: 22,
+              ),
+            ),
 
             if (!ultimo)
-
               Container(
-
-                width:
-                    2,
-
-                height:
-                    45,
-
-                color:
-                    ativo
-                        ? laranja
-                        : Colors.grey.shade300,
-
+                width: 2,
+                height: 45,
+                color: ativo
+                    ? laranja
+                    : Colors.grey.shade300,
               ),
-
           ],
-
         ),
 
-
-        const SizedBox(
-          width: 15,
-        ),
-
+        const SizedBox(width: 15),
 
         Expanded(
-
-          child:
-              Padding(
-
+          child: Padding(
             padding:
                 const EdgeInsets.only(
               top: 10,
             ),
-
-            child:
-                Text(
-
+            child: Text(
               titulo,
-
-              style:
-                  TextStyle(
-
-                fontSize:
-                    16,
-
-                fontWeight:
-                    ativo
-                        ? FontWeight.bold
-                        : FontWeight.normal,
-
-                color:
-                    ativo
-                        ? Colors.black
-                        : Colors.grey,
-
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: ativo
+                    ? FontWeight.bold
+                    : FontWeight.normal,
+                color: ativo
+                    ? Colors.black
+                    : Colors.grey,
               ),
-
             ),
-
           ),
-
         ),
-
       ],
-
     );
-
   }
-
 }
 

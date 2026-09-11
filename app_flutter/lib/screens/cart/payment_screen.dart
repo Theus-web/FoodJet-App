@@ -1309,6 +1309,7 @@ class _PixCheckoutPageState
   }
 }
 
+
 // ============================================================
 // CARTÃO DE CRÉDITO
 // ============================================================
@@ -1340,6 +1341,7 @@ class CardPaymentPage extends StatefulWidget {
 
 class _CardPaymentPageState
     extends State<CardPaymentPage> {
+
   final formKey =
       GlobalKey<FormState>();
 
@@ -1357,9 +1359,9 @@ class _CardPaymentPageState
 
   bool carregando = false;
 
-  Timer? timer;
-
   bool navegandoPedido = false;
+
+  Timer? timer;
 
   double get totalPedido {
     return widget.subtotal +
@@ -1379,6 +1381,10 @@ class _CardPaymentPageState
     super.dispose();
   }
 
+  // ============================================================
+  // TOKEN
+  // ============================================================
+
   Future<String?> obterToken() async {
     final prefs =
         await SharedPreferences.getInstance();
@@ -1388,6 +1394,10 @@ class _CardPaymentPageState
         prefs.getString("access_token") ??
         prefs.getString("auth_token");
   }
+
+  // ============================================================
+  // VALIDADE
+  // ============================================================
 
   bool validadeExpirada(
     String validade,
@@ -1435,12 +1445,12 @@ class _CardPaymentPageState
   // ============================================================
 
   Future<void> pagar() async {
+
     if (carregando) {
       return;
     }
 
-    if (!formKey.currentState!
-        .validate()) {
+    if (!formKey.currentState!.validate()) {
       return;
     }
 
@@ -1463,12 +1473,23 @@ class _CardPaymentPageState
 
     if (numero.length < 13 ||
         numero.length > 19) {
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            "Número do cartão inválido.",
+          ),
+        ),
+      );
+
       return;
     }
 
     if (!RegExp(
       r'^\d{2}\/\d{2}$',
     ).hasMatch(validade)) {
+
       ScaffoldMessenger.of(context)
           .showSnackBar(
         const SnackBar(
@@ -1477,10 +1498,12 @@ class _CardPaymentPageState
           ),
         ),
       );
+
       return;
     }
 
     if (validadeExpirada(validade)) {
+
       ScaffoldMessenger.of(context)
           .showSnackBar(
         const SnackBar(
@@ -1489,11 +1512,22 @@ class _CardPaymentPageState
           ),
         ),
       );
+
       return;
     }
 
     if (cvv.length < 3 ||
         cvv.length > 4) {
+
+      ScaffoldMessenger.of(context)
+          .showSnackBar(
+        const SnackBar(
+          content: Text(
+            "CVV inválido.",
+          ),
+        ),
+      );
+
       return;
     }
 
@@ -1502,54 +1536,107 @@ class _CardPaymentPageState
     });
 
     try {
+
       final token =
           await obterToken();
 
       if (token == null ||
           token.isEmpty) {
+
         throw Exception(
           "Sessão expirada. Faça login novamente.",
         );
       }
 
+      // ========================================================
+      // BODY
+      //
+      // CPF, telefone, e-mail e endereço de cobrança NÃO são
+      // enviados pelo Flutter.
+      //
+      // O backend pega esses dados do PostgreSQL através do JWT.
+      // ========================================================
+
       final body = {
-        "valor": totalPedido,
-        "total": totalPedido,
-        "subtotal": widget.subtotal,
-        "taxaEntrega": widget.taxaEntrega,
-        "taxaServico": widget.taxaServico,
+
+        "valor":
+            totalPedido,
+
+        "total":
+            totalPedido,
+
+        "subtotal":
+            widget.subtotal,
+
+        "taxaEntrega":
+            widget.taxaEntrega,
+
+        "taxaServico":
+            widget.taxaServico,
+
         "restauranteId":
             widget.restauranteId,
+
+        // Se já existir, envia.
+        // Se não existir, o backend mantém payment-first.
         "pedidoId":
             widget.pedidoId,
+
+        // Este endereço é o endereço de ENTREGA.
+        // O backend NÃO deve usar esse campo como
+        // endereço de cobrança do cartão.
         "endereco":
             widget.endereco,
+
         "itens":
             prepararItens(),
+
         "formaPagamento":
             "CREDITO",
+
         "pagamento":
             "CREDITO",
+
         "cartao": {
-          "numero": numero,
+
+          "numero":
+              numero,
+
           "nome":
               nomeController.text.trim(),
-          "validade": validade,
-          "cvv": cvv,
+
+          "validade":
+              validade,
+
+          "cvv":
+              cvv,
         },
       };
 
+      debugPrint("");
       debugPrint(
         "========================================",
       );
       debugPrint(
-        "💳 PAGAMENTO CARTAO",
+        "💳 FOODJET - PAGAMENTO CARTÃO",
       );
       debugPrint(
-        "💳 ENVIANDO PAGAMENTO",
+        "========================================",
       );
       debugPrint(
-        "💳 DADOS DO CARTAO: NAO EXIBIDOS",
+        "💰 VALOR: ${totalPedido.toStringAsFixed(2)}",
+      );
+      debugPrint(
+        "🏪 RESTAURANTE: ${widget.restauranteId}",
+      );
+      debugPrint(
+        "📦 PEDIDO INFORMADO: ${widget.pedidoId}",
+      );
+      debugPrint(
+        "🔐 DADOS CADASTRAIS: BUSCADOS PELO BACKEND",
+      );
+      debugPrint(
+        "💳 CARTÃO: ENVIADO",
       );
       debugPrint(
         "========================================",
@@ -1561,8 +1648,10 @@ class _CardPaymentPageState
           "${Api.baseUrl}/pagamentos/cartao",
         ),
         headers: {
+
           "Content-Type":
               "application/json",
+
           "Authorization":
               "Bearer $token",
         },
@@ -1570,14 +1659,39 @@ class _CardPaymentPageState
             jsonEncode(body),
       );
 
-      final dados =
-          jsonDecode(
-        response.body,
+      debugPrint(
+        "💳 CARTÃO HTTP: ${response.statusCode}",
       );
+
+      Map<String, dynamic> dados;
+
+      try {
+
+        final decoded =
+            jsonDecode(
+          response.body,
+        );
+
+        if (decoded is! Map) {
+          throw Exception();
+        }
+
+        dados =
+            Map<String, dynamic>.from(
+          decoded,
+        );
+
+      } catch (_) {
+
+        throw Exception(
+          "Resposta inválida do servidor.",
+        );
+      }
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300 ||
           dados["sucesso"] != true) {
+
         throw Exception(
           dados["erro"] ??
               dados["mensagem"] ??
@@ -1585,62 +1699,90 @@ class _CardPaymentPageState
         );
       }
 
-      final pagamentoId =
-          dados["pagamentoId"]
-                  ?.toString() ??
-              dados["paymentId"]
-                  ?.toString();
+      // ========================================================
+      // PEDIDO RETORNADO IMEDIATAMENTE
+      // ========================================================
 
       final pedidoRetornado =
-          dados["pedidoId"] ??
-              dados["orderId"];
-
-      final pedidoNumero =
-          int.tryParse(
-        pedidoRetornado
-                ?.toString() ??
-            "",
+          extrairPedidoId(
+        dados,
       );
 
-      if (pedidoNumero != null) {
-        if (!mounted) {
-          return;
-        }
+      debugPrint(
+        "📦 PEDIDO RETORNADO: $pedidoRetornado",
+      );
 
-        await abrirAcompanhamento(
-          pedidoNumero,
+      if (pedidoRetornado != null) {
+
+        final pedidoNumero =
+            int.tryParse(
+          pedidoRetornado,
         );
 
-        return;
+        if (pedidoNumero != null) {
+
+          debugPrint(
+            "✅ PEDIDO JÁ EXISTE: $pedidoNumero",
+          );
+
+          await abrirAcompanhamento(
+            pedidoNumero,
+          );
+
+          return;
+        }
       }
+
+      // ========================================================
+      // PAGAMENTO ID
+      // ========================================================
+
+      final pagamentoId =
+          extrairPagamentoId(
+        dados,
+      );
+
+      debugPrint(
+        "💳 PAGAMENTO ID: $pagamentoId",
+      );
 
       if (pagamentoId == null ||
           pagamentoId.isEmpty) {
+
         throw Exception(
           "O pagamento foi enviado, mas o servidor não retornou o ID do pagamento.",
         );
       }
 
-      if (!mounted) {
-        return;
+      // ========================================================
+      // AVISAR USUÁRIO
+      // ========================================================
+
+      if (mounted) {
+
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
+          const SnackBar(
+            backgroundColor:
+                Color(0xFFF97316),
+            content: Text(
+              "Pagamento aprovado! Aguardando confirmação do restaurante...",
+            ),
+          ),
+        );
       }
 
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          backgroundColor:
-              Color(0xFFF97316),
-          content: Text(
-            "Pagamento enviado! Aguardando confirmação.",
-          ),
-        ),
-      );
+      // ========================================================
+      // COMEÇAR POLLING
+      // ========================================================
 
       await aguardarPagamento(
         pagamentoId,
         token,
       );
+
     } catch (e) {
+
       if (!mounted) {
         return;
       }
@@ -1657,8 +1799,11 @@ class _CardPaymentPageState
           ),
         ),
       );
+
     } finally {
+
       if (mounted) {
+
         setState(() {
           carregando = false;
         });
@@ -1667,99 +1812,500 @@ class _CardPaymentPageState
   }
 
   // ============================================================
-  // AGUARDAR CARTÃO
+  // EXTRAIR PAGAMENTO ID
+  // ============================================================
+
+  String? extrairPagamentoId(
+    Map<String, dynamic> dados,
+  ) {
+
+    final valores = [
+
+      dados["pagamentoId"],
+
+      dados["paymentId"],
+
+      dados["asaasPaymentId"],
+
+      dados["asaas_id"],
+
+      dados["id"],
+
+      if (dados["pagamento"] is Map)
+        (dados["pagamento"]
+            as Map)["id"],
+
+      if (dados["payment"] is Map)
+        (dados["payment"]
+            as Map)["id"],
+
+      if (dados["data"] is Map)
+        (dados["data"]
+            as Map)["pagamentoId"],
+
+      if (dados["resultado"] is Map)
+        (dados["resultado"]
+            as Map)["pagamentoId"],
+    ];
+
+    for (final valor in valores) {
+
+      if (valor != null &&
+          valor.toString().trim().isNotEmpty) {
+
+        return valor.toString().trim();
+      }
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // EXTRAIR PEDIDO ID
+  // ============================================================
+
+  String? extrairPedidoId(
+    dynamic dados,
+  ) {
+
+    if (dados == null) {
+      return null;
+    }
+
+    // ========================================================
+    // SE FOR MAP
+    // ========================================================
+
+    if (dados is Map) {
+
+      final valoresDiretos = [
+
+        dados["pedidoId"],
+
+        dados["orderId"],
+
+        dados["pedido_id"],
+
+        dados["order_id"],
+
+        dados["idPedido"],
+
+        dados["id_pedido"],
+      ];
+
+      for (final valor
+          in valoresDiretos) {
+
+        if (valor != null &&
+            valor.toString()
+                .trim()
+                .isNotEmpty) {
+
+          return valor.toString().trim();
+        }
+      }
+
+      // ======================================================
+      // PEDIDO
+      // ======================================================
+
+      final pedido =
+          dados["pedido"];
+
+      final pedidoId =
+          extrairPedidoId(
+        pedido,
+      );
+
+      if (pedidoId != null) {
+        return pedidoId;
+      }
+
+      // ======================================================
+      // ORDER
+      // ======================================================
+
+      final order =
+          dados["order"];
+
+      final orderId =
+          extrairPedidoId(
+        order,
+      );
+
+      if (orderId != null) {
+        return orderId;
+      }
+
+      // ======================================================
+      // PAGAMENTO
+      // ======================================================
+
+      final pagamento =
+          dados["pagamento"];
+
+      final pagamentoPedido =
+          extrairPedidoId(
+        pagamento,
+      );
+
+      if (pagamentoPedido != null) {
+        return pagamentoPedido;
+      }
+
+      // ======================================================
+      // PAYMENT
+      // ======================================================
+
+      final payment =
+          dados["payment"];
+
+      final paymentPedido =
+          extrairPedidoId(
+        payment,
+      );
+
+      if (paymentPedido != null) {
+        return paymentPedido;
+      }
+
+      // ======================================================
+      // CHECKOUT
+      // ======================================================
+
+      final checkout =
+          dados["checkout"];
+
+      final checkoutPedido =
+          extrairPedidoId(
+        checkout,
+      );
+
+      if (checkoutPedido != null) {
+        return checkoutPedido;
+      }
+
+      // ======================================================
+      // DATA
+      // ======================================================
+
+      final data =
+          dados["data"];
+
+      final dataPedido =
+          extrairPedidoId(
+        data,
+      );
+
+      if (dataPedido != null) {
+        return dataPedido;
+      }
+
+      // ======================================================
+      // RESULTADO
+      // ======================================================
+
+      final resultado =
+          dados["resultado"];
+
+      final resultadoPedido =
+          extrairPedidoId(
+        resultado,
+      );
+
+      if (resultadoPedido != null) {
+        return resultadoPedido;
+      }
+    }
+
+    // ========================================================
+    // LISTA
+    // ========================================================
+
+    if (dados is List) {
+
+      for (final item in dados) {
+
+        final id =
+            extrairPedidoId(item);
+
+        if (id != null) {
+          return id;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // AGUARDAR PAGAMENTO
   // ============================================================
 
   Future<void> aguardarPagamento(
     String pagamentoId,
     String token,
   ) async {
-    for (int i = 0; i < 60; i++) {
-      await Future.delayed(
-        const Duration(
-          seconds: 3,
-        ),
-      );
 
-      if (!mounted) {
-        return;
-      }
+    timer?.cancel();
 
-      try {
-        final response =
-            await http.get(
-          Uri.parse(
-            "${Api.baseUrl}/pagamentos/$pagamentoId",
-          ),
-          headers: {
-            "Authorization":
-                "Bearer $token",
-          },
-        );
+    int tentativas = 0;
 
-        if (response.statusCode < 200 ||
-            response.statusCode >= 300) {
-          continue;
-        }
+    // ========================================================
+    // CONSULTAR IMEDIATAMENTE
+    // ========================================================
 
-        final dados =
-            jsonDecode(
-          response.body,
-        );
+    await consultarStatusPagamento(
+      pagamentoId,
+      token,
+    );
 
-        final status =
-            dados["statusPagamento"]
-                ?.toString()
-                .toUpperCase();
-
-        final aprovado =
-            dados["pagamentoAprovado"] ==
-                    true ||
-                status == "APPROVED" ||
-                status == "RECEIVED" ||
-                status == "CONFIRMED";
-
-        if (!aprovado) {
-          continue;
-        }
-
-        final pedidoId =
-            dados["pedidoId"] ??
-                dados["orderId"];
-
-        if (pedidoId == null) {
-          continue;
-        }
-
-        final id =
-            int.tryParse(
-          pedidoId.toString(),
-        );
-
-        if (id == null) {
-          continue;
-        }
-
-        await abrirAcompanhamento(
-          id,
-        );
-
-        return;
-      } catch (_) {}
-    }
-
-    if (!mounted) {
+    if (navegandoPedido) {
       return;
     }
 
-    ScaffoldMessenger.of(context)
-        .showSnackBar(
-      const SnackBar(
-        content: Text(
-          "O pagamento ainda está sendo processado. Verifique novamente em alguns instantes.",
-        ),
-      ),
+    // ========================================================
+    // POLLING
+    // ========================================================
+
+    timer = Timer.periodic(
+      const Duration(seconds: 3),
+      (_) async {
+
+        if (navegandoPedido) {
+          timer?.cancel();
+          return;
+        }
+
+        tentativas++;
+
+        debugPrint(
+          "💳 CARTÃO - CONSULTA #$tentativas",
+        );
+
+        await consultarStatusPagamento(
+          pagamentoId,
+          token,
+        );
+      },
     );
+
+    // ========================================================
+    // LIMITE DE 5 MINUTOS
+    // ========================================================
+
+    Future.delayed(
+      const Duration(minutes: 5),
+      () {
+
+        if (navegandoPedido) {
+          return;
+        }
+
+        timer?.cancel();
+
+        if (!mounted) {
+          return;
+        }
+
+        ScaffoldMessenger.of(context)
+            .showSnackBar(
+          const SnackBar(
+            content: Text(
+              "O pagamento foi processado. O pedido continua sendo atualizado pelo servidor.",
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // ============================================================
+  // CONSULTAR STATUS
+  // ============================================================
+
+  Future<void> consultarStatusPagamento(
+    String pagamentoId,
+    String token,
+  ) async {
+
+    if (navegandoPedido) {
+      return;
+    }
+
+    try {
+
+      final response =
+          await http.get(
+        Uri.parse(
+          "${Api.baseUrl}/pagamentos/$pagamentoId",
+        ),
+        headers: {
+
+          "Authorization":
+              "Bearer $token",
+
+          "Content-Type":
+              "application/json",
+        },
+      );
+
+      debugPrint(
+        "💳 STATUS CARTÃO HTTP: ${response.statusCode}",
+      );
+
+      if (response.statusCode < 200 ||
+          response.statusCode >= 300) {
+
+        debugPrint(
+          "⚠️ STATUS CARTÃO HTTP INVÁLIDO",
+        );
+
+        return;
+      }
+
+      final decoded =
+          jsonDecode(
+        response.body,
+      );
+
+      if (decoded is! Map) {
+        return;
+      }
+
+      final dados =
+          Map<String, dynamic>.from(
+        decoded,
+      );
+
+      debugPrint(
+        "💳 RESPOSTA STATUS CARTÃO: $dados",
+      );
+
+      // ========================================================
+      // STATUS DO PAGAMENTO
+      // ========================================================
+
+      final status =
+          dados["statusPagamento"]
+                  ?.toString()
+                  .toUpperCase() ??
+              dados["status"]
+                  ?.toString()
+                  .toUpperCase() ??
+              dados["paymentStatus"]
+                  ?.toString()
+                  .toUpperCase() ??
+              dados["status_asaas"]
+                  ?.toString()
+                  .toUpperCase() ??
+              "";
+
+      final aprovado =
+          dados["pagamentoAprovado"] == true ||
+          dados["paymentApproved"] == true ||
+          dados["aprovado"] == true ||
+          status == "APPROVED" ||
+          status == "RECEIVED" ||
+          status == "CONFIRMED";
+
+      debugPrint(
+        "💳 STATUS PAGAMENTO: $status",
+      );
+
+      debugPrint(
+        "💳 PAGAMENTO APROVADO: $aprovado",
+      );
+
+      if (!aprovado) {
+        return;
+      }
+
+      // ========================================================
+      // PAGAMENTO APROVADO
+      // ========================================================
+
+      debugPrint("");
+      debugPrint(
+        "========================================",
+      );
+      debugPrint(
+        "✅ CARTÃO APROVADO",
+      );
+      debugPrint(
+        "💳 PAGAMENTO: $pagamentoId",
+      );
+      debugPrint(
+        "⏳ PROCURANDO PEDIDO",
+      );
+      debugPrint(
+        "========================================",
+      );
+
+      // ========================================================
+      // PROCURAR PEDIDO
+      // ========================================================
+
+      final pedidoId =
+          extrairPedidoId(
+        dados,
+      );
+
+      if (pedidoId == null ||
+          pedidoId.trim().isEmpty) {
+
+        debugPrint(
+          "⏳ PAGAMENTO APROVADO, MAS PEDIDO AINDA NÃO FOI VINCULADO.",
+        );
+
+        return;
+      }
+
+      final id =
+          int.tryParse(
+        pedidoId.trim(),
+      );
+
+      if (id == null) {
+
+        debugPrint(
+          "❌ ID DO PEDIDO INVÁLIDO: $pedidoId",
+        );
+
+        return;
+      }
+
+      // ========================================================
+      // PEDIDO ENCONTRADO
+      // ========================================================
+
+      debugPrint("");
+      debugPrint(
+        "========================================",
+      );
+      debugPrint(
+        "🎉 PEDIDO ENCONTRADO",
+      );
+      debugPrint(
+        "📦 PEDIDO: $id",
+      );
+      debugPrint(
+        "➡️ ABRINDO ACOMPANHAMENTO",
+      );
+      debugPrint(
+        "========================================",
+      );
+
+      await abrirAcompanhamento(
+        id,
+      );
+
+    } catch (e) {
+
+      debugPrint(
+        "⚠️ ERRO CONSULTANDO CARTÃO: $e",
+      );
+    }
   }
 
   // ============================================================
@@ -1769,6 +2315,7 @@ class _CardPaymentPageState
   Future<void> abrirAcompanhamento(
     int pedidoId,
   ) async {
+
     if (navegandoPedido) {
       return;
     }
@@ -1785,9 +2332,34 @@ class _CardPaymentPageState
     validadeController.clear();
     cvvController.clear();
 
+    FocusScope.of(context).unfocus();
+
+    debugPrint("");
     debugPrint(
-      "🚀 ABRINDO ORDER TRACKING: $pedidoId",
+      "========================================",
     );
+    debugPrint(
+      "🚀 FOODJET - ABRINDO ACOMPANHAMENTO",
+    );
+    debugPrint(
+      "📦 PEDIDO: $pedidoId",
+    );
+    debugPrint(
+      "⏳ STATUS SERÁ MOSTRADO NO TRACKING",
+    );
+    debugPrint(
+      "========================================",
+    );
+
+    await Future.delayed(
+      const Duration(
+        milliseconds: 300,
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
 
     await Navigator.pushReplacement(
       context,
@@ -1806,34 +2378,49 @@ class _CardPaymentPageState
 
   List<Map<String, dynamic>>
       prepararItens() {
+
     return widget.itens.map((item) {
+
       return {
-        "produtoId": item.nome,
-        "nome": item.nome,
+
+        "produtoId":
+            item.nome,
+
+        "nome":
+            item.nome,
+
         "quantidade":
             item.quantidade,
-        "preco": item.preco,
+
+        "preco":
+            item.preco,
       };
+
     }).toList();
   }
 
   // ============================================================
-  // BUILD CARTÃO
+  // BUILD
   // ============================================================
 
   @override
   Widget build(
     BuildContext context,
   ) {
+
     return Form(
       key: formKey,
+
       child: SingleChildScrollView(
         padding:
             const EdgeInsets.all(20),
+
         child: Column(
           crossAxisAlignment:
               CrossAxisAlignment.start,
+
           children: [
+
             const Text(
               "Cartão de crédito",
               style: TextStyle(
@@ -1857,26 +2444,39 @@ class _CardPaymentPageState
 
             const SizedBox(height: 25),
 
+            // ==================================================
+            // NOME
+            // ==================================================
+
             campo(
               controller:
                   nomeController,
+
               label:
                   "Nome no cartão",
+
               hintText:
                   "Nome como aparece no cartão",
+
               icon:
                   Icons.person_outline,
+
               textCapitalization:
                   TextCapitalization.words,
+
               validator: (value) {
+
                 if (value == null ||
                     value.trim().isEmpty) {
-                  return "Informe o nome do titular";
+
+                  return
+                      "Informe o nome do titular";
                 }
 
-                if (value.trim().length <
-                    3) {
-                  return "Informe o nome completo";
+                if (value.trim().length < 3) {
+
+                  return
+                      "Informe o nome completo";
                 }
 
                 return null;
@@ -1885,26 +2485,40 @@ class _CardPaymentPageState
 
             const SizedBox(height: 15),
 
+            // ==================================================
+            // NÚMERO
+            // ==================================================
+
             campo(
               controller:
                   numeroController,
+
               label:
                   "Número do cartão",
+
               hintText:
                   "Digite o número do cartão",
+
               icon:
                   Icons.credit_card,
+
               keyboardType:
                   TextInputType.number,
+
               inputFormatters: [
+
                 FilteringTextInputFormatter
                     .digitsOnly,
+
                 LengthLimitingTextInputFormatter(
                   19,
                 ),
+
                 CardNumberInputFormatter(),
               ],
+
               validator: (value) {
+
                 final numero =
                     value?.replaceAll(
                           RegExp(r'\D'),
@@ -1913,12 +2527,16 @@ class _CardPaymentPageState
                         '';
 
                 if (numero.isEmpty) {
-                  return "Informe o número do cartão";
+
+                  return
+                      "Informe o número do cartão";
                 }
 
                 if (numero.length < 13 ||
                     numero.length > 19) {
-                  return "Número do cartão inválido";
+
+                  return
+                      "Número do cartão inválido";
                 }
 
                 return null;
@@ -1927,29 +2545,44 @@ class _CardPaymentPageState
 
             const SizedBox(height: 15),
 
+            // ==================================================
+            // VALIDADE + CVV
+            // ==================================================
+
             Row(
               children: [
+
                 Expanded(
                   child: campo(
                     controller:
                         validadeController,
+
                     label:
                         "Validade",
+
                     hintText:
                         "MM/AA",
+
                     icon:
                         Icons.calendar_month,
+
                     keyboardType:
                         TextInputType.number,
+
                     inputFormatters: [
+
                       FilteringTextInputFormatter
                           .digitsOnly,
+
                       LengthLimitingTextInputFormatter(
                         4,
                       ),
+
                       ValidityInputFormatter(),
                     ],
+
                     validator: (value) {
+
                       final texto =
                           value?.trim() ??
                               '';
@@ -1957,7 +2590,9 @@ class _CardPaymentPageState
                       if (!RegExp(
                         r'^\d{2}\/\d{2}$',
                       ).hasMatch(texto)) {
-                        return "Use MM/AA";
+
+                        return
+                            "Use MM/AA";
                       }
 
                       final partes =
@@ -1971,13 +2606,17 @@ class _CardPaymentPageState
                       if (mes == null ||
                           mes < 1 ||
                           mes > 12) {
-                        return "Mês inválido";
+
+                        return
+                            "Mês inválido";
                       }
 
                       if (validadeExpirada(
                         texto,
                       )) {
-                        return "Cartão vencido";
+
+                        return
+                            "Cartão vencido";
                       }
 
                       return null;
@@ -1991,24 +2630,34 @@ class _CardPaymentPageState
                   child: campo(
                     controller:
                         cvvController,
+
                     label:
                         "CVV",
+
                     hintText:
                         "123",
+
                     icon:
                         Icons.lock_outline,
+
                     keyboardType:
                         TextInputType.number,
+
                     obscureText:
                         true,
+
                     inputFormatters: [
+
                       FilteringTextInputFormatter
                           .digitsOnly,
+
                       LengthLimitingTextInputFormatter(
                         4,
                       ),
                     ],
+
                     validator: (value) {
+
                       final cvv =
                           value?.replaceAll(
                                 RegExp(r'\D'),
@@ -2018,7 +2667,9 @@ class _CardPaymentPageState
 
                       if (cvv.length < 3 ||
                           cvv.length > 4) {
-                        return "CVV inválido";
+
+                        return
+                            "CVV inválido";
                       }
 
                       return null;
@@ -2030,33 +2681,45 @@ class _CardPaymentPageState
 
             const SizedBox(height: 15),
 
+            // ==================================================
+            // INFORMAÇÃO
+            // ==================================================
+
             Container(
-              width: double.infinity,
+              width:
+                  double.infinity,
+
               padding:
                   const EdgeInsets.all(14),
+
               decoration:
                   BoxDecoration(
                 color:
                     Colors.orange.shade50,
+
                 borderRadius:
                     BorderRadius.circular(
                   12,
                 ),
               ),
+
               child: const Row(
                 crossAxisAlignment:
-                    CrossAxisAlignment
-                        .start,
+                    CrossAxisAlignment.start,
+
                 children: [
+
                   Icon(
                     Icons.info_outline,
                     color:
                         Color(0xFFF97316),
                   ),
+
                   SizedBox(width: 10),
+
                   Expanded(
                     child: Text(
-                      "Informe o nome do titular exatamente como aparece no cartão. CPF, telefone e endereço de cobrança não são necessários nesta etapa.",
+                      "Informe apenas os dados do cartão. CPF, telefone, e-mail e endereço de cobrança são obtidos automaticamente do seu cadastro.",
                       style:
                           TextStyle(
                         fontSize: 13,
@@ -2069,27 +2732,39 @@ class _CardPaymentPageState
 
             const SizedBox(height: 25),
 
+            // ==================================================
+            // BOTÃO
+            // ==================================================
+
             SizedBox(
-              width: double.infinity,
+              width:
+                  double.infinity,
+
               child:
                   ElevatedButton(
+
                 onPressed:
                     carregando
                         ? null
                         : pagar,
+
                 style:
                     ElevatedButton.styleFrom(
+
                   backgroundColor:
                       const Color(
                     0xFFF97316,
                   ),
+
                   foregroundColor:
                       Colors.white,
+
                   padding:
                       const EdgeInsets
                           .symmetric(
                     vertical: 17,
                   ),
+
                   shape:
                       RoundedRectangleBorder(
                     borderRadius:
@@ -2098,26 +2773,29 @@ class _CardPaymentPageState
                     ),
                   ),
                 ),
-                child: carregando
-                    ? const SizedBox(
-                        height: 23,
-                        width: 23,
-                        child:
-                            CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color:
-                              Colors.white,
-                        ),
-                      )
-                    : const Text(
-                        "Pagar com cartão",
-                        style:
-                            TextStyle(
-                          fontSize: 17,
-                          fontWeight:
-                              FontWeight.bold,
-                        ),
-                      ),
+
+                child:
+
+                    carregando
+                        ? const SizedBox(
+                            height: 23,
+                            width: 23,
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color:
+                                  Colors.white,
+                            ),
+                          )
+                        : const Text(
+                            "Pagar com cartão",
+                            style:
+                                TextStyle(
+                              fontSize: 17,
+                              fontWeight:
+                                  FontWeight.bold,
+                            ),
+                          ),
               ),
             ),
 
@@ -2144,40 +2822,70 @@ class _CardPaymentPageState
   // ============================================================
 
   Widget campo({
+
     required TextEditingController
         controller,
+
     required String label,
+
     required String hintText,
+
     required IconData icon,
+
     TextInputType? keyboardType,
+
     List<TextInputFormatter>?
         inputFormatters,
+
     String? Function(String?)?
         validator,
+
     bool obscureText = false,
+
     TextCapitalization
         textCapitalization =
         TextCapitalization.none,
+
   }) {
+
     return TextFormField(
-      controller: controller,
-      keyboardType: keyboardType,
+
+      controller:
+          controller,
+
+      keyboardType:
+          keyboardType,
+
       inputFormatters:
           inputFormatters,
-      validator: validator,
+
+      validator:
+          validator,
+
       obscureText:
           obscureText,
+
       textCapitalization:
           textCapitalization,
+
       decoration:
           InputDecoration(
-        labelText: label,
-        hintText: hintText,
+
+        labelText:
+            label,
+
+        hintText:
+            hintText,
+
         prefixIcon:
             Icon(icon),
-        filled: true,
+
+        filled:
+            true,
+
         fillColor:
             Colors.white,
+
         border:
             OutlineInputBorder(
           borderRadius:
@@ -2187,6 +2895,7 @@ class _CardPaymentPageState
           borderSide:
               BorderSide.none,
         ),
+
         enabledBorder:
             OutlineInputBorder(
           borderRadius:
@@ -2199,6 +2908,7 @@ class _CardPaymentPageState
                 Colors.grey.shade300,
           ),
         ),
+
         focusedBorder:
             OutlineInputBorder(
           borderRadius:
@@ -2216,6 +2926,8 @@ class _CardPaymentPageState
     );
   }
 }
+
+
 
 // ============================================================
 // FORMATADOR DO NÚMERO DO CARTÃO
