@@ -1009,6 +1009,56 @@ async function create(req, res) {
             });
         }
 
+        // ======================================================
+// BLOQUEIO: PIX NÃO PODE CRIAR PEDIDO ANTES DO PAGAMENTO
+// ======================================================
+
+const formaPagamento =
+    String(
+        body.pagamento ||
+        body.formaPagamento ||
+        ""
+    )
+        .trim()
+        .toUpperCase();
+
+if (formaPagamento === "PIX") {
+
+    console.log("");
+    console.log(
+        "========================================"
+    );
+    console.log(
+        "🚫 FOODJET - PIX BLOQUEADO NO /api/orders"
+    );
+    console.log(
+        "🚫 PEDIDO NÃO SERÁ CRIADO"
+    );
+    console.log(
+        "➡️ O cliente deve gerar o PIX primeiro"
+    );
+    console.log(
+        "➡️ O pedido será criado pelo webhook"
+    );
+    console.log(
+        "========================================"
+    );
+
+    return res.status(409).json({
+
+        sucesso: false,
+
+        codigo:
+            "PIX_PAGAMENTO_PRIMEIRO",
+
+        erro:
+            "Para pagamento via PIX, o pagamento deve ser realizado antes da criação do pedido.",
+
+        mensagem:
+            "Gere o PIX primeiro. O pedido será criado automaticamente após a confirmação do pagamento."
+    });
+}
+
 
         const pedido =
             await Order.criar({

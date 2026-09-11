@@ -1053,107 +1053,341 @@ function parseDados(valor) {
 // ============================================================
 
 async function gerarPix(req, res) {
+
     try {
-        const usuario = await buscarUsuarioAutenticado(req);
-        const body = req.body || {};
 
-        // NÃO CRIA PEDIDO AQUI
-        const referencia = gerarReferenciaCheckout(usuario.id);
+        console.log("");
+        console.log("========================================");
+        console.log("🟧 FOODJET - GERAR PIX");
+        console.log("🟧 MODO: PAGAMENTO PRIMEIRO / PEDIDO DEPOIS");
+        console.log("========================================");
 
-        const valorFinal = validarValor(
-            body.valor ?? body.total
+        const usuario =
+            await buscarUsuarioAutenticado(req);
+
+        const body =
+            req.body || {};
+
+        // ====================================================
+        // IMPORTANTE:
+        //
+        // NUNCA chamar Order.criar() neste fluxo.
+        // O pedido somente será criado pelo webhook do Asaas
+        // depois que o PIX for efetivamente aprovado/recebido.
+        // ====================================================
+
+        const referencia =
+            gerarReferenciaCheckout(
+                usuario.id
+            );
+
+        console.log(
+            "🔖 REFERÊNCIA CHECKOUT:",
+            referencia
         );
 
-        const dadosCliente = prepararDadosCliente(usuario, body);
-        validarDadosCliente(dadosCliente);
+        const restauranteId =
+            body.restauranteId ||
+            body.restaurantId ||
+            null;
 
-        // Salva os dados do pedido temporariamente
-        const checkout = {
-            clienteId: String(usuario.id),
-            restauranteId: String(
-                body.restauranteId || body.restaurantId
-            ),
-            itens: Array.isArray(body.itens) ? body.itens : [],
-            endereco: body.endereco || {},
-            pagamento: "PIX",
-            subtotal: Number(body.subtotal ?? valorFinal),
-            taxaServico: Number(body.taxaServico ?? 0),
-            taxaEntrega: Number(body.taxaEntrega ?? 0),
-            total: valorFinal,
-            precisaTroco: false,
-            trocoPara: null,
-            valorTroco: 0,
-            status: "AGUARDANDO_RESTAURANTE",
-            pagamentoStatus: "PENDENTE",
-            statusPagamento: "pending",
-            pagamentoAprovado: false,
-            checkoutCriadoEm: new Date().toISOString(),
-        };
-
-        // Guarda o checkout na tabela pagamentos_asaas
-        await salvarCheckoutPendente({
-            referencia,
-            usuario,
-            checkout,
-        });
-
-        console.log("💾 CHECKOUT PIX SALVO:", referencia);
-
-        const pagamento = await criarPix({
-            valor: valorFinal,
-            email: dadosCliente.email,
-            referencia,
-            descricao: `Pedido FoodJet PIX ${referencia}`,
-            nome: dadosCliente.nomeCliente,
-            cpf: dadosCliente.documento,
-            telefone: dadosCliente.telefoneCliente,
-            usuarioId: String(usuario.id),
-        });
-
-        if (!pagamento?.id) {
-            throw new Error("O Asaas não retornou o ID da cobrança PIX.");
+        if (
+            restauranteId === null ||
+            String(restauranteId).trim() === ""
+        ) {
+            throw new Error(
+                "Restaurante não informado."
+            );
         }
 
-        // Atualiza o checkout com o ID do pagamento Asaas
-        await vincularCheckoutAoPagamento(referencia, pagamento);
+        const itens =
+            Array.isArray(body.itens)
+                ? body.itens
+                : [];
 
-        const pix = await obterQrCodePix(pagamento.id);
+        if (itens.length === 0) {
+            throw new Error(
+                "Nenhum item foi informado no pedido."
+            );
+        }
 
-        if (!pix || !pix.payload) {
+        const valorFinal =
+            validarValor(
+                body.valor ??
+                body.total
+            );
+
+        const subtotal =
+            validarValor(
+                body.subtotal ??
+                valorFinal
+            );
+
+        const taxaServico =
+            Number(
+                Number(
+                    body.taxaServico ?? 0
+                ).toFixed(2)
+            );
+
+        const taxaEntrega =
+            Number(
+                Number(
+                    body.taxaEntrega ?? 0
+                ).toFixed(2)
+            );
+
+        const dadosCliente =
+            prepararDadosCliente(
+                usuario,
+                body
+            );
+
+        validarDadosCliente(
+            dadosCliente
+        );
+
+        // ====================================================
+        // CHECKOUT PIX
+        // ====================================================
+        //
+        // Fica em pagamentos_asaas.dados.
+        //
+        // NÃO existe registro em pedidos.
+        // ====================================================
+
+        const checkout = {
+
+            clienteId:
+                String(usuario.id),
+
+            restauranteId:
+                String(restauranteId),
+
+            itens,
+
+            endereco:
+                body.endereco || {},
+
+            pagamento:
+                "PIX",
+
+            subtotal,
+
+            taxaServico,
+
+            taxaEntrega,
+
+            total:
+                valorFinal,
+
+            precisaTroco:
+                false,
+
+            trocoPara:
+                null,
+
+            valorTroco:
+                0,
+
+            status:
+                "AGUARDANDO_RESTAURANTE",
+
+            pagamentoStatus:
+                "PENDENTE",
+
+            statusPagamento:
+                "pending",
+
+            pagamentoAprovado:
+                false,
+
+            checkoutCriadoEm:
+                new Date().toISOString(),
+
+        };
+
+        // ====================================================
+        // SALVAR CHECKOUT
+        // ====================================================
+
+        await salvarCheckoutPendente({
+
+            referencia,
+
+            usuario,
+
+            checkout,
+
+        });
+
+        console.log(
+            "💾 CHECKOUT PIX SALVO:",
+            referencia
+        );
+
+        console.log(
+            "📦 PEDIDO: NÃO CRIADO"
+        );
+
+        // ====================================================
+        // CRIAR COBRANÇA ASAAS
+        // ====================================================
+
+        const pagamento =
+            await criarPix({
+
+                valor:
+                    valorFinal,
+
+                email:
+                    dadosCliente.email,
+
+                referencia,
+
+                descricao:
+                    `Pagamento FoodJet PIX ${referencia}`,
+
+                nome:
+                    dadosCliente.nomeCliente,
+
+                cpf:
+                    dadosCliente.documento,
+
+                telefone:
+                    dadosCliente.telefoneCliente,
+
+                usuarioId:
+                    String(usuario.id),
+
+            });
+
+        if (!pagamento?.id) {
+            throw new Error(
+                "O Asaas não retornou o ID da cobrança PIX."
+            );
+        }
+
+        console.log(
+            "💰 COBRANÇA PIX ASAAS:",
+            pagamento.id
+        );
+
+        // ====================================================
+        // VINCULAR ASAAS AO CHECKOUT
+        // ====================================================
+
+        await vincularCheckoutAoPagamento(
+            referencia,
+            pagamento
+        );
+
+        // ====================================================
+        // OBTER QR CODE
+        // ====================================================
+
+        const pix =
+            await obterQrCodePix(
+                pagamento.id
+            );
+
+        if (
+            !pix ||
+            !pix.payload
+        ) {
             throw new Error(
                 "O Asaas criou a cobrança, mas não retornou o QR Code PIX."
             );
         }
 
+        console.log(
+            "📱 QR CODE PIX GERADO"
+        );
+
+        console.log(
+            "📦 PEDIDO CONTINUA INEXISTENTE ATÉ O WEBHOOK."
+        );
+
         return res.status(201).json({
-            sucesso: true,
 
-            pagamentoId: pagamento.id,
-            paymentId: pagamento.id,
+            sucesso:
+                true,
 
-            // IMPORTANTE: ainda não existe pedido
-            pedidoId: null,
+            pagamentoId:
+                pagamento.id,
+
+            paymentId:
+                pagamento.id,
+
+            // IMPORTANTE:
+            // ainda não existe pedido.
+            pedidoId:
+                null,
+
+            orderId:
+                null,
 
             externalReference:
-                pagamento.externalReference || referencia,
+                pagamento.externalReference ||
+                referencia,
 
-            status: pagamento.status || "PENDING",
+            status:
+                pagamento.status ||
+                "PENDING",
 
-            totalAmount: Number(
-                pagamento.value ?? valorFinal
-            ),
+            totalAmount:
+                Number(
+                    pagamento.value ??
+                    valorFinal
+                ),
 
-            billingType: "PIX",
+            billingType:
+                "PIX",
 
             pix: {
-                qrCode: pix.payload,
-                qrCodeBase64: pix.encodedImage || "",
-                ticketUrl: pix.ticketUrl || "",
-                expiracao: pix.expirationDate || "",
+
+                qrCode:
+                    pix.payload,
+
+                qrCodeBase64:
+                    pix.encodedImage ||
+                    "",
+
+                ticketUrl:
+                    pix.ticketUrl ||
+                    "",
+
+                expiracao:
+                    pix.expirationDate ||
+                    "",
+
             },
+
         });
+
     } catch (erro) {
-        console.error("❌ ERRO GERANDO PIX:", erro);
+
+        console.error("");
+        console.error("========================================");
+        console.error("❌ ERRO GERANDO PIX");
+        console.error("========================================");
+
+        console.error(
+            erro?.message ||
+            erro
+        );
+
+        if (erro?.response?.data) {
+
+            console.error(
+                "ASAAS:",
+                JSON.stringify(
+                    erro.response.data,
+                    null,
+                    2
+                )
+            );
+        }
 
         const status =
             erro?.response?.status >= 400 &&
@@ -1162,13 +1396,20 @@ async function gerarPix(req, res) {
                 : 500;
 
         const mensagem =
-            erro?.response?.data?.errors?.[0]?.description ||
-            erro.message ||
+            erro?.response?.data
+                ?.errors?.[0]
+                ?.description ||
+            erro?.message ||
             "Não foi possível gerar o PIX.";
 
         return res.status(status).json({
-            sucesso: false,
-            erro: mensagem,
+
+            sucesso:
+                false,
+
+            erro:
+                mensagem,
+
         });
     }
 }

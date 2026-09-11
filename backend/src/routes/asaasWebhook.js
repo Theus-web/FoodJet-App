@@ -1,4 +1,3 @@
-
 const crypto = require("crypto");
 
 const {
@@ -35,7 +34,6 @@ function normalizarId(valor) {
 // ============================================================
 
 function agora() {
-
     return new Date().toISOString();
 }
 
@@ -99,15 +97,15 @@ function pagamentoCancelado(status) {
     const valor =
         normalizarId(status).toUpperCase();
 
-    return (
-        valor === "OVERDUE" ||
-        valor === "REFUNDED" ||
-        valor === "REFUND_REQUESTED" ||
-        valor === "CHARGEBACK_REQUESTED" ||
-        valor === "CHARGEBACK_DISPUTE" ||
-        valor === "DUNNING_REQUESTED" ||
-        valor === "DUNNING_RECEIVED"
-    );
+    return [
+        "OVERDUE",
+        "REFUNDED",
+        "REFUND_REQUESTED",
+        "CHARGEBACK_REQUESTED",
+        "CHARGEBACK_DISPUTE",
+        "DUNNING_REQUESTED",
+        "DUNNING_RECEIVED",
+    ].includes(valor);
 }
 
 // ============================================================
@@ -125,27 +123,20 @@ function validarTokenWebhook(req) {
         return false;
     }
 
-    const tokenRecebido =
-        req.headers["asaas-access-token"];
-
-    if (!tokenRecebido) {
-
-        console.error(
-            "❌ Token do webhook não enviado."
-        );
-
-        return false;
-    }
-
     const recebido =
-        String(tokenRecebido).trim();
+        String(
+            req.headers["asaas-access-token"] || ""
+        ).trim();
 
     const esperado =
         String(
             ASAAS_WEBHOOK_TOKEN
         ).trim();
 
-    if (!recebido || !esperado) {
+    if (
+        !recebido ||
+        !esperado
+    ) {
         return false;
     }
 
@@ -163,13 +154,12 @@ function validarTokenWebhook(req) {
                 "utf8"
             );
 
-        if (a.length !== b.length) {
-            return false;
-        }
-
-        return crypto.timingSafeEqual(
-            a,
-            b
+        return (
+            a.length === b.length &&
+            crypto.timingSafeEqual(
+                a,
+                b
+            )
         );
 
     } catch (error) {
@@ -206,12 +196,33 @@ function parseDados(valor) {
     } catch (error) {
 
         console.error(
-            "⚠️ Não foi possível interpretar dados JSON:",
+            "⚠️ JSON inválido em pagamentos_asaas:",
             error.message
         );
 
         return {};
     }
+}
+
+// ============================================================
+// TIPO DO CHECKOUT
+// ============================================================
+
+function obterTipoCheckout(checkout) {
+
+    const pagamento =
+        normalizarId(
+            checkout?.pagamento
+        ).toUpperCase();
+
+    if (
+        pagamento === "PIX"
+    ) {
+
+        return "CHECKOUT_PIX";
+    }
+
+    return "CHECKOUT_CARTAO";
 }
 
 // ============================================================
@@ -229,19 +240,18 @@ function montarResultadoPedido(row) {
         };
     }
 
-    const dados =
-        parseDados(
-            row.dados
-        );
-
     return {
 
         pedido: {
 
-            ...dados,
+            ...parseDados(
+                row.dados
+            ),
 
             id:
-                Number(row.id),
+                Number(
+                    row.id
+                ),
         },
 
         index: -1,
@@ -254,7 +264,9 @@ function montarResultadoPedido(row) {
 // LOCALIZAR PEDIDO
 // ============================================================
 
-async function localizarPedido(payment) {
+async function localizarPedido(
+    payment
+) {
 
     const pagamentoId =
         normalizarId(
@@ -287,6 +299,7 @@ async function localizarPedido(payment) {
                 WHERE
                     dados->>'pagamentoId' = $1
                     OR dados->>'asaasPaymentId' = $1
+                    OR dados->>'paymentId' = $1
                 ORDER BY id DESC
                 LIMIT 1
                 `,
@@ -296,7 +309,7 @@ async function localizarPedido(payment) {
             );
 
         if (
-            resultado.rows.length > 0
+            resultado.rows.length
         ) {
 
             return montarResultadoPedido(
@@ -332,7 +345,7 @@ async function localizarPedido(payment) {
             );
 
         if (
-            resultado.rows.length > 0
+            resultado.rows.length
         ) {
 
             return montarResultadoPedido(
@@ -345,87 +358,35 @@ async function localizarPedido(payment) {
     // 3. ORDER ID
     // --------------------------------------------------------
 
-    if (orderId) {
+    if (
+        orderId &&
+        Number.isSafeInteger(
+            Number(orderId)
+        )
+    ) {
 
-        const numero =
-            Number(orderId);
-
-        if (
-            Number.isSafeInteger(numero)
-        ) {
-
-            const resultado =
-                await pool.query(
-                    `
-                    SELECT
-                        id,
-                        dados
-                    FROM pedidos
-                    WHERE id = $1
-                    LIMIT 1
-                    `,
-                    [
-                        numero,
-                    ]
-                );
-
-            if (
-                resultado.rows.length > 0
-            ) {
-
-                return montarResultadoPedido(
-                    resultado.rows[0]
-                );
-            }
-        }
-    }
-
-    // --------------------------------------------------------
-    // 4. REFERÊNCIA FOODJET NUMÉRICA
-    // --------------------------------------------------------
-
-    if (referencia) {
-
-        const numeroReferencia =
-            referencia
-                .replace(
-                    /^FOODJET-/i,
-                    ""
-                )
-                .trim();
+        const resultado =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    dados
+                FROM pedidos
+                WHERE id = $1
+                LIMIT 1
+                `,
+                [
+                    Number(orderId),
+                ]
+            );
 
         if (
-            numeroReferencia &&
-            /^\d+$/.test(numeroReferencia)
+            resultado.rows.length
         ) {
 
-            const resultado =
-                await pool.query(
-                    `
-                    SELECT
-                        id,
-                        dados
-                    FROM pedidos
-                    WHERE
-                        CAST(id AS TEXT) = $1
-                        OR dados->>'referenciaPagamento' = $1
-                        OR dados->>'pedidoReferencia' = $1
-                    ORDER BY id DESC
-                    LIMIT 1
-                    `,
-                    [
-                        numeroReferencia,
-                    ]
-                );
-
-            if (
-                resultado.rows.length > 0
-            ) {
-
-                return montarResultadoPedido(
-                    resultado.rows[0]
-                );
-            }
+            return montarResultadoPedido(
+                resultado.rows[0]
+            );
         }
     }
 
@@ -443,15 +404,11 @@ async function localizarPedido(payment) {
 // BUSCAR CHECKOUT PENDENTE
 // ============================================================
 //
-// O cartão usa uma referência:
+// IMPORTANTE:
 //
-// FOODJET-CHK-...
+// O checkout é salvo antes do pagamento.
 //
-// Essa referência não é o ID do pedido.
-//
-// O snapshot original está salvo em:
-//
-// pagamentos_asaas.dados.checkout
+// O pedido NÃO existe neste momento.
 //
 // ============================================================
 
@@ -463,7 +420,7 @@ async function buscarCheckoutPendente(
     let resultado;
 
     // --------------------------------------------------------
-    // 1. Tentar pelo PAYMENT ID
+    // 1. PAYMENT ID
     // --------------------------------------------------------
 
     if (pagamentoId) {
@@ -490,7 +447,7 @@ async function buscarCheckoutPendente(
             );
 
         if (
-            resultado.rows.length > 0
+            resultado.rows.length
         ) {
 
             const registro =
@@ -508,7 +465,9 @@ async function buscarCheckoutPendente(
             if (checkout) {
 
                 return {
+
                     registro,
+
                     checkout,
                 };
             }
@@ -516,7 +475,7 @@ async function buscarCheckoutPendente(
     }
 
     // --------------------------------------------------------
-    // 2. Tentar pela referência
+    // 2. EXTERNAL REFERENCE
     // --------------------------------------------------------
 
     if (referencia) {
@@ -543,7 +502,7 @@ async function buscarCheckoutPendente(
             );
 
         if (
-            resultado.rows.length > 0
+            resultado.rows.length
         ) {
 
             const registro =
@@ -561,7 +520,9 @@ async function buscarCheckoutPendente(
             if (checkout) {
 
                 return {
+
                     registro,
+
                     checkout,
                 };
             }
@@ -608,7 +569,7 @@ function validarCheckout(
         !Array.isArray(
             checkout.itens
         ) ||
-        checkout.itens.length === 0
+        !checkout.itens.length
     ) {
 
         throw new Error(
@@ -616,13 +577,18 @@ function validarCheckout(
         );
     }
 
+    const total =
+        Number(
+            checkout.total
+        );
+
     if (
-        checkout.total === undefined ||
-        checkout.total === null
+        !Number.isFinite(total) ||
+        total <= 0
     ) {
 
         throw new Error(
-            "Checkout sem valor total."
+            "Valor total do checkout inválido."
         );
     }
 
@@ -630,20 +596,293 @@ function validarCheckout(
 }
 
 // ============================================================
-// CRIAR PEDIDO A PARTIR DO CHECKOUT
+// SALVAR / ATUALIZAR PAGAMENTO ASAAS
 // ============================================================
-//
-// IMPORTANTE:
-//
-// Esta função só é chamada quando o pagamento estiver
-// RECEIVED ou CONFIRMED.
-//
-// Portanto:
-//
-// pagamento aprovado
-//        ↓
-// criar pedido
-//
+
+async function salvarPagamentoPendente(
+    payment,
+    evento,
+    pedidoId = null,
+    checkout = null
+) {
+
+    const pagamentoId =
+        normalizarId(
+            payment?.id
+        );
+
+    if (!pagamentoId) {
+        return null;
+    }
+
+    const referencia =
+        normalizarId(
+            payment?.externalReference
+        );
+
+    const statusAsaas =
+        normalizarId(
+            payment?.status
+        ).toUpperCase();
+
+    const statusPagamento =
+        normalizarStatusAsaas(
+            statusAsaas
+        );
+
+    const valor =
+        Number(
+            payment?.value
+        ) || 0;
+
+    // --------------------------------------------------------
+    // PROCURAR PAGAMENTO
+    // --------------------------------------------------------
+
+    const existente =
+        await pool.query(
+            `
+            SELECT
+                id,
+                pedido_id,
+                dados
+            FROM pagamentos_asaas
+            WHERE pagamento_id = $1
+            LIMIT 1
+            `,
+            [
+                pagamentoId,
+            ]
+        );
+
+    // --------------------------------------------------------
+    // PRESERVAR CHECKOUT
+    // --------------------------------------------------------
+
+    let checkoutFinal =
+        checkout ||
+        null;
+
+    if (
+        !checkoutFinal &&
+        existente.rows.length
+    ) {
+
+        const dadosAntigos =
+            parseDados(
+                existente.rows[0].dados
+            );
+
+        checkoutFinal =
+            dadosAntigos.checkout ||
+            null;
+    }
+
+    // --------------------------------------------------------
+    // TIPO CORRETO
+    // --------------------------------------------------------
+
+    const tipoCheckout =
+        obterTipoCheckout(
+            checkoutFinal
+        );
+
+    const dadosPagamento = {
+
+        tipo:
+            tipoCheckout,
+
+        checkout:
+            checkoutFinal,
+
+        pagamentoId,
+
+        paymentId:
+            pagamentoId,
+
+        externalReference:
+            referencia,
+
+        statusAsaas,
+
+        statusPagamento,
+
+        evento,
+
+        valor,
+
+        pedidoId:
+            pedidoId !== null &&
+            pedidoId !== undefined
+                ? String(pedidoId)
+                : null,
+
+        atualizadoEm:
+            agora(),
+
+        payment,
+    };
+
+    // --------------------------------------------------------
+    // ATUALIZAR
+    // --------------------------------------------------------
+
+    if (
+        existente.rows.length
+    ) {
+
+        await pool.query(
+            `
+            UPDATE pagamentos_asaas
+            SET
+                pedido_id =
+                    COALESCE(
+                        $1,
+                        pedido_id
+                    ),
+
+                external_reference =
+                    COALESCE(
+                        $2,
+                        external_reference
+                    ),
+
+                status =
+                    $3,
+
+                valor =
+                    $4,
+
+                dados =
+                    $5,
+
+                atualizado_em =
+                    NOW()
+
+            WHERE id = $6
+            `,
+            [
+
+                pedidoId !== null &&
+                pedidoId !== undefined
+                    ? String(pedidoId)
+                    : null,
+
+                referencia ||
+                    null,
+
+                statusAsaas ||
+                    null,
+
+                valor,
+
+                dadosPagamento,
+
+                existente.rows[0].id,
+            ]
+        );
+
+        console.log(
+            "🔄 PAGAMENTO ASAAS ATUALIZADO:",
+            pagamentoId
+        );
+
+        console.log(
+            "📊 STATUS:",
+            statusAsaas
+        );
+
+        console.log(
+            "💳 TIPO:",
+            tipoCheckout
+        );
+
+        return (
+            existente.rows[0].id
+        );
+    }
+
+    // --------------------------------------------------------
+    // INSERIR
+    // --------------------------------------------------------
+
+    const inserido =
+        await pool.query(
+            `
+            INSERT INTO pagamentos_asaas (
+                id,
+                pagamento_id,
+                pedido_id,
+                external_reference,
+                status,
+                valor,
+                dados,
+                criado_em,
+                atualizado_em
+            )
+            VALUES (
+                $1,
+                $2,
+                $3,
+                $4,
+                $5,
+                $6,
+                $7,
+                NOW(),
+                NOW()
+            )
+            RETURNING id
+            `,
+            [
+
+                pagamentoId,
+
+                pagamentoId,
+
+                pedidoId !== null &&
+                pedidoId !== undefined
+                    ? String(pedidoId)
+                    : null,
+
+                referencia ||
+                    null,
+
+                statusAsaas ||
+                    null,
+
+                valor,
+
+                dadosPagamento,
+            ]
+        );
+
+    console.log(
+        "💾 PAGAMENTO ASAAS SALVO:"
+    );
+
+    console.log(
+        "🆔 ASAAS:",
+        pagamentoId
+    );
+
+    console.log(
+        "📊 STATUS:",
+        statusAsaas
+    );
+
+    console.log(
+        "💳 TIPO:",
+        tipoCheckout
+    );
+
+    return (
+        inserido.rows[0]?.id ||
+        null
+    );
+}
+
+// ============================================================
+// CRIAR PEDIDO A PARTIR DO CHECKOUT PIX
 // ============================================================
 
 async function criarPedidoDoCheckout(
@@ -666,49 +905,51 @@ async function criarPedidoDoCheckout(
             payment?.externalReference
         );
 
-    const total =
-        Number(
-            checkout.total
-        );
-
-    const subtotal =
-        Number(
-            checkout.subtotal ?? 0
-        );
-
-    const taxaServico =
-        Number(
-            checkout.taxaServico ?? 0
-        );
-
-    const taxaEntrega =
-        Number(
-            checkout.taxaEntrega ?? 0
-        );
+    // ========================================================
+    // TRAVA 1
+    // ========================================================
 
     if (
-        !Number.isFinite(total) ||
-        total <= 0
+        !pagamentoAprovado(
+            payment?.status
+        )
     ) {
 
         throw new Error(
-            "Valor total do checkout inválido."
+            "Tentativa bloqueada: pedido PIX só pode ser criado após RECEIVED/CONFIRMED."
         );
     }
 
-    // --------------------------------------------------------
-    // SEGURANÇA CONTRA DUPLICAÇÃO
-    // --------------------------------------------------------
-    //
-    // Antes de criar um novo pedido, verificamos novamente
-    // pelo pagamento Asaas e pela referência.
-    //
-    // Isso é importante porque o Asaas pode reenviar o
-    // mesmo webhook.
-    // --------------------------------------------------------
+    // ========================================================
+    // TRAVA 2
+    // ========================================================
 
-    const pedidoExistente =
+    const tipoCheckout =
+        obterTipoCheckout(
+            checkout
+        );
+
+    if (
+        tipoCheckout !==
+        "CHECKOUT_PIX"
+    ) {
+
+        throw new Error(
+            "O webhook PIX recebeu um checkout que não é PIX."
+        );
+    }
+
+    // ========================================================
+    // TRAVA 3
+    // ========================================================
+    //
+    // Verificar novamente se o pedido já existe.
+    //
+    // ========================================================
+
+    const existente =
         await localizarPedido({
+
             id:
                 pagamentoId,
 
@@ -717,24 +958,26 @@ async function criarPedidoDoCheckout(
         });
 
     if (
-        pedidoExistente?.pedido
+        existente?.pedido
     ) {
 
         console.log(
-            "♻️ PEDIDO JÁ EXISTE. NÃO SERÁ DUPLICADO."
+            "♻️ PEDIDO JÁ EXISTE."
         );
 
         console.log(
             "🆔 PEDIDO:",
-            pedidoExistente.pedido.id
+            existente.pedido.id
         );
 
-        return pedidoExistente.pedido;
+        return (
+            existente.pedido
+        );
     }
 
-    // --------------------------------------------------------
+    // ========================================================
     // CRIAR PEDIDO
-    // --------------------------------------------------------
+    // ========================================================
 
     const pedidoCriado =
         await Order.criar({
@@ -757,29 +1000,37 @@ async function criarPedidoDoCheckout(
                 null,
 
             pagamento:
-                String(
-                    checkout.pagamento ||
-                    "CREDITO"
-                ).toUpperCase(),
+                "PIX",
 
             subtotal:
                 Number(
-                    subtotal.toFixed(2)
+                    Number(
+                        checkout.subtotal ||
+                        0
+                    ).toFixed(2)
                 ),
 
             taxaServico:
                 Number(
-                    taxaServico.toFixed(2)
+                    Number(
+                        checkout.taxaServico ||
+                        0
+                    ).toFixed(2)
                 ),
 
             taxaEntrega:
                 Number(
-                    taxaEntrega.toFixed(2)
+                    Number(
+                        checkout.taxaEntrega ||
+                        0
+                    ).toFixed(2)
                 ),
 
             total:
                 Number(
-                    total.toFixed(2)
+                    Number(
+                        checkout.total
+                    ).toFixed(2)
                 ),
 
             precisaTroco:
@@ -834,9 +1085,7 @@ async function criarPedidoDoCheckout(
         });
 
     if (
-        !pedidoCriado ||
-        pedidoCriado.id === undefined ||
-        pedidoCriado.id === null
+        !pedidoCriado?.id
     ) {
 
         throw new Error(
@@ -849,7 +1098,7 @@ async function criarPedidoDoCheckout(
     );
 
     console.log(
-        "🎉 PEDIDO CRIADO APÓS PAGAMENTO APROVADO"
+        "🎉 PEDIDO PIX CRIADO APÓS PAGAMENTO"
     );
 
     console.log(
@@ -865,11 +1114,6 @@ async function criarPedidoDoCheckout(
     console.log(
         "🔖 REFERÊNCIA:",
         referencia
-    );
-
-    console.log(
-        "💰 TOTAL:",
-        total
     );
 
     console.log(
@@ -900,22 +1144,25 @@ async function vincularPedidoAoPagamento(
     }
 
     if (
-        pedidoId === undefined ||
-        pedidoId === null
+        pedidoId === null ||
+        pedidoId === undefined
     ) {
 
         throw new Error(
-            "Pedido não informado para vinculação."
+            "Pedido não informado."
         );
     }
 
     const dadosAtuais = {
 
         tipo:
-            "CHECKOUT_CARTAO",
+            obterTipoCheckout(
+                checkout
+            ),
 
         checkout:
-            checkout || null,
+            checkout ||
+            null,
 
         pagamentoId,
 
@@ -926,7 +1173,9 @@ async function vincularPedidoAoPagamento(
             referencia,
 
         pedidoId:
-            String(pedidoId),
+            String(
+                pedidoId
+            ),
 
         statusAsaas:
             normalizarId(
@@ -942,7 +1191,8 @@ async function vincularPedidoAoPagamento(
 
         valor:
             Number(
-                payment?.value || 0
+                payment?.value ||
+                0
             ),
 
         atualizadoEm:
@@ -952,98 +1202,30 @@ async function vincularPedidoAoPagamento(
             payment,
     };
 
-    await pool.query(
-        `
-        UPDATE pagamentos_asaas
-        SET
-            pedido_id = $1,
-            pagamento_id = $2,
-            external_reference = $3,
-            status = $4,
-            valor = $5,
-            dados = $6,
-            atualizado_em = NOW()
-        WHERE pagamento_id = $2
-        `,
-        [
-            String(
-                pedidoId
-            ),
-
-            pagamentoId,
-
-            referencia || null,
-
-            normalizarId(
-                payment?.status
-            ).toUpperCase() ||
-                "PENDING",
-
-            Number(
-                payment?.value || 0
-            ),
-
-            dadosAtuais,
-        ]
-    );
-
-    // --------------------------------------------------------
-    // Caso o registro ainda não exista
-    // --------------------------------------------------------
-
-    const verificacao =
+    const atualizado =
         await pool.query(
             `
-            SELECT id
-            FROM pagamentos_asaas
-            WHERE pagamento_id = $1
-            LIMIT 1
+            UPDATE pagamentos_asaas
+            SET
+                pedido_id = $1,
+                pagamento_id = $2,
+                external_reference = $3,
+                status = $4,
+                valor = $5,
+                dados = $6,
+                atualizado_em = NOW()
+            WHERE pagamento_id = $2
             `,
             [
-                pagamentoId,
-            ]
-        );
-
-    if (
-        verificacao.rows.length === 0
-    ) {
-
-        await pool.query(
-            `
-            INSERT INTO pagamentos_asaas (
-                id,
-                pagamento_id,
-                pedido_id,
-                external_reference,
-                status,
-                valor,
-                dados,
-                criado_em,
-                atualizado_em
-            )
-            VALUES (
-                $1,
-                $2,
-                $3,
-                $4,
-                $5,
-                $6,
-                $7,
-                NOW(),
-                NOW()
-            )
-            `,
-            [
-
-                pagamentoId,
-
-                pagamentoId,
 
                 String(
                     pedidoId
                 ),
 
-                referencia || null,
+                pagamentoId,
+
+                referencia ||
+                    null,
 
                 normalizarId(
                     payment?.status
@@ -1051,16 +1233,32 @@ async function vincularPedidoAoPagamento(
                     "PENDING",
 
                 Number(
-                    payment?.value || 0
+                    payment?.value ||
+                    0
                 ),
 
                 dadosAtuais,
             ]
         );
+
+    // --------------------------------------------------------
+    // Se ainda não existe
+    // --------------------------------------------------------
+
+    if (
+        !atualizado.rowCount
+    ) {
+
+        await salvarPagamentoPendente(
+            payment,
+            evento,
+            pedidoId,
+            checkout
+        );
     }
 
     console.log(
-        "🔗 PAGAMENTO VINCULADO AO PEDIDO:"
+        "🔗 PAGAMENTO VINCULADO:"
     );
 
     console.log(
@@ -1099,78 +1297,55 @@ async function atualizarPedido(
             payment?.status
         ).toUpperCase();
 
-    const statusPagamento =
-        normalizarStatusAsaas(
-            statusAsaas
-        );
-
     const momento =
         agora();
 
-    const pedidoAtualizado = {
+    const atualizado = {
 
         ...pedido,
+
+        pagamentoId:
+            pagamentoId ||
+            pedido.pagamentoId ||
+            "",
+
+        paymentId:
+            pagamentoId ||
+            pedido.paymentId ||
+            "",
+
+        asaasPaymentId:
+            pagamentoId ||
+            pedido.asaasPaymentId ||
+            "",
+
+        externalReference:
+            referencia ||
+            pedido.externalReference ||
+            "",
+
+        referenciaPagamento:
+            referencia ||
+            pedido.referenciaPagamento ||
+            "",
+
+        statusPagamento:
+            normalizarStatusAsaas(
+                statusAsaas
+            ),
+
+        statusPagamentoAsaas:
+            statusAsaas,
+
+        asaasEvento:
+            evento,
+
+        asaasAtualizadoEm:
+            momento,
+
+        pagamentoAtualizadoEm:
+            momento,
     };
-
-    pedidoAtualizado.pagamentoId =
-        pagamentoId ||
-        pedidoAtualizado.pagamentoId ||
-        "";
-
-    pedidoAtualizado.paymentId =
-        pagamentoId ||
-        pedidoAtualizado.paymentId ||
-        "";
-
-    pedidoAtualizado.externalReference =
-        referencia ||
-        pedidoAtualizado.externalReference ||
-        pedidoAtualizado.referenciaPagamento ||
-        "";
-
-    pedidoAtualizado.referenciaPagamento =
-        referencia ||
-        pedidoAtualizado.referenciaPagamento ||
-        "";
-
-    pedidoAtualizado.statusPagamento =
-        statusPagamento;
-
-    pedidoAtualizado.statusPagamentoAsaas =
-        statusAsaas;
-
-    pedidoAtualizado.asaasPaymentId =
-        pagamentoId ||
-        pedidoAtualizado.asaasPaymentId ||
-        "";
-
-    pedidoAtualizado.asaasEvento =
-        evento;
-
-    pedidoAtualizado.asaasAtualizadoEm =
-        momento;
-
-    pedidoAtualizado.pagamentoAtualizadoEm =
-        momento;
-
-    if (
-        payment?.value !== undefined &&
-        payment?.value !== null
-    ) {
-
-        const valor =
-            Number(
-                payment.value
-            );
-
-        if (
-            Number.isFinite(valor)
-        ) {
-
-            pedidoAtualizado.valorPagamento =
-                valor;
-        }
-    }
 
     // --------------------------------------------------------
     // APROVADO
@@ -1182,23 +1357,23 @@ async function atualizarPedido(
         )
     ) {
 
-        pedidoAtualizado.statusPagamento =
+        atualizado.statusPagamento =
             "approved";
 
-        pedidoAtualizado.pagamentoAprovado =
+        atualizado.pagamentoAprovado =
             true;
 
-        pedidoAtualizado.pagamentoAprovadoEm =
-            pedidoAtualizado.pagamentoAprovadoEm ||
+        atualizado.pagamentoAprovadoEm =
+            atualizado.pagamentoAprovadoEm ||
             momento;
 
         if (
-            !pedidoAtualizado.status ||
-            pedidoAtualizado.status ===
+            !atualizado.status ||
+            atualizado.status ===
                 "AGUARDANDO_PAGAMENTO"
         ) {
 
-            pedidoAtualizado.status =
+            atualizado.status =
                 "AGUARDANDO_RESTAURANTE";
         }
     }
@@ -1213,319 +1388,38 @@ async function atualizarPedido(
         )
     ) {
 
-        pedidoAtualizado.pagamentoAprovado =
+        atualizado.pagamentoAprovado =
             false;
 
-        pedidoAtualizado.pagamentoCanceladoEm =
-            pedidoAtualizado.pagamentoCanceladoEm ||
+        atualizado.pagamentoCanceladoEm =
+            atualizado.pagamentoCanceladoEm ||
             momento;
 
         if (
-            pedidoAtualizado.status ===
+            atualizado.status ===
                 "AGUARDANDO_PAGAMENTO" ||
-            pedidoAtualizado.status ===
+
+            atualizado.status ===
                 "AGUARDANDO_RESTAURANTE"
         ) {
 
-            pedidoAtualizado.status =
+            atualizado.status =
                 "CANCELADO";
 
-            pedidoAtualizado.canceladoEm =
-                pedidoAtualizado.canceladoEm ||
+            atualizado.canceladoEm =
+                atualizado.canceladoEm ||
                 momento;
         }
     }
 
     return await Order.atualizarDadosPedido(
-        pedidoAtualizado.id,
-        pedidoAtualizado
+        atualizado.id,
+        atualizado
     );
 }
 
 // ============================================================
-// SALVAR / ATUALIZAR PAGAMENTO ASAAS
-// ============================================================
-
-async function salvarPagamentoPendente(
-    payment,
-    evento,
-    pedidoId = null,
-    checkout = null
-) {
-
-    const pagamentoId =
-        normalizarId(
-            payment?.id
-        );
-
-    const referencia =
-        normalizarId(
-            payment?.externalReference
-        );
-
-    if (!pagamentoId) {
-        return null;
-    }
-
-    const statusAsaas =
-        normalizarId(
-            payment?.status
-        ).toUpperCase();
-
-    const statusPagamento =
-        normalizarStatusAsaas(
-            statusAsaas
-        );
-
-    const valor =
-        Number(
-            payment?.value
-        ) || 0;
-
-    // --------------------------------------------------------
-    // Preservar checkout existente
-    // --------------------------------------------------------
-
-    let checkoutFinal =
-        checkout || null;
-
-    if (!checkoutFinal) {
-
-        const existenteCheckout =
-            await pool.query(
-                `
-                SELECT dados
-                FROM pagamentos_asaas
-                WHERE pagamento_id = $1
-                LIMIT 1
-                `,
-                [
-                    pagamentoId,
-                ]
-            );
-
-        if (
-            existenteCheckout.rows.length > 0
-        ) {
-
-            const dados =
-                parseDados(
-                    existenteCheckout.rows[0].dados
-                );
-
-            checkoutFinal =
-                dados.checkout ||
-                null;
-        }
-    }
-
-    const dadosPagamento = {
-
-        tipo:
-            checkoutFinal
-                ? "CHECKOUT_CARTAO"
-                : "ASAAS_PAYMENT",
-
-        checkout:
-            checkoutFinal,
-
-        pagamentoId,
-
-        paymentId:
-            pagamentoId,
-
-        externalReference:
-            referencia,
-
-        statusAsaas,
-
-        statusPagamento,
-
-        evento,
-
-        valor,
-
-        pedidoId:
-            pedidoId
-                ? String(pedidoId)
-                : null,
-
-        atualizadoEm:
-            agora(),
-
-        payment,
-    };
-
-    // --------------------------------------------------------
-    // EXISTENTE
-    // --------------------------------------------------------
-
-    const existente =
-        await pool.query(
-            `
-            SELECT
-                id,
-                pedido_id,
-                dados
-            FROM pagamentos_asaas
-            WHERE pagamento_id = $1
-            LIMIT 1
-            `,
-            [
-                pagamentoId,
-            ]
-        );
-
-    if (
-        existente.rows.length > 0
-    ) {
-
-        const registro =
-            existente.rows[0];
-
-        const dadosAntigos =
-            parseDados(
-                registro.dados
-            );
-
-        const checkoutPreservado =
-            checkoutFinal ||
-            dadosAntigos.checkout ||
-            null;
-
-        dadosPagamento.checkout =
-            checkoutPreservado;
-
-        await pool.query(
-            `
-            UPDATE pagamentos_asaas
-            SET
-                pedido_id = COALESCE($1, pedido_id),
-                external_reference = COALESCE($2, external_reference),
-                status = $3,
-                valor = $4,
-                dados = $5,
-                atualizado_em = NOW()
-            WHERE id = $6
-            `,
-            [
-
-                pedidoId
-                    ? String(pedidoId)
-                    : null,
-
-                referencia || null,
-
-                statusAsaas || null,
-
-                valor,
-
-                dadosPagamento,
-
-                registro.id,
-            ]
-        );
-
-        console.log(
-            "🔄 PAGAMENTO ASAAS ATUALIZADO NO POSTGRESQL:",
-            pagamentoId
-        );
-
-        console.log(
-            "📊 STATUS:",
-            statusAsaas
-        );
-
-        console.log(
-            "🔖 REFERÊNCIA:",
-            referencia
-        );
-
-        if (pedidoId) {
-
-            console.log(
-                "🆔 PEDIDO VINCULADO:",
-                pedidoId
-            );
-        }
-
-        return registro.id;
-    }
-
-    // --------------------------------------------------------
-    // NOVO
-    // --------------------------------------------------------
-
-    const inserido =
-        await pool.query(
-            `
-            INSERT INTO pagamentos_asaas (
-                id,
-                pagamento_id,
-                pedido_id,
-                external_reference,
-                status,
-                valor,
-                dados,
-                criado_em,
-                atualizado_em
-            )
-            VALUES (
-                $1,
-                $2,
-                $3,
-                $4,
-                $5,
-                $6,
-                $7,
-                NOW(),
-                NOW()
-            )
-            RETURNING id
-            `,
-            [
-
-                pagamentoId,
-
-                pagamentoId,
-
-                pedidoId
-                    ? String(pedidoId)
-                    : null,
-
-                referencia || null,
-
-                statusAsaas || null,
-
-                valor,
-
-                dadosPagamento,
-            ]
-        );
-
-    console.log(
-        "💾 PAGAMENTO ASAAS SALVO NO POSTGRESQL:",
-        pagamentoId
-    );
-
-    console.log(
-        "📊 STATUS:",
-        statusAsaas
-    );
-
-    console.log(
-        "🔖 REFERÊNCIA:",
-        referencia
-    );
-
-    return (
-        inserido.rows[0]?.id ||
-        null
-    );
-}
-
-// ============================================================
-// SOCKET
+// SOCKET.IO
 // ============================================================
 
 function emitirAtualizacao(
@@ -1570,9 +1464,20 @@ function emitirAtualizacao(
                 pedido
             );
 
+        // ----------------------------------------------------
+        // NOVO PEDIDO
+        // ----------------------------------------------------
+        //
+        // Só envia depois do pagamento aprovado.
+        //
+        // ----------------------------------------------------
+
         if (
             pedido.statusPagamento ===
-            "approved"
+                "approved" &&
+
+            pedido.status ===
+                "AGUARDANDO_RESTAURANTE"
         ) {
 
             global.io
@@ -1581,6 +1486,11 @@ function emitirAtualizacao(
                     "novo_pedido",
                     pedido
                 );
+
+            console.log(
+                "📢 NOVO PEDIDO ENVIADO AO RESTAURANTE:",
+                pedido.id
+            );
         }
 
         console.log(
@@ -1603,6 +1513,286 @@ function emitirAtualizacao(
 }
 
 // ============================================================
+// PROCESSAR PIX APROVADO
+// ============================================================
+
+async function processarPixAprovado(
+    payment,
+    evento
+) {
+
+    console.log(
+        "========================================"
+    );
+
+    console.log(
+        "💠 FOODJET - PIX APROVADO"
+    );
+
+    console.log(
+        "========================================"
+    );
+
+    const pagamentoId =
+        normalizarId(
+            payment.id
+        );
+
+    const referencia =
+        normalizarId(
+            payment.externalReference
+        );
+
+    // ========================================================
+    // 1. BUSCAR CHECKOUT
+    // ========================================================
+
+    const checkoutResultado =
+        await buscarCheckoutPendente(
+            referencia,
+            pagamentoId
+        );
+
+    // ========================================================
+    // CHECKOUT NÃO ENCONTRADO
+    // ========================================================
+
+    if (
+        !checkoutResultado?.checkout
+    ) {
+
+        await salvarPagamentoPendente(
+            payment,
+            evento,
+            null,
+            null
+        );
+
+        console.error(
+            "❌ CHECKOUT PIX NÃO ENCONTRADO."
+        );
+
+        console.error(
+            "💳 ASAAS:",
+            pagamentoId
+        );
+
+        console.error(
+            "🔖 REFERÊNCIA:",
+            referencia
+        );
+
+        return {
+
+            processado:
+                false,
+
+            pagamentoRegistrado:
+                true,
+
+            pedidoCriado:
+                false,
+        };
+    }
+
+    const checkout =
+        checkoutResultado.checkout;
+
+    // ========================================================
+    // TRAVA PIX
+    // ========================================================
+
+    if (
+        obterTipoCheckout(
+            checkout
+        ) !==
+        "CHECKOUT_PIX"
+    ) {
+
+        await salvarPagamentoPendente(
+            payment,
+            evento,
+            null,
+            checkout
+        );
+
+        throw new Error(
+            "Checkout encontrado, mas não está marcado como PIX."
+        );
+    }
+
+    // ========================================================
+    // 2. VERIFICAR SE JÁ EXISTE PEDIDO
+    // ========================================================
+
+    const existente =
+        await localizarPedido(
+            payment
+        );
+
+    if (
+        existente?.pedido
+    ) {
+
+        console.log(
+            "♻️ PEDIDO PIX JÁ EXISTE:",
+            existente.pedido.id
+        );
+
+        const pedido =
+            await atualizarPedido(
+                existente.pedido,
+                payment,
+                evento
+            );
+
+        await salvarPagamentoPendente(
+            payment,
+            evento,
+            pedido.id,
+            checkout
+        );
+
+        emitirAtualizacao(
+            pedido,
+            evento
+        );
+
+        return {
+
+            processado:
+                true,
+
+            pedidoEncontrado:
+                true,
+
+            pedidoCriadoAgora:
+                false,
+
+            pedidoId:
+                pedido.id,
+
+            pedido,
+        };
+    }
+
+    // ========================================================
+    // 3. CRIAR PEDIDO
+    // ========================================================
+
+    console.log(
+        "========================================"
+    );
+
+    console.log(
+        "💰 PIX CONFIRMADO"
+    );
+
+    console.log(
+        "📦 CRIANDO PEDIDO AGORA"
+    );
+
+    console.log(
+        "========================================"
+    );
+
+    const pedidoCriado =
+        await criarPedidoDoCheckout(
+            checkout,
+            payment,
+            evento
+        );
+
+    // ========================================================
+    // 4. VINCULAR PAGAMENTO
+    // ========================================================
+
+    await vincularPedidoAoPagamento(
+        pagamentoId,
+        referencia,
+        pedidoCriado.id,
+        checkout,
+        payment,
+        evento
+    );
+
+    // ========================================================
+    // 5. ATUALIZAR PEDIDO
+    // ========================================================
+
+    const pedido =
+        await atualizarPedido(
+            pedidoCriado,
+            payment,
+            evento
+        );
+
+    // ========================================================
+    // 6. SALVAR PAGAMENTO
+    // ========================================================
+
+    await salvarPagamentoPendente(
+        payment,
+        evento,
+        pedido.id,
+        checkout
+    );
+
+    // ========================================================
+    // 7. SOCKET
+    // ========================================================
+
+    emitirAtualizacao(
+        pedido,
+        evento
+    );
+
+    console.log(
+        "========================================"
+    );
+
+    console.log(
+        "🎉 PEDIDO PIX CRIADO APÓS PAGAMENTO"
+    );
+
+    console.log(
+        "🆔 PEDIDO:",
+        pedido.id
+    );
+
+    console.log(
+        "💳 ASAAS:",
+        pagamentoId
+    );
+
+    console.log(
+        "📦 STATUS:",
+        pedido.status
+    );
+
+    console.log(
+        "========================================"
+    );
+
+    return {
+
+        processado:
+            true,
+
+        pedidoEncontrado:
+            false,
+
+        pedidoCriadoAgora:
+            true,
+
+        pedidoId:
+            pedido.id,
+
+        pedido,
+    };
+}
+
+// ============================================================
 // WEBHOOK ASAAS
 // POST /api/asaas/webhook
 // ============================================================
@@ -1611,41 +1801,50 @@ async function webhook(
     req,
     res
 ) {
+
     console.log("");
+
     console.log(
         "========================================"
     );
+
     console.log(
         "🔔 FOODJET - ASAAS WEBHOOK"
     );
+
     console.log(
         "========================================"
     );
 
     // ========================================================
-    // VALIDAR TOKEN
+    // TOKEN
     // ========================================================
 
     if (
         !validarTokenWebhook(req)
     ) {
+
         console.error(
             "❌ WEBHOOK ASAAS RECUSADO"
         );
 
         return res.status(401).json({
-            sucesso: false,
+
+            sucesso:
+                false,
+
             erro:
                 "Token do webhook inválido.",
         });
     }
 
     // ========================================================
-    // PAYLOAD
+    // BODY
     // ========================================================
 
     const body =
-        req.body || {};
+        req.body ||
+        {};
 
     const evento =
         normalizarId(
@@ -1653,7 +1852,8 @@ async function webhook(
         );
 
     const payment =
-        body.payment || {};
+        body.payment ||
+        {};
 
     console.log(
         "📌 EVENTO:",
@@ -1662,71 +1862,49 @@ async function webhook(
 
     console.log(
         "🆔 PAYMENT ID:",
-        payment?.id
+        payment.id
     );
 
     console.log(
-        "📊 STATUS ASAAS:",
-        payment?.status
-    );
-
-    console.log(
-        "💰 VALOR:",
-        payment?.value
+        "📊 STATUS:",
+        payment.status
     );
 
     console.log(
         "💳 TIPO:",
-        payment?.billingType
+        payment.billingType
     );
 
     console.log(
         "🔖 REFERÊNCIA:",
-        payment?.externalReference
+        payment.externalReference
     );
 
     // ========================================================
-    // VALIDAR EVENTO
-    // ========================================================
-
-    if (!evento) {
-        console.warn(
-            "⚠️ Webhook recebido sem evento."
-        );
-
-        return res.status(200).json({
-            sucesso: true,
-            processado: false,
-            mensagem:
-                "Evento não informado.",
-        });
-    }
-
-    // ========================================================
-    // VALIDAR PAYMENT
+    // VALIDAR
     // ========================================================
 
     if (
-        !payment ||
+        !evento ||
         !payment.id
     ) {
-        console.warn(
-            "⚠️ Webhook sem payment.id."
-        );
 
         return res.status(200).json({
-            sucesso: true,
-            processado: false,
+
+            sucesso:
+                true,
+
+            processado:
+                false,
+
             mensagem:
-                "Pagamento não informado.",
+                !evento
+                    ? "Evento não informado."
+                    : "Pagamento não informado.",
         });
     }
 
     try {
-
-        // ====================================================
-        // IDENTIFICAR PIX
-        // ====================================================
 
         const billingType =
             normalizarId(
@@ -1734,224 +1912,80 @@ async function webhook(
             ).toUpperCase();
 
         const ehPix =
-            billingType === "PIX";
+            billingType ===
+            "PIX";
 
         console.log(
             "💠 É PIX:",
-            ehPix ? "SIM" : "NÃO"
+            ehPix
+                ? "SIM"
+                : "NÃO"
         );
 
         // ====================================================
         // ====================================================
         // PIX
+        // ====================================================
         //
-        // IMPORTANTE:
+        // PENDING
+        // AWAITING_PAYMENT
+        // AWAITING_RISK_ANALYSIS
         //
-        // O PIX NÃO CRIA PEDIDO ANTES DO PAGAMENTO.
+        // NÃO CRIA PEDIDO.
         //
-        // O pedido só será criado quando o Asaas enviar:
+        // RECEIVED
+        // CONFIRMED
         //
-        // PAYMENT_RECEIVED
-        // ou
-        // PAYMENT_CONFIRMED
+        // CRIA PEDIDO.
         //
         // ====================================================
         // ====================================================
 
         if (
-            ehPix &&
-            (
-                evento ===
-                    "PAYMENT_RECEIVED" ||
-                evento ===
-                    "PAYMENT_CONFIRMED"
-            )
+            ehPix
         ) {
 
-            console.log("");
-            console.log(
-                "========================================"
-            );
-            console.log(
-                "💰 FOODJET - PIX CONFIRMADO"
-            );
-            console.log(
-                "========================================"
-            );
+            // ------------------------------------------------
+            // PIX AINDA NÃO PAGO
+            // ------------------------------------------------
 
-            console.log(
-                "🆔 ASAAS:",
-                payment.id
-            );
-
-            console.log(
-                "🔖 REFERÊNCIA:",
-                payment.externalReference
-            );
-
-            // ==================================================
-            // 1. ATUALIZAR PAGAMENTO ASAAS
-            //
-            // O registro ainda pode não possuir pedido.
-            // ==================================================
-
-            await salvarPagamentoPendente(
-                payment,
-                evento,
-                null,
-                null
-            );
-
-            console.log(
-                "💾 PAGAMENTO PIX REGISTRADO."
-            );
-
-            // ==================================================
-            // 2. VERIFICAR SE JÁ EXISTE PEDIDO
-            //
-            // Isso evita duplicação quando o Asaas reenviar
-            // PAYMENT_RECEIVED / PAYMENT_CONFIRMED.
-            // ==================================================
-
-            const resultadoExistente =
-                await localizarPedido(
-                    payment
-                );
-
-            let pedido =
-                resultadoExistente?.pedido ||
-                null;
-
-            if (pedido) {
-
-                console.log(
-                    "♻️ PEDIDO PIX JÁ EXISTE:",
-                    pedido.id
-                );
-
-                // ----------------------------------------------
-                // Atualizar dados do pagamento
-                // ----------------------------------------------
-
-                pedido =
-                    await atualizarPedido(
-                        pedido,
-                        payment,
-                        evento
-                    );
-
-                // ----------------------------------------------
-                // Garantir vínculo no pagamento
-                // ----------------------------------------------
+            if (
+                !pagamentoAprovado(
+                    payment.status
+                )
+            ) {
 
                 await salvarPagamentoPendente(
                     payment,
                     evento,
-                    pedido.id,
+                    null,
                     null
                 );
 
-                // ----------------------------------------------
-                // Socket
-                // ----------------------------------------------
-
-                emitirAtualizacao(
-                    pedido,
-                    evento
+                console.log(
+                    "⏳ PIX AINDA NÃO APROVADO."
                 );
 
                 console.log(
-                    "✅ WEBHOOK PIX JÁ PROCESSADO."
+                    "❌ NENHUM PEDIDO SERÁ CRIADO."
                 );
 
                 return res.status(200).json({
-                    sucesso: true,
-                    processado: true,
-                    pedidoEncontrado: true,
-                    pedidoCriadoAgora: false,
 
-                    pagamentoId:
-                        payment.id,
+                    sucesso:
+                        true,
 
-                    pedidoId:
-                        pedido.id,
-
-                    statusPagamento:
-                        pedido.statusPagamento,
-
-                    statusPedido:
-                        pedido.status,
-                });
-            }
-
-            // ==================================================
-            // 3. PEDIDO NÃO EXISTE
-            //
-            // Agora procuramos o checkout salvo antes da
-            // criação da cobrança PIX.
-            // ==================================================
-
-            console.log(
-                "📦 PEDIDO AINDA NÃO EXISTE."
-            );
-
-            console.log(
-                "🔎 BUSCANDO CHECKOUT PIX..."
-            );
-
-            const checkoutResultado =
-                await buscarCheckoutPendente(
-                    normalizarId(
-                        payment.externalReference
-                    ),
-                    normalizarId(
-                        payment.id
-                    )
-                );
-
-            if (
-                !checkoutResultado ||
-                !checkoutResultado.checkout
-            ) {
-
-                console.error(
-                    "❌ CHECKOUT PIX NÃO ENCONTRADO."
-                );
-
-                console.error(
-                    "🔖 REFERÊNCIA:",
-                    payment.externalReference
-                );
-
-                console.error(
-                    "🆔 PAYMENT:",
-                    payment.id
-                );
-
-                /*
-                 * O pagamento já foi confirmado.
-                 *
-                 * Não retornamos erro para o Asaas ficar
-                 * reenviando indefinidamente.
-                 *
-                 * O registro do pagamento permanece salvo.
-                 */
-
-                return res.status(200).json({
-                    sucesso: true,
-                    processado: false,
+                    processado:
+                        false,
 
                     pagamentoRegistrado:
                         true,
-
-                    pedidoEncontrado:
-                        false,
 
                     pedidoCriado:
                         false,
 
                     pagamentoAprovado:
-                        true,
+                        false,
 
                     pagamentoId:
                         payment.id,
@@ -1962,238 +1996,58 @@ async function webhook(
                 });
             }
 
-            const checkout =
-                checkoutResultado.checkout;
+            // ------------------------------------------------
+            // PIX APROVADO
+            // ------------------------------------------------
 
-            console.log(
-                "✅ CHECKOUT PIX ENCONTRADO."
-            );
-
-            console.log(
-                "👤 CLIENTE:",
-                checkout.clienteId
-            );
-
-            console.log(
-                "🍽️ RESTAURANTE:",
-                checkout.restauranteId
-            );
-
-            console.log(
-                "📦 ITENS:",
-                Array.isArray(
-                    checkout.itens
-                )
-                    ? checkout.itens.length
-                    : 0
-            );
-
-            console.log(
-                "💰 TOTAL:",
-                checkout.total
-            );
-
-            // ==================================================
-            // 4. CRIAR PEDIDO
-            //
-            // SOMENTE AGORA.
-            //
-            // O PIX já foi confirmado pelo Asaas.
-            // ==================================================
-
-            console.log("");
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "💰 PIX RECEBIDO"
-            );
-
-            console.log(
-                "📦 CRIANDO PEDIDO AGORA"
-            );
-
-            console.log(
-                "========================================"
-            );
-
-            pedido =
-                await criarPedidoDoCheckout(
-                    checkout,
+            const resultado =
+                await processarPixAprovado(
                     payment,
                     evento
                 );
-
-            // ==================================================
-            // 5. VINCULAR PEDIDO AO PAGAMENTO
-            // ==================================================
-
-            await vincularPedidoAoPagamento(
-                normalizarId(
-                    payment.id
-                ),
-
-                normalizarId(
-                    payment.externalReference
-                ),
-
-                pedido.id,
-
-                checkout,
-
-                payment,
-
-                evento
-            );
-
-            // ==================================================
-            // 6. GARANTIR STATUS FINAL DO PEDIDO
-            // ==================================================
-
-            pedido =
-                await atualizarPedido(
-                    pedido,
-                    payment,
-                    evento
-                );
-
-            // ==================================================
-            // 7. SALVAR PAGAMENTO COM pedido_id
-            // ==================================================
-
-            await salvarPagamentoPendente(
-                payment,
-                evento,
-                pedido.id,
-                checkout
-            );
-
-            console.log(
-                "💾 PAGAMENTO VINCULADO AO PEDIDO:",
-                pedido.id
-            );
-
-            // ==================================================
-            // 8. SOCKET
-            //
-            // O RESTAURANTE SÓ RECEBE O NOVO PEDIDO AGORA.
-            // ==================================================
-
-            emitirAtualizacao(
-                pedido,
-                evento
-            );
-
-            console.log("");
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "🎉 PEDIDO PIX CRIADO APÓS PAGAMENTO"
-            );
-
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "🆔 PEDIDO:",
-                pedido.id
-            );
-
-            console.log(
-                "🆔 ASAAS:",
-                payment.id
-            );
-
-            console.log(
-                "🔖 REFERÊNCIA:",
-                payment.externalReference
-            );
-
-            console.log(
-                "📊 STATUS ASAAS:",
-                payment.status
-            );
-
-            console.log(
-                "💳 STATUS PAGAMENTO:",
-                pedido.statusPagamento
-            );
-
-            console.log(
-                "📦 STATUS PEDIDO:",
-                pedido.status
-            );
-
-            console.log(
-                "========================================"
-            );
-
-            // ==================================================
-            // 9. RESPOSTA PARA ASAAS
-            // ==================================================
 
             return res.status(200).json({
-                sucesso: true,
 
-                processado: true,
-
-                pedidoEncontrado:
-                    false,
-
-                pedidoCriadoAgora:
+                sucesso:
                     true,
+
+                ...resultado,
 
                 pagamentoId:
                     payment.id,
 
-                pedidoId:
-                    pedido.id,
-
                 statusPagamento:
-                    pedido.statusPagamento,
+                    resultado.pedido?.statusPagamento ||
+                    "approved",
 
                 statusPedido:
-                    pedido.status,
+                    resultado.pedido?.status ||
+                    null,
             });
         }
 
         // ====================================================
         // ====================================================
-        // DEMAIS PAGAMENTOS
-        //
         // CARTÃO / OUTROS
+        // ====================================================
         //
-        // NÃO ALTERAR O FLUXO EXISTENTE.
+        // Não alteramos a regra principal do cartão.
+        //
         // ====================================================
         // ====================================================
 
-        const resultado =
+        const resultadoExistente =
             await localizarPedido(
                 payment
             );
 
-        let pedido =
-            resultado?.pedido ||
-            null;
+        if (
+            resultadoExistente?.pedido
+        ) {
 
-        // ====================================================
-        // PEDIDO JÁ EXISTE
-        // ====================================================
-
-        if (pedido) {
-
-            console.log(
-                "📦 PEDIDO JÁ EXISTE:",
-                pedido.id
-            );
-
-            pedido =
+            const pedido =
                 await atualizarPedido(
-                    pedido,
+                    resultadoExistente.pedido,
                     payment,
                     evento
                 );
@@ -2210,37 +2064,13 @@ async function webhook(
                 evento
             );
 
-            console.log(
-                "========================================"
-            );
-
-            console.log(
-                "✅ WEBHOOK PROCESSADO"
-            );
-
-            console.log(
-                "🆔 PEDIDO:",
-                pedido.id
-            );
-
-            console.log(
-                "🆔 ASAAS:",
-                payment.id
-            );
-
-            console.log(
-                "📊 STATUS:",
-                payment.status
-            );
-
-            console.log(
-                "========================================"
-            );
-
             return res.status(200).json({
-                sucesso: true,
 
-                processado: true,
+                sucesso:
+                    true,
+
+                processado:
+                    true,
 
                 pedidoEncontrado:
                     true,
@@ -2262,19 +2092,15 @@ async function webhook(
             });
         }
 
-        // ====================================================
-        // PAGAMENTO AINDA NÃO APROVADO
-        // ====================================================
+        // ----------------------------------------------------
+        // NÃO APROVADO
+        // ----------------------------------------------------
 
         if (
             !pagamentoAprovado(
                 payment.status
             )
         ) {
-
-            console.log(
-                "⏳ PAGAMENTO AINDA NÃO APROVADO."
-            );
 
             await salvarPagamentoPendente(
                 payment,
@@ -2284,7 +2110,9 @@ async function webhook(
             );
 
             return res.status(200).json({
-                sucesso: true,
+
+                sucesso:
+                    true,
 
                 processado:
                     false,
@@ -2310,19 +2138,9 @@ async function webhook(
             });
         }
 
-        // ====================================================
-        // CARTÃO / OUTROS APROVADOS
-        //
-        // Mantém o fluxo atual.
-        // ====================================================
-
-        console.log(
-            "💰 PAGAMENTO APROVADO."
-        );
-
-        console.log(
-            "📦 RECUPERANDO CHECKOUT..."
-        );
+        // ----------------------------------------------------
+        // PAGAMENTO APROVADO
+        // ----------------------------------------------------
 
         const checkoutResultado =
             await buscarCheckoutPendente(
@@ -2335,13 +2153,8 @@ async function webhook(
             );
 
         if (
-            !checkoutResultado ||
-            !checkoutResultado.checkout
+            !checkoutResultado?.checkout
         ) {
-
-            console.error(
-                "❌ CHECKOUT NÃO ENCONTRADO."
-            );
 
             await salvarPagamentoPendente(
                 payment,
@@ -2351,16 +2164,15 @@ async function webhook(
             );
 
             return res.status(200).json({
-                sucesso: true,
+
+                sucesso:
+                    true,
 
                 processado:
                     false,
 
                 pagamentoRegistrado:
                     true,
-
-                pedidoEncontrado:
-                    false,
 
                 pedidoCriado:
                     false,
@@ -2380,12 +2192,109 @@ async function webhook(
         const checkout =
             checkoutResultado.checkout;
 
-        pedido =
-            await criarPedidoDoCheckout(
-                checkout,
-                payment,
-                evento
-            );
+        const pedidoCriado =
+            await Order.criar({
+
+                clienteId:
+                    String(
+                        checkout.clienteId
+                    ),
+
+                restauranteId:
+                    String(
+                        checkout.restauranteId
+                    ),
+
+                itens:
+                    checkout.itens,
+
+                endereco:
+                    checkout.endereco ||
+                    null,
+
+                pagamento:
+                    String(
+                        checkout.pagamento ||
+                        "CREDITO"
+                    ).toUpperCase(),
+
+                subtotal:
+                    Number(
+                        checkout.subtotal ||
+                        0
+                    ),
+
+                taxaServico:
+                    Number(
+                        checkout.taxaServico ||
+                        0
+                    ),
+
+                taxaEntrega:
+                    Number(
+                        checkout.taxaEntrega ||
+                        0
+                    ),
+
+                total:
+                    Number(
+                        checkout.total
+                    ),
+
+                precisaTroco:
+                    false,
+
+                trocoPara:
+                    null,
+
+                valorTroco:
+                    0,
+
+                status:
+                    "AGUARDANDO_RESTAURANTE",
+
+                pagamentoStatus:
+                    "APROVADO",
+
+                statusPagamento:
+                    "approved",
+
+                pagamentoAprovado:
+                    true,
+
+                pagamentoId:
+                    payment.id,
+
+                paymentId:
+                    payment.id,
+
+                asaasPaymentId:
+                    payment.id,
+
+                externalReference:
+                    normalizarId(
+                        payment.externalReference
+                    ),
+
+                referenciaPagamento:
+                    normalizarId(
+                        payment.externalReference
+                    ),
+
+                statusPagamentoAsaas:
+                    normalizarId(
+                        payment.status
+                    ).toUpperCase(),
+
+                asaasEvento:
+                    evento,
+
+                asaasAtualizadoEm:
+                    agora(),
+
+                pagamentoAprovadoEm:
+                    agora(),
+            });
 
         await vincularPedidoAoPagamento(
             normalizarId(
@@ -2396,7 +2305,7 @@ async function webhook(
                 payment.externalReference
             ),
 
-            pedido.id,
+            pedidoCriado.id,
 
             checkout,
 
@@ -2405,9 +2314,9 @@ async function webhook(
             evento
         );
 
-        pedido =
+        const pedido =
             await atualizarPedido(
-                pedido,
+                pedidoCriado,
                 payment,
                 evento
             );
@@ -2424,40 +2333,10 @@ async function webhook(
             evento
         );
 
-        console.log(
-            "========================================"
-        );
-
-        console.log(
-            "🎉 WEBHOOK CONCLUÍDO COM SUCESSO"
-        );
-
-        console.log(
-            "🆔 PEDIDO:",
-            pedido.id
-        );
-
-        console.log(
-            "🆔 ASAAS:",
-            payment.id
-        );
-
-        console.log(
-            "📊 STATUS:",
-            payment.status
-        );
-
-        console.log(
-            "📦 STATUS PEDIDO:",
-            pedido.status
-        );
-
-        console.log(
-            "========================================"
-        );
-
         return res.status(200).json({
-            sucesso: true,
+
+            sucesso:
+                true,
 
             processado:
                 true,
@@ -2492,10 +2371,6 @@ async function webhook(
         );
 
         console.error(
-            "========================================"
-        );
-
-        console.error(
             error
         );
 
@@ -2514,7 +2389,9 @@ async function webhook(
         );
 
         return res.status(500).json({
-            sucesso: false,
+
+            sucesso:
+                false,
 
             erro:
                 "Erro ao processar webhook.",
@@ -2530,7 +2407,9 @@ async function webhook(
 // REGISTRAR ROTA
 // ============================================================
 
-function registrarWebhook(app) {
+function registrarWebhook(
+    app
+) {
 
     if (!app) {
 
@@ -2545,15 +2424,7 @@ function registrarWebhook(app) {
     );
 
     console.log(
-        "========================================"
-    );
-
-    console.log(
         "🔔 ROTA /api/asaas/webhook REGISTRADA"
-    );
-
-    console.log(
-        "========================================"
     );
 }
 
@@ -2567,4 +2438,3 @@ module.exports = {
 
     registrarWebhook,
 };
-
