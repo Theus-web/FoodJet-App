@@ -380,78 +380,56 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   }
 
   // ============================================================
-  // FLUXO PIX
-  //
-  // PIX:
-  // 1. Cria o pedido.
-  // 2. Pega o ID.
-  // 3. Abre PaymentScreen.
-  // 4. PaymentScreen gera o PIX.
-  // ============================================================
+// FLUXO PIX
+//
+// IMPORTANTE:
+// O PIX NÃO cria pedido antes do pagamento.
+//
+// Fluxo:
+//
+// 1. Abre PaymentScreen.
+// 2. PaymentScreen chama POST /pagamentos/pix.
+// 3. Backend cria a cobrança PIX no Asaas.
+// 4. Nenhum pedido é criado neste momento.
+// 5. Cliente paga o PIX.
+// 6. Asaas envia RECEIVED/CONFIRMED para o webhook.
+// 7. Backend cria o pedido.
+// 8. Pedido fica AGUARDANDO_RESTAURANTE.
+// ============================================================
 
-  Future<void> criarPedidoParaPix() async {
-    if (!mounted) {
-      return;
-    }
-
-    debugPrint("");
-    debugPrint("========================================");
-    debugPrint("💚 FOODJET - PAGAMENTO PIX");
-    debugPrint("========================================");
-    debugPrint("📦 Criando pedido antes do PIX");
-    debugPrint("🏪 RESTAURANTE: ${widget.restauranteId}");
-    debugPrint("💰 TOTAL: $totalPedido");
-    debugPrint("========================================");
-
-    final dados = await criarPedido();
-
-    if (dados == null) {
-      return;
-    }
-
-    final pedidoId = extrairPedidoId(dados);
-
-    if (pedidoId == null) {
-      mostrarMensagem(
-        "Pedido criado, mas o ID não foi retornado.",
-        erro: true,
-      );
-      return;
-    }
-
-    final id = int.tryParse(pedidoId.toString());
-
-    if (id == null) {
-      mostrarMensagem(
-        "ID do pedido inválido.",
-        erro: true,
-      );
-      return;
-    }
-
-    if (!mounted) {
-      return;
-    }
-
-    debugPrint("✅ PEDIDO CRIADO: $id");
-    debugPrint("➡️ Abrindo tela de pagamento PIX");
-
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => PaymentScreen(
-          endereco: widget.endereco,
-          itens: widget.itens,
-          subtotal: widget.subtotal,
-          restauranteId: widget.restauranteId,
-          taxaEntrega: taxaEntrega,
-          taxaServico: taxaServico,
-          formaPagamento: "PIX",
-          pedidoId: id.toString(),
-        ),
-      ),
-    );
+Future<void> criarPedidoParaPix() async {
+  if (!mounted) {
+    return;
   }
+
+  debugPrint("");
+  debugPrint("========================================");
+  debugPrint("💚 FOODJET - PAGAMENTO PIX");
+  debugPrint("========================================");
+  debugPrint("🚫 NÃO criando pedido antes do PIX");
+  debugPrint("🏪 RESTAURANTE: ${widget.restauranteId}");
+  debugPrint("💰 TOTAL: $totalPedido");
+  debugPrint("➡️ Abrindo PaymentScreen");
+  debugPrint("========================================");
+
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (_) => PaymentScreen(
+        endereco: widget.endereco,
+        itens: widget.itens,
+        subtotal: widget.subtotal,
+        restauranteId: widget.restauranteId,
+        taxaEntrega: taxaEntrega,
+        taxaServico: taxaServico,
+        formaPagamento: "PIX",
+
+        // PIX ainda não possui pedido.
+        pedidoId: null,
+      ),
+    ),
+  );
+}
 
   // ============================================================
   // FLUXO CARTÃO DE CRÉDITO

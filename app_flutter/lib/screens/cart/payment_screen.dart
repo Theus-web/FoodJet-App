@@ -1,4 +1,3 @@
-
 import 'dart:async';
 import 'dart:convert';
 
@@ -77,7 +76,9 @@ class _PaymentScreenState extends State<PaymentScreen> {
               restauranteId: widget.restauranteId,
               taxaEntrega: widget.taxaEntrega,
               taxaServico: widget.taxaServico,
-              pedidoId: widget.pedidoId,
+
+              // PIX NÃO possui pedido antes do pagamento.
+              pedidoId: null,
             )
           : formaPagamento == "CREDITO"
               ? CardPaymentPage(
@@ -135,6 +136,8 @@ class _PixCheckoutPageState
     extends State<PixCheckoutPage> {
   bool carregando = false;
   bool pagamentoGerado = false;
+  bool pagamentoAprovado = false;
+  bool navegandoPedido = false;
 
   String? pagamentoId;
   String? qrCodeBase64;
@@ -145,6 +148,8 @@ class _PixCheckoutPageState
   DateTime? expiracao;
 
   Timer? timer;
+
+  int tentativas = 0;
 
   double get totalPedido {
     return widget.subtotal +
@@ -158,16 +163,9 @@ class _PixCheckoutPageState
     super.dispose();
   }
 
-  List<Map<String, dynamic>> prepararItens() {
-    return widget.itens.map((item) {
-      return {
-        "produtoId": item.nome,
-        "nome": item.nome,
-        "quantidade": item.quantidade,
-        "preco": item.preco,
-      };
-    }).toList();
-  }
+  // ============================================================
+  // TOKEN
+  // ============================================================
 
   Future<String?> obterToken() async {
     final prefs =
@@ -180,11 +178,40 @@ class _PixCheckoutPageState
   }
 
   // ============================================================
+  // ITENS
+  // ============================================================
+
+  List<Map<String, dynamic>> prepararItens() {
+    return widget.itens.map((item) {
+      return {
+        "produtoId": item.nome,
+        "nome": item.nome,
+        "quantidade": item.quantidade,
+        "preco": item.preco,
+      };
+    }).toList();
+  }
+
+  // ============================================================
   // GERAR PIX
+  //
+  // ATENÇÃO:
+  //
+  // ESTE MÉTODO NÃO CRIA PEDIDO.
+  //
+  // Ele cria somente:
+  //
+  // 1. checkout pendente
+  // 2. cobrança PIX no Asaas
+  //
+  // O pedido somente nasce no webhook
+  // depois que o pagamento for aprovado.
   // ============================================================
 
   Future<void> gerarPix() async {
-    if (carregando) return;
+    if (carregando) {
+      return;
+    }
 
     setState(() {
       carregando = true;
@@ -204,6 +231,12 @@ class _PixCheckoutPageState
         "${Api.baseUrl}/pagamentos/pix",
       );
 
+      // ========================================================
+      // IMPORTANTE:
+      //
+      // NUNCA enviar um pedidoId existente no PIX.
+      // ========================================================
+
       final body = {
         "valor": totalPedido,
         "total": totalPedido,
@@ -211,14 +244,30 @@ class _PixCheckoutPageState
         "taxaEntrega": widget.taxaEntrega,
         "taxaServico": widget.taxaServico,
         "restauranteId": widget.restauranteId,
-        "pedidoId": widget.pedidoId,
+
+        // PAYMENT-FIRST
+        "pedidoId": null,
+
         "endereco": widget.endereco,
         "itens": prepararItens(),
+        "formaPagamento": "PIX",
+        "pagamento": "PIX",
       };
 
+      debugPrint("");
+      debugPrint("========================================");
+      debugPrint("💚 FOODJET - GERAR PIX");
+      debugPrint("========================================");
       debugPrint(
-        "PIX - GERANDO PAGAMENTO",
+        "🏪 RESTAURANTE: ${widget.restauranteId}",
       );
+      debugPrint(
+        "💰 TOTAL: ${totalPedido.toStringAsFixed(2)}",
+      );
+      debugPrint("🚫 PEDIDO ID: NULL");
+      debugPrint("🚫 PEDIDO NÃO SERÁ CRIADO");
+      debugPrint("➡️ CRIANDO SOMENTE PIX");
+      debugPrint("========================================");
 
       final response = await http.post(
         url,
@@ -230,10 +279,28 @@ class _PixCheckoutPageState
       );
 
       debugPrint(
-        "PIX - STATUS HTTP: ${response.statusCode}",
+        "💚 PIX - HTTP: ${response.statusCode}",
       );
 
-      final dados = jsonDecode(response.body);
+      Map<String, dynamic> dados;
+
+      try {
+        final decoded =
+            jsonDecode(response.body);
+
+        if (decoded is! Map) {
+          throw Exception();
+        }
+
+        dados =
+            Map<String, dynamic>.from(
+          decoded,
+        );
+      } catch (_) {
+        throw Exception(
+          "Resposta inválida do servidor.",
+        );
+      }
 
       if (response.statusCode < 200 ||
           response.statusCode >= 300 ||
@@ -245,6 +312,10 @@ class _PixCheckoutPageState
         );
       }
 
+      // ========================================================
+      // PIX
+      // ========================================================
+
       final pix = dados["pix"];
 
       if (pix == null || pix is! Map) {
@@ -253,25 +324,29 @@ class _PixCheckoutPageState
         );
       }
 
-      final novoPagamentoId =
-          dados["pagamentoId"]?.toString() ??
-              dados["paymentId"]?.toString();
+      // ========================================================
+      // PAGAMENTO ID
+      // ========================================================
 
-      final novoQrCodeBase64 =
-          pix["qrCodeBase64"]?.toString() ?? "";
+      String? novoPagamentoId;
 
-      final novoPixCopiaCola =
-          pix["qrCode"]?.toString() ??
-              pix["payload"]?.toString() ??
-              "";
+      novoPagamentoId =
+          dados["pagamentoId"]?.toString();
 
-      final novoTicketUrl =
-          pix["ticketUrl"]?.toString() ?? "";
+      novoPagamentoId ??=
+          dados["paymentId"]?.toString();
 
-      final novaExpiracao =
-          pix["expiracao"]?.toString() ??
-              pix["expirationDate"]?.toString() ??
-              "";
+      novoPagamentoId ??=
+          dados["asaasPaymentId"]?.toString();
+
+      novoPagamentoId ??=
+          pix["pagamentoId"]?.toString();
+
+      novoPagamentoId ??=
+          pix["paymentId"]?.toString();
+
+      novoPagamentoId ??=
+          pix["id"]?.toString();
 
       if (novoPagamentoId == null ||
           novoPagamentoId.isEmpty) {
@@ -280,6 +355,46 @@ class _PixCheckoutPageState
         );
       }
 
+      // ========================================================
+      // QR CODE
+      // ========================================================
+
+      final novoQrCodeBase64 =
+          pix["qrCodeBase64"]?.toString() ??
+              pix["encodedImage"]?.toString() ??
+              pix["imagem"]?.toString() ??
+              "";
+
+      // ========================================================
+      // COPIA E COLA
+      // ========================================================
+
+      final novoPixCopiaCola =
+          pix["qrCode"]?.toString() ??
+              pix["payload"]?.toString() ??
+              pix["pixCopiaCola"]?.toString() ??
+              pix["copyPaste"]?.toString() ??
+              "";
+
+      // ========================================================
+      // TICKET
+      // ========================================================
+
+      final novoTicketUrl =
+          pix["ticketUrl"]?.toString() ??
+              pix["invoiceUrl"]?.toString() ??
+              "";
+
+      // ========================================================
+      // EXPIRAÇÃO
+      // ========================================================
+
+      final novaExpiracao =
+          pix["expiracao"]?.toString() ??
+              pix["expirationDate"]?.toString() ??
+              pix["expiresAt"]?.toString() ??
+              "";
+
       if (novoQrCodeBase64.isEmpty &&
           novoPixCopiaCola.isEmpty) {
         throw Exception(
@@ -287,7 +402,9 @@ class _PixCheckoutPageState
         );
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         pagamentoId = novoPagamentoId;
@@ -310,15 +427,32 @@ class _PixCheckoutPageState
         pagamentoGerado = true;
 
         if (novaExpiracao.isNotEmpty) {
-          expiracao = DateTime.tryParse(
+          expiracao =
+              DateTime.tryParse(
             novaExpiracao,
           );
         }
       });
 
+      debugPrint("");
+      debugPrint("========================================");
+      debugPrint("✅ PIX GERADO");
+      debugPrint(
+        "💳 PAGAMENTO: $novoPagamentoId",
+      );
+      debugPrint("🚫 PEDIDO: NÃO CRIADO");
+      debugPrint("⏳ AGUARDANDO PAGAMENTO");
+      debugPrint("========================================");
+
+      // ========================================================
+      // COMEÇAR CONSULTA
+      // ========================================================
+
       iniciarConsultaPagamento();
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       setState(() {
         mensagem = e
@@ -338,19 +472,29 @@ class _PixCheckoutPageState
   }
 
   // ============================================================
-  // CONSULTAR PIX
+  // CONSULTA
   // ============================================================
 
   void iniciarConsultaPagamento() {
     timer?.cancel();
 
+    tentativas = 0;
+
+    // Consulta imediatamente.
+    consultarPagamento();
+
+    // Depois consulta a cada 3 segundos.
     timer = Timer.periodic(
-      const Duration(seconds: 5),
+      const Duration(seconds: 3),
       (_) async {
         await consultarPagamento();
       },
     );
   }
+
+  // ============================================================
+  // CONSULTAR PAGAMENTO
+  // ============================================================
 
   Future<void> consultarPagamento() async {
     if (pagamentoId == null ||
@@ -358,10 +502,17 @@ class _PixCheckoutPageState
       return;
     }
 
+    if (navegandoPedido) {
+      return;
+    }
+
+    tentativas++;
+
     try {
       final token = await obterToken();
 
-      if (token == null || token.isEmpty) {
+      if (token == null ||
+          token.isEmpty) {
         return;
       }
 
@@ -370,8 +521,15 @@ class _PixCheckoutPageState
           "${Api.baseUrl}/pagamentos/$pagamentoId",
         ),
         headers: {
-          "Authorization": "Bearer $token",
+          "Authorization":
+              "Bearer $token",
+          "Content-Type":
+              "application/json",
         },
+      );
+
+      debugPrint(
+        "💚 PIX - CONSULTA #$tentativas - HTTP ${response.statusCode}",
       );
 
       if (response.statusCode < 200 ||
@@ -379,72 +537,283 @@ class _PixCheckoutPageState
         return;
       }
 
-      final dados = jsonDecode(response.body);
+      final decoded =
+          jsonDecode(response.body);
+
+      if (decoded is! Map) {
+        return;
+      }
+
+      final dados =
+          Map<String, dynamic>.from(
+        decoded,
+      );
+
+      // ========================================================
+      // STATUS
+      // ========================================================
 
       final status =
           dados["statusPagamento"]
-              ?.toString()
-              .toUpperCase();
+                  ?.toString()
+                  .toUpperCase() ??
+              dados["status"]
+                  ?.toString()
+                  .toUpperCase() ??
+              dados["paymentStatus"]
+                  ?.toString()
+                  .toUpperCase() ??
+              "";
+
+      debugPrint(
+        "💚 PIX - STATUS: $status",
+      );
+
+      // ========================================================
+      // APROVAÇÃO
+      // ========================================================
 
       final aprovado =
           dados["pagamentoAprovado"] == true ||
+              dados["paymentApproved"] == true ||
               status == "APPROVED" ||
               status == "RECEIVED" ||
               status == "CONFIRMED";
 
-      debugPrint(
-        "PIX - STATUS: ${status ?? "DESCONHECIDO"}",
-      );
+      // ========================================================
+      // PAGAMENTO AINDA PENDENTE
+      // ========================================================
 
       if (!aprovado) {
         return;
       }
 
-      final pedidoId =
-          dados["pedidoId"] ??
-              dados["orderId"];
+      // ========================================================
+      // PAGAMENTO APROVADO
+      // ========================================================
 
-      if (pedidoId == null) {
+      if (!pagamentoAprovado) {
+        pagamentoAprovado = true;
+
+        debugPrint("");
         debugPrint(
-          "PIX - PAGAMENTO APROVADO, AGUARDANDO PEDIDO.",
+          "========================================",
         );
+        debugPrint(
+          "✅ FOODJET - PIX APROVADO",
+        );
+        debugPrint(
+          "💳 PAGAMENTO: $pagamentoId",
+        );
+        debugPrint(
+          "⏳ AGUARDANDO WEBHOOK",
+        );
+        debugPrint(
+          "⏳ AGUARDANDO CRIAÇÃO DO PEDIDO",
+        );
+        debugPrint(
+          "========================================",
+        );
+
+        if (mounted) {
+          setState(() {});
+        }
+      }
+
+      // ========================================================
+      // PROCURAR PEDIDO
+      // ========================================================
+
+      final pedidoId =
+          extrairPedidoIdPagamento(
+        dados,
+      );
+
+      if (pedidoId == null ||
+          pedidoId.trim().isEmpty) {
+        debugPrint(
+          "⏳ PAGAMENTO APROVADO, MAS PEDIDO AINDA NÃO EXISTE.",
+        );
+
         return;
       }
 
-      final id = int.tryParse(
-        pedidoId.toString(),
+      final id =
+          int.tryParse(
+        pedidoId.trim(),
       );
 
       if (id == null) {
+        debugPrint(
+          "❌ ID DO PEDIDO INVÁLIDO: $pedidoId",
+        );
+
         return;
       }
 
-      timer?.cancel();
-
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context)
-          .showSnackBar(
-        const SnackBar(
-          backgroundColor: Colors.green,
-          content: Text(
-            "Pagamento confirmado!",
-          ),
-        ),
+      debugPrint("");
+      debugPrint(
+        "========================================",
+      );
+      debugPrint(
+        "🎉 FOODJET - PEDIDO ENCONTRADO",
+      );
+      debugPrint(
+        "💳 PAGAMENTO: $pagamentoId",
+      );
+      debugPrint(
+        "📦 PEDIDO: $id",
+      );
+      debugPrint(
+        "➡️ ABRINDO ACOMPANHAMENTO",
+      );
+      debugPrint(
+        "========================================",
       );
 
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(
-          builder: (_) =>
-              OrderTrackingScreen(
-            pedidoId: id,
-          ),
-        ),
+      await abrirAcompanhamento(id);
+    } catch (e) {
+      debugPrint(
+        "⚠️ ERRO CONSULTANDO PIX: $e",
       );
-    } catch (_) {
-      // Continua consultando.
     }
+  }
+
+  // ============================================================
+  // EXTRAIR PEDIDO
+  // ============================================================
+
+  String? extrairPedidoIdPagamento(
+    Map<String, dynamic> dados,
+  ) {
+    // ----------------------------------------------------------
+    // DIRETO
+    // ----------------------------------------------------------
+
+    final diretos = [
+      dados["pedidoId"],
+      dados["orderId"],
+      dados["pedido_id"],
+      dados["order_id"],
+    ];
+
+    for (final valor in diretos) {
+      if (valor != null &&
+          valor.toString().trim().isNotEmpty) {
+        return valor.toString();
+      }
+    }
+
+    // ----------------------------------------------------------
+    // PEDIDO
+    // ----------------------------------------------------------
+
+    final pedido = dados["pedido"];
+
+    if (pedido is Map) {
+      final id =
+          pedido["id"] ??
+              pedido["_id"] ??
+              pedido["pedidoId"] ??
+              pedido["orderId"];
+
+      if (id != null) {
+        return id.toString();
+      }
+    }
+
+    // ----------------------------------------------------------
+    // ORDER
+    // ----------------------------------------------------------
+
+    final order = dados["order"];
+
+    if (order is Map) {
+      final id =
+          order["id"] ??
+              order["_id"] ??
+              order["pedidoId"] ??
+              order["orderId"];
+
+      if (id != null) {
+        return id.toString();
+      }
+    }
+
+    // ----------------------------------------------------------
+    // PAGAMENTO
+    // ----------------------------------------------------------
+
+    final pagamento =
+        dados["pagamento"];
+
+    if (pagamento is Map) {
+      final id =
+          pagamento["pedidoId"] ??
+              pagamento["orderId"] ??
+              pagamento["pedido_id"] ??
+              pagamento["order_id"];
+
+      if (id != null) {
+        return id.toString();
+      }
+    }
+
+    return null;
+  }
+
+  // ============================================================
+  // ABRIR PEDIDO
+  // ============================================================
+
+  Future<void> abrirAcompanhamento(
+    int pedidoId,
+  ) async {
+    if (navegandoPedido) {
+      return;
+    }
+
+    navegandoPedido = true;
+
+    timer?.cancel();
+
+    if (!mounted) {
+      return;
+    }
+
+    debugPrint(
+      "🚀 ABRINDO ORDER TRACKING: $pedidoId",
+    );
+
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
+      const SnackBar(
+        backgroundColor: Colors.green,
+        content: Text(
+          "Pagamento confirmado! Pedido criado.",
+        ),
+      ),
+    );
+
+    await Future.delayed(
+      const Duration(
+        milliseconds: 500,
+      ),
+    );
+
+    if (!mounted) {
+      return;
+    }
+
+    await Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (_) =>
+            OrderTrackingScreen(
+          pedidoId: pedidoId,
+        ),
+      ),
+    );
   }
 
   // ============================================================
@@ -463,7 +832,8 @@ class _PixCheckoutPageState
       ),
     );
 
-    ScaffoldMessenger.of(context).showSnackBar(
+    ScaffoldMessenger.of(context)
+        .showSnackBar(
       const SnackBar(
         content: Text(
           "Código PIX copiado!",
@@ -473,10 +843,12 @@ class _PixCheckoutPageState
   }
 
   // ============================================================
-  // NORMALIZAR BASE64
+  // BASE64
   // ============================================================
 
-  String limparBase64(String valor) {
+  String limparBase64(
+    String valor,
+  ) {
     return valor
         .replaceFirst(
           RegExp(
@@ -492,13 +864,16 @@ class _PixCheckoutPageState
   }
 
   // ============================================================
-  // BUILD PIX
+  // BUILD
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(20),
+      padding:
+          const EdgeInsets.all(20),
       child: Column(
         children: [
           const SizedBox(height: 10),
@@ -515,7 +890,8 @@ class _PixCheckoutPageState
             "Pagamento via PIX",
             style: TextStyle(
               fontSize: 24,
-              fontWeight: FontWeight.bold,
+              fontWeight:
+                  FontWeight.bold,
             ),
           ),
 
@@ -525,49 +901,74 @@ class _PixCheckoutPageState
             "Total: R\$ ${totalPedido.toStringAsFixed(2).replaceAll('.', ',')}",
             style: const TextStyle(
               fontSize: 20,
-              fontWeight: FontWeight.bold,
+              fontWeight:
+                  FontWeight.bold,
             ),
           ),
 
           const SizedBox(height: 25),
+
+          // ======================================================
+          // ERRO
+          // ======================================================
 
           if (mensagem != null)
             Container(
               width: double.infinity,
               padding:
                   const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
+              decoration:
+                  BoxDecoration(
+                color:
+                    Colors.red.shade50,
                 borderRadius:
-                    BorderRadius.circular(12),
+                    BorderRadius.circular(
+                  12,
+                ),
               ),
               child: Text(
                 mensagem!,
                 style: TextStyle(
-                  color: Colors.red.shade700,
+                  color:
+                      Colors.red.shade700,
                   fontSize: 14,
                 ),
               ),
             ),
 
+          // ======================================================
+          // GERAR PIX
+          // ======================================================
+
           if (!pagamentoGerado)
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
+              child:
+                  ElevatedButton(
                 onPressed:
-                    carregando ? null : gerarPix,
-                style: ElevatedButton.styleFrom(
+                    carregando
+                        ? null
+                        : gerarPix,
+                style:
+                    ElevatedButton.styleFrom(
                   backgroundColor:
-                      const Color(0xFFF97316),
-                  foregroundColor: Colors.white,
+                      const Color(
+                    0xFFF97316,
+                  ),
+                  foregroundColor:
+                      Colors.white,
                   padding:
-                      const EdgeInsets.symmetric(
+                      const EdgeInsets
+                          .symmetric(
                     vertical: 16,
                   ),
                   shape:
                       RoundedRectangleBorder(
                     borderRadius:
-                        BorderRadius.circular(12),
+                        BorderRadius
+                            .circular(
+                      12,
+                    ),
                   ),
                 ),
                 child: carregando
@@ -577,12 +978,14 @@ class _PixCheckoutPageState
                         child:
                             CircularProgressIndicator(
                           strokeWidth: 2,
-                          color: Colors.white,
+                          color:
+                              Colors.white,
                         ),
                       )
                     : const Text(
                         "Gerar PIX",
-                        style: TextStyle(
+                        style:
+                            TextStyle(
                           fontSize: 17,
                           fontWeight:
                               FontWeight.bold,
@@ -590,6 +993,10 @@ class _PixCheckoutPageState
                       ),
               ),
             ),
+
+          // ======================================================
+          // PIX GERADO
+          // ======================================================
 
           if (pagamentoGerado) ...[
             const SizedBox(height: 20),
@@ -599,18 +1006,28 @@ class _PixCheckoutPageState
               Container(
                 width: double.infinity,
                 padding:
-                    const EdgeInsets.all(18),
-                decoration: BoxDecoration(
+                    const EdgeInsets.all(
+                  18,
+                ),
+                decoration:
+                    BoxDecoration(
                   color: Colors.white,
                   borderRadius:
-                      BorderRadius.circular(16),
+                      BorderRadius.circular(
+                    16,
+                  ),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black
-                          .withOpacity(0.06),
+                          .withOpacity(
+                        0.06,
+                      ),
                       blurRadius: 10,
                       offset:
-                          const Offset(0, 3),
+                          const Offset(
+                        0,
+                        3,
+                      ),
                     ),
                   ],
                 ),
@@ -624,7 +1041,9 @@ class _PixCheckoutPageState
                             FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 15),
+                    const SizedBox(
+                      height: 15,
+                    ),
                     Image.memory(
                       base64Decode(
                         limparBase64(
@@ -642,7 +1061,9 @@ class _PixCheckoutPageState
                       ) {
                         return const Padding(
                           padding:
-                              EdgeInsets.all(20),
+                              EdgeInsets.all(
+                            20,
+                          ),
                           child: Column(
                             children: [
                               Icon(
@@ -653,7 +1074,8 @@ class _PixCheckoutPageState
                                     Colors.red,
                               ),
                               SizedBox(
-                                  height: 10),
+                                height: 10,
+                              ),
                               Text(
                                 "Não foi possível carregar o QR Code.",
                                 textAlign:
@@ -669,51 +1091,29 @@ class _PixCheckoutPageState
                 ),
               ),
 
-            if ((qrCodeBase64 == null ||
-                    qrCodeBase64!.isEmpty) &&
-                pixCopiaCola != null &&
-                pixCopiaCola!.isNotEmpty)
-              Container(
-                width: double.infinity,
-                padding:
-                    const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius:
-                      BorderRadius.circular(16),
-                ),
-                child: const Column(
-                  children: [
-                    Icon(
-                      Icons.qr_code_2,
-                      size: 55,
-                      color: Color(0xFF16A34A),
-                    ),
-                    SizedBox(height: 10),
-                    Text(
-                      "Use o código PIX copia e cola abaixo.",
-                      textAlign:
-                          TextAlign.center,
-                      style: TextStyle(
-                        fontSize: 15,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            // ====================================================
+            // COPIA E COLA
+            // ====================================================
 
-            const SizedBox(height: 20),
+            if (pixCopiaCola != null &&
+                pixCopiaCola!.isNotEmpty)
+              const SizedBox(height: 20),
 
             if (pixCopiaCola != null &&
                 pixCopiaCola!.isNotEmpty)
               Container(
                 width: double.infinity,
                 padding:
-                    const EdgeInsets.all(14),
-                decoration: BoxDecoration(
+                    const EdgeInsets.all(
+                  14,
+                ),
+                decoration:
+                    BoxDecoration(
                   color: Colors.white,
                   borderRadius:
-                      BorderRadius.circular(12),
+                      BorderRadius.circular(
+                    12,
+                  ),
                   border: Border.all(
                     color:
                         Colors.grey.shade300,
@@ -721,7 +1121,8 @@ class _PixCheckoutPageState
                 ),
                 child: Column(
                   crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                      CrossAxisAlignment
+                          .start,
                   children: [
                     const Text(
                       "PIX Copia e Cola",
@@ -731,7 +1132,11 @@ class _PixCheckoutPageState
                             FontWeight.bold,
                       ),
                     ),
-                    const SizedBox(height: 8),
+
+                    const SizedBox(
+                      height: 8,
+                    ),
+
                     Text(
                       pixCopiaCola!,
                       maxLines: 4,
@@ -740,23 +1145,34 @@ class _PixCheckoutPageState
                       style: TextStyle(
                         fontSize: 12,
                         color:
-                            Colors.grey.shade700,
+                            Colors.grey
+                                .shade700,
                       ),
                     ),
-                    const SizedBox(height: 12),
+
+                    const SizedBox(
+                      height: 12,
+                    ),
+
                     SizedBox(
-                      width: double.infinity,
+                      width:
+                          double.infinity,
                       child:
-                          ElevatedButton.icon(
-                        onPressed: copiarPix,
-                        icon: const Icon(
+                          ElevatedButton
+                              .icon(
+                        onPressed:
+                            copiarPix,
+                        icon:
+                            const Icon(
                           Icons.copy,
                         ),
-                        label: const Text(
+                        label:
+                            const Text(
                           "Copiar código PIX",
                         ),
                         style:
-                            ElevatedButton.styleFrom(
+                            ElevatedButton
+                                .styleFrom(
                           backgroundColor:
                               const Color(
                             0xFFF97316,
@@ -772,29 +1188,57 @@ class _PixCheckoutPageState
 
             const SizedBox(height: 22),
 
+            // ====================================================
+            // STATUS DO PAGAMENTO
+            // ====================================================
+
             Container(
               width: double.infinity,
               padding:
-                  const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius:
-                    BorderRadius.circular(12),
+                  const EdgeInsets.all(
+                16,
               ),
-              child: const Row(
+              decoration:
+                  BoxDecoration(
+                color:
+                    pagamentoAprovado
+                        ? Colors.green
+                            .shade50
+                        : Colors.orange
+                            .shade50,
+                borderRadius:
+                    BorderRadius.circular(
+                  12,
+                ),
+              ),
+              child: Row(
                 crossAxisAlignment:
-                    CrossAxisAlignment.start,
+                    CrossAxisAlignment
+                        .start,
                 children: [
                   Icon(
-                    Icons.hourglass_top_rounded,
+                    pagamentoAprovado
+                        ? Icons
+                            .check_circle_outline
+                        : Icons
+                            .hourglass_top_rounded,
                     color:
-                        Color(0xFFF97316),
+                        pagamentoAprovado
+                            ? Colors.green
+                            : const Color(
+                                0xFFF97316,
+                              ),
                   ),
-                  SizedBox(width: 10),
+                  const SizedBox(
+                    width: 10,
+                  ),
                   Expanded(
                     child: Text(
-                      "Aguardando confirmação do pagamento. Após pagar o PIX, a confirmação será feita automaticamente.",
-                      style: TextStyle(
+                      pagamentoAprovado
+                          ? "Pagamento confirmado! Aguardando a criação do pedido pelo servidor."
+                          : "Aguardando confirmação do pagamento. Após pagar o PIX, a confirmação será feita automaticamente.",
+                      style:
+                          const TextStyle(
                         fontSize: 14,
                         fontWeight:
                             FontWeight.w600,
@@ -822,18 +1266,44 @@ class _PixCheckoutPageState
     );
   }
 
-  String _formatarData(DateTime data) {
+  // ============================================================
+  // DATA
+  // ============================================================
+
+  String _formatarData(
+    DateTime data,
+  ) {
     final dia =
-        data.day.toString().padLeft(2, '0');
+        data.day
+            .toString()
+            .padLeft(
+              2,
+              '0',
+            );
 
     final mes =
-        data.month.toString().padLeft(2, '0');
+        data.month
+            .toString()
+            .padLeft(
+              2,
+              '0',
+            );
 
     final hora =
-        data.hour.toString().padLeft(2, '0');
+        data.hour
+            .toString()
+            .padLeft(
+              2,
+              '0',
+            );
 
     final minuto =
-        data.minute.toString().padLeft(2, '0');
+        data.minute
+            .toString()
+            .padLeft(
+              2,
+              '0',
+            );
 
     return "$dia/$mes/${data.year} às $hora:$minuto";
   }
@@ -919,12 +1389,11 @@ class _CardPaymentPageState
         prefs.getString("auth_token");
   }
 
-  // ============================================================
-  // VALIDADE
-  // ============================================================
-
-  bool validadeExpirada(String validade) {
-    final partes = validade.split("/");
+  bool validadeExpirada(
+    String validade,
+  ) {
+    final partes =
+        validade.split("/");
 
     if (partes.length != 2) {
       return true;
@@ -946,7 +1415,8 @@ class _CardPaymentPageState
     final ano =
         2000 + anoDoisDigitos;
 
-    final agora = DateTime.now();
+    final agora =
+        DateTime.now();
 
     if (ano < agora.year) {
       return true;
@@ -965,9 +1435,12 @@ class _CardPaymentPageState
   // ============================================================
 
   Future<void> pagar() async {
-    if (carregando) return;
+    if (carregando) {
+      return;
+    }
 
-    if (!formKey.currentState!.validate()) {
+    if (!formKey.currentState!
+        .validate()) {
       return;
     }
 
@@ -1029,17 +1502,15 @@ class _CardPaymentPageState
     });
 
     try {
-      final token = await obterToken();
+      final token =
+          await obterToken();
 
-      if (token == null || token.isEmpty) {
+      if (token == null ||
+          token.isEmpty) {
         throw Exception(
           "Sessão expirada. Faça login novamente.",
         );
       }
-
-      // ========================================================
-      // DADOS DO CHECKOUT
-      // ========================================================
 
       final body = {
         "valor": totalPedido,
@@ -1047,13 +1518,18 @@ class _CardPaymentPageState
         "subtotal": widget.subtotal,
         "taxaEntrega": widget.taxaEntrega,
         "taxaServico": widget.taxaServico,
-        "restauranteId": widget.restauranteId,
-        "pedidoId": widget.pedidoId,
-        "endereco": widget.endereco,
-        "itens": prepararItens(),
-        "formaPagamento": "CREDITO",
-        "pagamento": "CREDITO",
-
+        "restauranteId":
+            widget.restauranteId,
+        "pedidoId":
+            widget.pedidoId,
+        "endereco":
+            widget.endereco,
+        "itens":
+            prepararItens(),
+        "formaPagamento":
+            "CREDITO",
+        "pagamento":
+            "CREDITO",
         "cartao": {
           "numero": numero,
           "nome":
@@ -1066,28 +1542,21 @@ class _CardPaymentPageState
       debugPrint(
         "========================================",
       );
-
       debugPrint(
         "💳 PAGAMENTO CARTAO",
       );
-
       debugPrint(
         "💳 ENVIANDO PAGAMENTO",
       );
-
       debugPrint(
-        "💳 NOME DO TITULAR: ENVIADO",
+        "💳 DADOS DO CARTAO: NAO EXIBIDOS",
       );
-
-      debugPrint(
-        "💳 DADOS DO CARTAO: NAO EXIBIDOS NO LOG",
-      );
-
       debugPrint(
         "========================================",
       );
 
-      final response = await http.post(
+      final response =
+          await http.post(
         Uri.parse(
           "${Api.baseUrl}/pagamentos/cartao",
         ),
@@ -1097,14 +1566,13 @@ class _CardPaymentPageState
           "Authorization":
               "Bearer $token",
         },
-        body: jsonEncode(body),
+        body:
+            jsonEncode(body),
       );
 
       final dados =
-          jsonDecode(response.body);
-
-      debugPrint(
-        "💳 STATUS HTTP: ${response.statusCode}",
+          jsonDecode(
+        response.body,
       );
 
       if (response.statusCode < 200 ||
@@ -1117,20 +1585,11 @@ class _CardPaymentPageState
         );
       }
 
-      // ========================================================
-      // PEGAR PAGAMENTO
-      // ========================================================
-
       final pagamentoId =
-          dados["pagamentoId"]?.toString() ??
-              dados["paymentId"]?.toString();
-
-      // ========================================================
-      // IMPORTANTE:
-      //
-      // SE O BACKEND JÁ DEVOLVEU O PEDIDO,
-      // VAMOS DIRETO PARA O ACOMPANHAMENTO.
-      // ========================================================
+          dados["pagamentoId"]
+                  ?.toString() ??
+              dados["paymentId"]
+                  ?.toString();
 
       final pedidoRetornado =
           dados["pedidoId"] ??
@@ -1138,11 +1597,15 @@ class _CardPaymentPageState
 
       final pedidoNumero =
           int.tryParse(
-        pedidoRetornado?.toString() ?? "",
+        pedidoRetornado
+                ?.toString() ??
+            "",
       );
 
       if (pedidoNumero != null) {
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
 
         await abrirAcompanhamento(
           pedidoNumero,
@@ -1158,7 +1621,9 @@ class _CardPaymentPageState
         );
       }
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(context)
           .showSnackBar(
@@ -1171,25 +1636,24 @@ class _CardPaymentPageState
         ),
       );
 
-      // ========================================================
-      // AGUARDAR PAGAMENTO + PEDIDO
-      // ========================================================
-
       await aguardarPagamento(
         pagamentoId,
         token,
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       ScaffoldMessenger.of(context)
           .showSnackBar(
         SnackBar(
           content: Text(
-            e.toString().replaceFirst(
-                  "Exception: ",
-                  "",
-                ),
+            e.toString()
+                .replaceFirst(
+              "Exception: ",
+              "",
+            ),
           ),
         ),
       );
@@ -1203,31 +1667,27 @@ class _CardPaymentPageState
   }
 
   // ============================================================
-  // AGUARDAR PAGAMENTO
+  // AGUARDAR CARTÃO
   // ============================================================
 
   Future<void> aguardarPagamento(
     String pagamentoId,
     String token,
   ) async {
-    debugPrint(
-      "💳 AGUARDANDO CONFIRMAÇÃO DO PAGAMENTO",
-    );
-
-    // ========================================================
-    // 60 TENTATIVAS
-    // 60 x 3 segundos = 3 MINUTOS
-    // ========================================================
-
     for (int i = 0; i < 60; i++) {
       await Future.delayed(
-        const Duration(seconds: 3),
+        const Duration(
+          seconds: 3,
+        ),
       );
 
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
 
       try {
-        final response = await http.get(
+        final response =
+            await http.get(
           Uri.parse(
             "${Api.baseUrl}/pagamentos/$pagamentoId",
           ),
@@ -1239,14 +1699,13 @@ class _CardPaymentPageState
 
         if (response.statusCode < 200 ||
             response.statusCode >= 300) {
-          debugPrint(
-            "💳 CONSULTA PAGAMENTO HTTP ${response.statusCode}",
-          );
           continue;
         }
 
         final dados =
-            jsonDecode(response.body);
+            jsonDecode(
+          response.body,
+        );
 
         final status =
             dados["statusPagamento"]
@@ -1260,37 +1719,15 @@ class _CardPaymentPageState
                 status == "RECEIVED" ||
                 status == "CONFIRMED";
 
-        debugPrint(
-          "💳 PAGAMENTO ${i + 1}/60 - STATUS: ${status ?? "DESCONHECIDO"}",
-        );
-
-        // ======================================================
-        // PAGAMENTO AINDA NÃO APROVADO
-        // ======================================================
-
         if (!aprovado) {
           continue;
         }
-
-        debugPrint(
-          "✅ PAGAMENTO APROVADO",
-        );
-
-        // ======================================================
-        // PEGAR PEDIDO
-        // ======================================================
 
         final pedidoId =
             dados["pedidoId"] ??
                 dados["orderId"];
 
         if (pedidoId == null) {
-          debugPrint(
-            "⏳ PAGAMENTO APROVADO, MAS PEDIDO AINDA NÃO FOI CRIADO.",
-          );
-
-          // O webhook pode estar criando
-          // o pedido neste momento.
           continue;
         }
 
@@ -1300,53 +1737,26 @@ class _CardPaymentPageState
         );
 
         if (id == null) {
-          debugPrint(
-            "❌ PEDIDO ID INVÁLIDO: $pedidoId",
-          );
           continue;
         }
 
-        debugPrint(
-          "========================================",
+        await abrirAcompanhamento(
+          id,
         );
-
-        debugPrint(
-          "✅ PEDIDO LOCALIZADO",
-        );
-
-        debugPrint(
-          "✅ PEDIDO ID: $id",
-        );
-
-        debugPrint(
-          "➡️ ABRINDO ACOMPANHAMENTO",
-        );
-
-        debugPrint(
-          "========================================",
-        );
-
-        await abrirAcompanhamento(id);
 
         return;
-      } catch (e) {
-        debugPrint(
-          "⚠️ ERRO CONSULTANDO PAGAMENTO: $e",
-        );
-      }
+      } catch (_) {}
     }
 
-    // ========================================================
-    // TEMPO ESGOTADO
-    // ========================================================
-
-    if (!mounted) return;
+    if (!mounted) {
+      return;
+    }
 
     ScaffoldMessenger.of(context)
         .showSnackBar(
       const SnackBar(
         content: Text(
-          "O pagamento ainda está sendo processado. Verifique o pedido em alguns instantes.",
+          "O pagamento ainda está sendo processado. Verifique novamente em alguns instantes.",
         ),
       ),
     );
@@ -1365,23 +1775,15 @@ class _CardPaymentPageState
 
     navegandoPedido = true;
 
+    timer?.cancel();
+
     if (!mounted) {
       return;
     }
 
-    // ========================================================
-    // LIMPAR CAMPOS SENSÍVEIS ANTES DE SAIR
-    // ========================================================
-
     numeroController.clear();
     validadeController.clear();
     cvvController.clear();
-
-    // ========================================================
-    // PARAR QUALQUER TIMER
-    // ========================================================
-
-    timer?.cancel();
 
     debugPrint(
       "🚀 ABRINDO ORDER TRACKING: $pedidoId",
@@ -1402,23 +1804,27 @@ class _CardPaymentPageState
   // ITENS
   // ============================================================
 
-  List<Map<String, dynamic>> prepararItens() {
+  List<Map<String, dynamic>>
+      prepararItens() {
     return widget.itens.map((item) {
       return {
         "produtoId": item.nome,
         "nome": item.nome,
-        "quantidade": item.quantidade,
+        "quantidade":
+            item.quantidade,
         "preco": item.preco,
       };
     }).toList();
   }
 
   // ============================================================
-  // BUILD
+  // BUILD CARTÃO
   // ============================================================
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(
+    BuildContext context,
+  ) {
     return Form(
       key: formKey,
       child: SingleChildScrollView(
@@ -1441,7 +1847,8 @@ class _CardPaymentPageState
 
             Text(
               "Total: R\$ ${totalPedido.toStringAsFixed(2).replaceAll('.', ',')}",
-              style: const TextStyle(
+              style:
+                  const TextStyle(
                 fontSize: 19,
                 fontWeight:
                     FontWeight.bold,
@@ -1609,8 +2016,7 @@ class _CardPaymentPageState
                               ) ??
                               '';
 
-                      if (cvv.length <
-                              3 ||
+                      if (cvv.length < 3 ||
                           cvv.length > 4) {
                         return "CVV inválido";
                       }
@@ -1651,7 +2057,8 @@ class _CardPaymentPageState
                   Expanded(
                     child: Text(
                       "Informe o nome do titular exatamente como aparece no cartão. CPF, telefone e endereço de cobrança não são necessários nesta etapa.",
-                      style: TextStyle(
+                      style:
+                          TextStyle(
                         fontSize: 13,
                       ),
                     ),
@@ -1664,7 +2071,8 @@ class _CardPaymentPageState
 
             SizedBox(
               width: double.infinity,
-              child: ElevatedButton(
+              child:
+                  ElevatedButton(
                 onPressed:
                     carregando
                         ? null
@@ -1703,7 +2111,8 @@ class _CardPaymentPageState
                       )
                     : const Text(
                         "Pagar com cartão",
-                        style: TextStyle(
+                        style:
+                            TextStyle(
                           fontSize: 17,
                           fontWeight:
                               FontWeight.bold,
@@ -1756,7 +2165,8 @@ class _CardPaymentPageState
       inputFormatters:
           inputFormatters,
       validator: validator,
-      obscureText: obscureText,
+      obscureText:
+          obscureText,
       textCapitalization:
           textCapitalization,
       decoration:
@@ -1865,7 +2275,6 @@ class CardNumberInputFormatter
 
 // ============================================================
 // FORMATADOR DA VALIDADE
-// MM/AA
 // ============================================================
 
 class ValidityInputFormatter
@@ -1909,4 +2318,3 @@ class ValidityInputFormatter
     );
   }
 }
-
