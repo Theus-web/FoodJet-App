@@ -1,0 +1,7 @@
+import { BellRing, Bike, Building2, CreditCard, Radar, Zap } from "lucide-react";
+
+const items = [["Pedidos em tempo real", Radar],["Notificações", BellRing],["Acompanhamento de entrega", Bike],["Pagamentos digitais", CreditCard],["Gestão de restaurantes", Building2],["Plataforma para entregadores", Zap]];
+
+export function Technology() {
+ return <section className="section-space bg-[#f3f4f6]"><div className="container grid gap-10 lg:grid-cols-[.8fr_1.2fr] lg:gap-20"><div><span className="eyebrow">TECNOLOGIA FOODJET</span><h2 className="section-title mt-4">Tecnologia para deixar o delivery <span className="text-[#F97316]">mais simples.</span></h2><p className="section-copy mt-5">O FoodJet foi pensado para conectar clientes, restaurantes e entregadores em uma experiência digital integrada.</p></div><div className="grid gap-3 sm:grid-cols-2">{items.map(([title, Icon],i) => <article key={title as string} className={`group rounded-2xl p-5 transition-all duration-200 hover:-translate-y-1 ${i === 0 ? "bg-[#F97316] text-white shadow-[0_14px_28px_rgba(249,115,22,.18)]" : "bg-white text-[#111827] shadow-[0_7px_20px_rgba(17,24,39,.04)] ring-1 ring-[#111827]/[.04]"}`}><span className={`grid size-10 place-items-center rounded-xl ${i === 0 ? "bg-white/15 text-white" : "bg-[#fff0e7] text-[#F97316]"}`}><Icon className="size-4"/></span><h3 className="mt-6 text-sm font-extrabold">{title as string}</h3><div className={`mt-4 h-px w-full ${i === 0 ? "bg-white/20" : "bg-[#e5e7eb]"}`}/></article>)}</div></div></section>
+}

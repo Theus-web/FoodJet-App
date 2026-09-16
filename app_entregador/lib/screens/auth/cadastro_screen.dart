@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-import '../../../config/api.dart';
-import '../../../services/auth_service.dart';
+import '../../config/api.dart';
+import '../../services/auth_service.dart';
 // ignore: unused_import
 import '../screens/home/home_screen.dart';
 
