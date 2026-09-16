@@ -1,18 +1,19 @@
-
 const bcrypt = require("bcryptjs");
 
 const User = require("../models/user");
 const Restaurant = require("../models/restaurant");
+const Delivery = require("../models/delivery");
 const Token = require("../services/tokenService");
 const Email = require("../services/emailService");
 
 // ============================================================
 // CADASTRO
-// CLIENTE OU RESTAURANTE
+// CLIENTE, RESTAURANTE OU ENTREGADOR
 // ============================================================
 
 exports.register = async (req, res) => {
     try {
+
         const {
             nome,
             email,
@@ -33,7 +34,9 @@ exports.register = async (req, res) => {
             agencia,
             conta,
             pix,
-            tipo
+            tipo,
+            veiculo,
+            placa
         } = req.body;
 
         // ====================================================
@@ -74,9 +77,10 @@ exports.register = async (req, res) => {
         // VALIDAÇÃO SIMPLES DO EMAIL
         // ====================================================
 
-        const emailValido = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
-            emailNormalizado
-        );
+        const emailValido =
+            /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(
+                emailNormalizado
+            );
 
         if (!emailValido) {
             return res.status(400).json({
@@ -89,7 +93,9 @@ exports.register = async (req, res) => {
         // ====================================================
 
         const usuarioExistente =
-            await User.buscarPorEmail(emailNormalizado);
+            await User.buscarPorEmail(
+                emailNormalizado
+            );
 
         if (usuarioExistente) {
             return res.status(409).json({
@@ -105,39 +111,53 @@ exports.register = async (req, res) => {
 
             const agora = Date.now();
 
-            const usuarioId = `user_${agora}`;
+            const usuarioId =
+                `user_${agora}`;
 
-            const senhaHash = await bcrypt.hash(
-                String(senha),
-                10
-            );
+            const senhaHash =
+                await bcrypt.hash(
+                    String(senha),
+                    10
+                );
 
             const usuario = {
-                id: usuarioId,
 
-                nome: String(nome).trim(),
+                id:
+                    usuarioId,
 
-                email: emailNormalizado,
+                nome:
+                    String(nome).trim(),
 
-                telefone: telefone
-                    ? String(telefone).trim()
-                    : "",
+                email:
+                    emailNormalizado,
 
-                cpf: cpf
-                    ? String(cpf).trim()
-                    : "",
+                telefone:
+                    telefone
+                        ? String(telefone).trim()
+                        : "",
 
-                senha: senhaHash,
+                cpf:
+                    cpf
+                        ? String(cpf).trim()
+                        : "",
 
-                tipo: "CLIENTE",
+                senha:
+                    senhaHash,
 
-                restauranteId: null,
+                tipo:
+                    "CLIENTE",
 
-                endereco: null,
+                restauranteId:
+                    null,
 
-                criadoEm: new Date().toISOString(),
+                endereco:
+                    null,
 
-                atualizadoEm: new Date().toISOString()
+                criadoEm:
+                    new Date().toISOString(),
+
+                atualizadoEm:
+                    new Date().toISOString()
             };
 
             // =================================================
@@ -177,24 +197,35 @@ exports.register = async (req, res) => {
             );
 
             return res.status(201).json({
-                sucesso: true,
 
-                mensagem: "Conta criada com sucesso",
+                sucesso:
+                    true,
+
+                mensagem:
+                    "Conta criada com sucesso",
 
                 usuario: {
-                    id: usuario.id,
 
-                    nome: usuario.nome,
+                    id:
+                        usuario.id,
 
-                    email: usuario.email,
+                    nome:
+                        usuario.nome,
 
-                    telefone: usuario.telefone,
+                    email:
+                        usuario.email,
 
-                    cpf: usuario.cpf,
+                    telefone:
+                        usuario.telefone,
 
-                    tipo: usuario.tipo,
+                    cpf:
+                        usuario.cpf,
 
-                    restauranteId: null
+                    tipo:
+                        usuario.tipo,
+
+                    restauranteId:
+                        null
                 }
             });
         }
@@ -223,7 +254,8 @@ exports.register = async (req, res) => {
 
             if (!responsavel || !cpf) {
                 return res.status(400).json({
-                    erro: "Responsável e CPF são obrigatórios"
+                    erro:
+                        "Responsável e CPF são obrigatórios"
                 });
             }
 
@@ -236,7 +268,8 @@ exports.register = async (req, res) => {
                 !estado
             ) {
                 return res.status(400).json({
-                    erro: "O endereço completo é obrigatório"
+                    erro:
+                        "O endereço completo é obrigatório"
                 });
             }
 
@@ -256,8 +289,9 @@ exports.register = async (req, res) => {
             // NORMALIZAR CNPJ
             // =================================================
 
-            const cnpjNormalizado = String(cnpj)
-                .replace(/\D/g, "");
+            const cnpjNormalizado =
+                String(cnpj)
+                    .replace(/\D/g, "");
 
             if (!cnpjNormalizado) {
                 return res.status(400).json({
@@ -282,7 +316,8 @@ exports.register = async (req, res) => {
 
             if (cnpjExistente) {
                 return res.status(409).json({
-                    erro: "Este CNPJ já está cadastrado"
+                    erro:
+                        "Este CNPJ já está cadastrado"
                 });
             }
 
@@ -290,7 +325,8 @@ exports.register = async (req, res) => {
             // IDS
             // =================================================
 
-            const agora = Date.now();
+            const agora =
+                Date.now();
 
             const restauranteId =
                 `rest_${agora}`;
@@ -313,35 +349,48 @@ exports.register = async (req, res) => {
             // =================================================
 
             const restaurante = {
-                id: restauranteId,
 
-                nome: String(nome).trim(),
+                id:
+                    restauranteId,
 
-                cnpj: String(cnpj).trim(),
+                nome:
+                    String(nome).trim(),
 
-                categoria: categoria
-                    ? String(categoria).trim()
-                    : "Restaurante",
+                cnpj:
+                    String(cnpj).trim(),
 
-                email: emailNormalizado,
+                categoria:
+                    categoria
+                        ? String(categoria).trim()
+                        : "Restaurante",
 
-                telefone: String(telefone).trim(),
+                email:
+                    emailNormalizado,
+
+                telefone:
+                    String(telefone).trim(),
 
                 responsavel:
                     String(responsavel).trim(),
 
-                cpf: String(cpf).trim(),
+                cpf:
+                    String(cpf).trim(),
 
                 endereco: {
-                    cep: String(cep).trim(),
 
-                    rua: String(rua).trim(),
+                    cep:
+                        String(cep).trim(),
 
-                    numero: String(numero).trim(),
+                    rua:
+                        String(rua).trim(),
 
-                    complemento: complemento
-                        ? String(complemento).trim()
-                        : "",
+                    numero:
+                        String(numero).trim(),
+
+                    complemento:
+                        complemento
+                            ? String(complemento).trim()
+                            : "",
 
                     bairro:
                         String(bairro).trim(),
@@ -354,6 +403,7 @@ exports.register = async (req, res) => {
                 },
 
                 pagamento: {
+
                     banco:
                         String(banco).trim(),
 
@@ -367,11 +417,14 @@ exports.register = async (req, res) => {
                         String(pix).trim()
                 },
 
-                status: "FECHADO",
+                status:
+                    "FECHADO",
 
-                online: false,
+                online:
+                    false,
 
-                aberto: false,
+                aberto:
+                    false,
 
                 criadoEm:
                     new Date().toISOString(),
@@ -393,7 +446,9 @@ exports.register = async (req, res) => {
             // =================================================
 
             const usuario = {
-                id: usuarioId,
+
+                id:
+                    usuarioId,
 
                 nome:
                     String(responsavel).trim(),
@@ -427,7 +482,9 @@ exports.register = async (req, res) => {
             // SALVAR USUÁRIO
             // =================================================
 
-            await User.criar(usuario);
+            await User.criar(
+                usuario
+            );
 
             console.log("");
             console.log(
@@ -455,17 +512,16 @@ exports.register = async (req, res) => {
                 "=========================================="
             );
 
-            // =================================================
-            // RESPOSTA
-            // =================================================
-
             return res.status(201).json({
-                sucesso: true,
+
+                sucesso:
+                    true,
 
                 mensagem:
                     "Restaurante criado com sucesso",
 
                 usuario: {
+
                     id:
                         usuario.id,
 
@@ -486,6 +542,7 @@ exports.register = async (req, res) => {
                 },
 
                 restaurante: {
+
                     id:
                         restaurante.id,
 
@@ -508,12 +565,312 @@ exports.register = async (req, res) => {
         }
 
         // ====================================================
+        // ENTREGADOR
+        // ====================================================
+
+        if (tipoNormalizado === "ENTREGADOR") {
+
+            // =================================================
+            // VALIDAÇÕES ESPECÍFICAS DO ENTREGADOR
+            // =================================================
+
+            if (!telefone) {
+                return res.status(400).json({
+                    erro:
+                        "Telefone é obrigatório para o entregador"
+                });
+            }
+
+            if (!cpf) {
+                return res.status(400).json({
+                    erro:
+                        "CPF é obrigatório para o entregador"
+                });
+            }
+
+            // =================================================
+            // VEÍCULO
+            // =================================================
+
+            const veiculoNormalizado =
+                veiculo !== undefined &&
+                veiculo !== null
+                    ? String(veiculo).trim()
+                    : "";
+
+            const placaNormalizada =
+                placa !== undefined &&
+                placa !== null
+                    ? String(placa)
+                        .trim()
+                        .toUpperCase()
+                    : "";
+
+            // =================================================
+            // IDS
+            // =================================================
+
+            const agora =
+                Date.now();
+
+            const usuarioId =
+                `user_${agora}`;
+
+            // =================================================
+            // HASH DA SENHA
+            // =================================================
+
+            const senhaHash =
+                await bcrypt.hash(
+                    String(senha),
+                    10
+                );
+
+            // =================================================
+            // USUÁRIO
+            // =================================================
+
+            const usuario = {
+
+                id:
+                    usuarioId,
+
+                nome:
+                    String(nome).trim(),
+
+                email:
+                    emailNormalizado,
+
+                telefone:
+                    String(telefone).trim(),
+
+                cpf:
+                    String(cpf).trim(),
+
+                senha:
+                    senhaHash,
+
+                tipo:
+                    "ENTREGADOR",
+
+                restauranteId:
+                    null,
+
+                endereco:
+                    null,
+
+                criadoEm:
+                    new Date().toISOString(),
+
+                atualizadoEm:
+                    new Date().toISOString()
+            };
+
+            // =================================================
+            // SALVAR USUÁRIO
+            // =================================================
+
+            await User.criar(
+                usuario
+            );
+
+            // =================================================
+            // CADASTRO DO ENTREGADOR
+            // =================================================
+
+            const entregador = {
+
+                id:
+                    usuarioId,
+
+                nome:
+                    usuario.nome,
+
+                email:
+                    usuario.email,
+
+                telefone:
+                    usuario.telefone,
+
+                cpf:
+                    usuario.cpf,
+
+                veiculo:
+                    veiculoNormalizado || null,
+
+                placa:
+                    placaNormalizada || null,
+
+                status:
+                    "DISPONIVEL",
+
+                online:
+                    false,
+
+                criadoEm:
+                    new Date().toISOString(),
+
+                atualizadoEm:
+                    new Date().toISOString()
+            };
+
+            // =================================================
+            // SALVAR ENTREGADOR
+            // =================================================
+
+            try {
+
+                await Delivery.criar(
+                    entregador
+                );
+
+            } catch (deliveryError) {
+
+                console.error(
+                    "ERRO AO CADASTRAR ENTREGADOR:",
+                    deliveryError
+                );
+
+                // =================================================
+                // TENTAR DESFAZER USUÁRIO
+                // =================================================
+
+                try {
+
+                    await User.excluir(
+                        usuario.id
+                    );
+
+                } catch (rollbackError) {
+
+                    console.error(
+                        "ERRO AO DESFAZER USUÁRIO DO ENTREGADOR:",
+                        rollbackError
+                    );
+                }
+
+                throw deliveryError;
+            }
+
+            console.log("");
+            console.log(
+                "=========================================="
+            );
+            console.log(
+                "🛵 FOODJET - ENTREGADOR CADASTRADO"
+            );
+            console.log(
+                "=========================================="
+            );
+            console.log(
+                "🆔 USUÁRIO:",
+                usuario.id
+            );
+            console.log(
+                "🛵 ENTREGADOR:",
+                entregador.id
+            );
+            console.log(
+                "👤 NOME:",
+                usuario.nome
+            );
+            console.log(
+                "📧 EMAIL:",
+                usuario.email
+            );
+            console.log(
+                "📱 TELEFONE:",
+                usuario.telefone
+            );
+            console.log(
+                "🚗 VEÍCULO:",
+                entregador.veiculo ||
+                    "Não informado"
+            );
+            console.log(
+                "🔖 PLACA:",
+                entregador.placa ||
+                    "Não informada"
+            );
+            console.log(
+                "👤 TIPO:",
+                usuario.tipo
+            );
+            console.log(
+                "=========================================="
+            );
+
+            return res.status(201).json({
+
+                sucesso:
+                    true,
+
+                mensagem:
+                    "Entregador cadastrado com sucesso",
+
+                usuario: {
+
+                    id:
+                        usuario.id,
+
+                    nome:
+                        usuario.nome,
+
+                    email:
+                        usuario.email,
+
+                    telefone:
+                        usuario.telefone,
+
+                    cpf:
+                        usuario.cpf,
+
+                    tipo:
+                        usuario.tipo,
+
+                    restauranteId:
+                        null
+                },
+
+                entregador: {
+
+                    id:
+                        entregador.id,
+
+                    nome:
+                        entregador.nome,
+
+                    email:
+                        entregador.email,
+
+                    telefone:
+                        entregador.telefone,
+
+                    cpf:
+                        entregador.cpf,
+
+                    veiculo:
+                        entregador.veiculo,
+
+                    placa:
+                        entregador.placa,
+
+                    status:
+                        entregador.status,
+
+                    online:
+                        entregador.online
+                }
+            });
+        }
+
+        // ====================================================
         // TIPO INVÁLIDO
         // ====================================================
 
         return res.status(400).json({
             erro:
-                "Tipo de usuário inválido. Use CLIENTE ou RESTAURANTE."
+                "Tipo de usuário inválido. Use CLIENTE, RESTAURANTE ou ENTREGADOR."
         });
 
     } catch (error) {
@@ -524,6 +881,7 @@ exports.register = async (req, res) => {
         );
 
         return res.status(500).json({
+
             erro:
                 "Erro interno ao cadastrar usuário",
 
@@ -538,7 +896,9 @@ exports.register = async (req, res) => {
 // ============================================================
 
 exports.login = async (req, res) => {
+
     try {
+
         const {
             email,
             senha
@@ -582,17 +942,23 @@ exports.login = async (req, res) => {
         }
 
         // ====================================================
-        // RESTAURANTE
+        // TIPO DO USUÁRIO
         // ====================================================
-
-        let restaurante = null;
 
         const tipoUsuario =
             String(usuario.tipo || "")
                 .trim()
                 .toUpperCase();
 
-        if (tipoUsuario === "RESTAURANTE") {
+        // ====================================================
+        // RESTAURANTE
+        // ====================================================
+
+        let restaurante = null;
+
+        if (
+            tipoUsuario === "RESTAURANTE"
+        ) {
 
             if (!usuario.restauranteId) {
                 return res.status(403).json({
@@ -615,11 +981,34 @@ exports.login = async (req, res) => {
         }
 
         // ====================================================
+        // ENTREGADOR
+        // ====================================================
+
+        if (
+            tipoUsuario === "ENTREGADOR"
+        ) {
+
+            const entregador =
+                await Delivery.buscarPorId(
+                    usuario.id
+                );
+
+            if (!entregador) {
+
+                return res.status(403).json({
+                    erro:
+                        "Esta conta de entregador não possui cadastro de entregador vinculado."
+                });
+            }
+        }
+
+        // ====================================================
         // TOKEN
         // ====================================================
 
         const token =
             Token.criarToken({
+
                 id:
                     usuario.id,
 
@@ -630,14 +1019,14 @@ exports.login = async (req, res) => {
                     usuario.email,
 
                 tipo:
-                    usuario.tipo,
+                    tipoUsuario,
 
                 restauranteId:
-                    usuario.restauranteId
+                    usuario.restauranteId || null
             });
 
         // ====================================================
-        // RESPOSTA
+        // LOG
         // ====================================================
 
         console.log("");
@@ -660,7 +1049,7 @@ exports.login = async (req, res) => {
         );
         console.log(
             "👤 TIPO:",
-            usuario.tipo
+            tipoUsuario
         );
         console.log(
             "🆔 ID:",
@@ -670,8 +1059,14 @@ exports.login = async (req, res) => {
             "=========================================="
         );
 
+        // ====================================================
+        // RESPOSTA
+        // ====================================================
+
         return res.status(200).json({
-            sucesso: true,
+
+            sucesso:
+                true,
 
             mensagem:
                 "Login realizado com sucesso",
@@ -679,6 +1074,7 @@ exports.login = async (req, res) => {
             token,
 
             usuario: {
+
                 id:
                     usuario.id,
 
@@ -695,15 +1091,16 @@ exports.login = async (req, res) => {
                     usuario.cpf,
 
                 tipo:
-                    usuario.tipo,
+                    tipoUsuario,
 
                 restauranteId:
-                    usuario.restauranteId
+                    usuario.restauranteId || null
             },
 
             restaurante:
                 restaurante
                     ? {
+
                         id:
                             restaurante.id,
 
@@ -733,6 +1130,7 @@ exports.login = async (req, res) => {
         );
 
         return res.status(500).json({
+
             erro:
                 "Erro interno no login",
 
@@ -750,6 +1148,7 @@ exports.validarCodigoRecuperacao = async (
     req,
     res
 ) => {
+
     try {
 
         const {
@@ -778,7 +1177,9 @@ exports.validarCodigoRecuperacao = async (
         }
 
         return res.status(200).json({
-            sucesso: true,
+
+            sucesso:
+                true,
 
             mensagem:
                 "Código validado com sucesso",
@@ -809,6 +1210,7 @@ exports.redefinirSenha = async (
     req,
     res
 ) => {
+
     try {
 
         const {
@@ -828,7 +1230,9 @@ exports.redefinirSenha = async (
             });
         }
 
-        if (String(novaSenha).length < 6) {
+        if (
+            String(novaSenha).length < 6
+        ) {
             return res.status(400).json({
                 erro:
                     "A nova senha deve ter pelo menos 6 caracteres"
@@ -864,7 +1268,9 @@ exports.redefinirSenha = async (
         );
 
         return res.status(200).json({
-            sucesso: true,
+
+            sucesso:
+                true,
 
             mensagem:
                 "Senha redefinida com sucesso"
@@ -892,6 +1298,7 @@ exports.alterarSenha = async (
     req,
     res
 ) => {
+
     try {
 
         const {
@@ -899,14 +1306,19 @@ exports.alterarSenha = async (
             novaSenha
         } = req.body;
 
-        if (!senhaAtual || !novaSenha) {
+        if (
+            !senhaAtual ||
+            !novaSenha
+        ) {
             return res.status(400).json({
                 erro:
                     "Senha atual e nova senha são obrigatórias"
             });
         }
 
-        if (String(novaSenha).length < 6) {
+        if (
+            String(novaSenha).length < 6
+        ) {
             return res.status(400).json({
                 erro:
                     "A nova senha deve ter pelo menos 6 caracteres"
@@ -955,12 +1367,14 @@ exports.alterarSenha = async (
             );
 
         await User.atualizarSenha(
-            usuario.id,
+            usuarioId,
             novaSenhaHash
         );
 
         return res.status(200).json({
-            sucesso: true,
+
+            sucesso:
+                true,
 
             mensagem:
                 "Senha alterada com sucesso"
@@ -988,6 +1402,7 @@ exports.perfil = async (
     req,
     res
 ) => {
+
     try {
 
         const usuarioId =
@@ -1013,6 +1428,7 @@ exports.perfil = async (
         }
 
         const usuarioSeguro = {
+
             id:
                 usuario.id,
 
@@ -1045,7 +1461,9 @@ exports.perfil = async (
         };
 
         return res.status(200).json({
-            sucesso: true,
+
+            sucesso:
+                true,
 
             usuario:
                 usuarioSeguro
@@ -1073,6 +1491,7 @@ exports.atualizarPerfil = async (
     req,
     res
 ) => {
+
     try {
 
         const usuarioId =
@@ -1135,12 +1554,15 @@ exports.atualizarPerfil = async (
         }
 
         return res.status(200).json({
-            sucesso: true,
+
+            sucesso:
+                true,
 
             mensagem:
                 "Perfil atualizado com sucesso",
 
             usuario: {
+
                 id:
                     usuarioAtualizado.id,
 
@@ -1186,6 +1608,7 @@ exports.atualizarEndereco = async (
     req,
     res
 ) => {
+
     try {
 
         const usuarioId =
@@ -1199,6 +1622,7 @@ exports.atualizarEndereco = async (
         }
 
         const endereco = {
+
             cep:
                 req.body.cep,
 
@@ -1235,7 +1659,9 @@ exports.atualizarEndereco = async (
         }
 
         return res.status(200).json({
-            sucesso: true,
+
+            sucesso:
+                true,
 
             mensagem:
                 "Endereço atualizado com sucesso",
@@ -1266,6 +1692,7 @@ exports.solicitarRecuperacao = async (
     req,
     res
 ) => {
+
     try {
 
         console.log("");
@@ -1378,7 +1805,9 @@ exports.solicitarRecuperacao = async (
         );
 
         return res.status(200).json({
-            sucesso: true,
+
+            sucesso:
+                true,
 
             mensagem:
                 "Código de recuperação enviado para seu email"
@@ -1404,6 +1833,7 @@ exports.solicitarRecuperacao = async (
         );
 
         return res.status(500).json({
+
             erro:
                 "Não foi possível enviar o email de recuperação",
 
@@ -1421,6 +1851,7 @@ exports.excluirConta = async (
     req,
     res
 ) => {
+
     try {
 
         console.log("");
@@ -1479,7 +1910,9 @@ exports.excluirConta = async (
             tipoUsuario
         );
 
-        if (tipoUsuario !== "CLIENTE") {
+        if (
+            tipoUsuario !== "CLIENTE"
+        ) {
             return res.status(403).json({
                 erro:
                     "Somente clientes podem excluir a conta."
@@ -1508,7 +1941,9 @@ exports.excluirConta = async (
         );
 
         return res.status(200).json({
-            sucesso: true,
+
+            sucesso:
+                true,
 
             mensagem:
                 "Conta excluída com sucesso"
@@ -1529,6 +1964,7 @@ exports.excluirConta = async (
         );
 
         return res.status(500).json({
+
             erro:
                 "Erro interno ao excluir conta",
 
@@ -1537,4 +1973,3 @@ exports.excluirConta = async (
         });
     }
 };
-

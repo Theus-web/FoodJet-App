@@ -34,8 +34,8 @@ class _OrderReviewScreenState extends State<OrderReviewScreen> {
   static const Color laranja = Color(0xFFF97316);
   static const Color fundo = Color(0xFFF6F7F9);
 
-  final double taxaEntrega = 5.0;
-  final double percentualTaxaServico = 0.15;
+  final double taxaEntrega = 6.5;
+  final double percentualTaxaServico = 0.13;
 
   late String formaPagamento;
 

@@ -1,8 +1,9 @@
-
 import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -31,6 +32,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   static const Color laranja = Color(0xFFF97316);
   static const Color fundo = Color(0xFFF5F5F5);
+
+  // ============================================================
+  // LOCALIZAÇÃO EM TEMPO REAL
+  // ============================================================
+
+  StreamSubscription<Position>? _localizacaoSubscription;
+
+  String _cidadeAtual = 'Localizando...';
+  String _estadoAtual = '';
+
+  bool _localizacaoCarregando = true;
+
 
   // ============================================================
   // NAVEGAÇÃO
@@ -202,6 +215,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     _iniciarCarrossel();
 
+    // LOCALIZAÇÃO AUTOMÁTICA EM TEMPO REAL
+    _iniciarLocalizacaoTempoReal();
+
     _timer = Timer.periodic(
       const Duration(seconds: 60),
       (_) {
@@ -216,6 +232,258 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     );
+  }
+
+  // ============================================================
+  // LOCALIZAÇÃO EM TEMPO REAL
+  // ============================================================
+
+  Future<void> _iniciarLocalizacaoTempoReal() async {
+    try {
+      final servicoAtivo =
+          await Geolocator.isLocationServiceEnabled();
+
+      if (!servicoAtivo) {
+        if (!mounted) return;
+
+        setState(() {
+          _cidadeAtual = 'Localização desativada';
+          _estadoAtual = '';
+          _localizacaoCarregando = false;
+        });
+
+        return;
+      }
+
+      LocationPermission permissao =
+          await Geolocator.checkPermission();
+
+      if (permissao == LocationPermission.denied) {
+        permissao =
+            await Geolocator.requestPermission();
+      }
+
+      if (permissao == LocationPermission.denied) {
+        if (!mounted) return;
+
+        setState(() {
+          _cidadeAtual = 'Permissão negada';
+          _estadoAtual = '';
+          _localizacaoCarregando = false;
+        });
+
+        return;
+      }
+
+      if (permissao ==
+          LocationPermission.deniedForever) {
+        if (!mounted) return;
+
+        setState(() {
+          _cidadeAtual =
+              'Ative a localização nas configurações';
+          _estadoAtual = '';
+          _localizacaoCarregando = false;
+        });
+
+        return;
+      }
+
+      const configuracao = LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 50,
+      );
+
+      // ========================================================
+      // PRIMEIRA LOCALIZAÇÃO
+      // ========================================================
+
+      final posicao =
+          await Geolocator.getCurrentPosition(
+        locationSettings: configuracao,
+      );
+
+      await _atualizarLocalizacao(posicao);
+
+      // ========================================================
+      // ACOMPANHAR MOVIMENTO EM TEMPO REAL
+      // ========================================================
+
+      await _localizacaoSubscription?.cancel();
+
+      _localizacaoSubscription =
+          Geolocator.getPositionStream(
+        locationSettings: configuracao,
+      ).listen(
+        (Position position) {
+          _atualizarLocalizacao(position);
+        },
+        onError: (error) {
+          debugPrint(
+            'FOODJET - ERRO STREAM LOCALIZAÇÃO: $error',
+          );
+        },
+      );
+    } catch (e) {
+      debugPrint(
+        'FOODJET - ERRO LOCALIZAÇÃO: $e',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _cidadeAtual = 'Localização indisponível';
+        _estadoAtual = '';
+        _localizacaoCarregando = false;
+      });
+    }
+  }
+
+  // ============================================================
+  // ATUALIZAR LOCALIZAÇÃO
+  // ============================================================
+
+  Future<void> _atualizarLocalizacao(
+    Position position,
+  ) async {
+    try {
+
+      debugPrint(
+        'FOODJET - GPS:',
+      );
+
+      debugPrint(
+        'LATITUDE: ${position.latitude}',
+      );
+
+      debugPrint(
+        'LONGITUDE: ${position.longitude}',
+      );
+
+      final placemarks =
+          await placemarkFromCoordinates(
+        position.latitude,
+        position.longitude,
+      );
+
+      if (placemarks.isEmpty) {
+        return;
+      }
+
+      final local =
+          placemarks.first;
+
+      String cidade =
+          local.locality?.trim() ?? '';
+
+      if (cidade.isEmpty) {
+        cidade =
+            local.subAdministrativeArea
+                    ?.trim() ??
+                '';
+      }
+
+      if (cidade.isEmpty) {
+        cidade =
+            local.administrativeArea
+                    ?.trim() ??
+                'Localização atual';
+      }
+
+      final estadoCompleto =
+          local.administrativeArea
+                  ?.trim() ??
+              '';
+
+      final estado =
+          _abreviarEstado(
+        estadoCompleto,
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _cidadeAtual =
+            cidade.isNotEmpty
+                ? cidade
+                : 'Localização atual';
+
+        _estadoAtual = estado;
+
+        _localizacaoCarregando = false;
+      });
+
+      debugPrint(
+        'FOODJET - LOCALIZAÇÃO ATUAL: $_cidadeAtual - $_estadoAtual',
+      );
+    } catch (e) {
+      debugPrint(
+        'FOODJET - ERRO AO CONVERTER GPS: $e',
+      );
+
+      if (!mounted) return;
+
+      setState(() {
+        _localizacaoCarregando = false;
+      });
+    }
+  }
+
+  // ============================================================
+  // ABREVIAR ESTADO
+  // ============================================================
+
+  String _abreviarEstado(
+    String estado,
+  ) {
+    final normalizado =
+        estado
+            .trim()
+            .toLowerCase();
+
+    const estados = {
+      'acre': 'AC',
+      'alagoas': 'AL',
+      'amapá': 'AP',
+      'amapa': 'AP',
+      'amazonas': 'AM',
+      'bahia': 'BA',
+      'ceará': 'CE',
+      'ceara': 'CE',
+      'distrito federal': 'DF',
+      'espírito santo': 'ES',
+      'espirito santo': 'ES',
+      'goiás': 'GO',
+      'goias': 'GO',
+      'maranhão': 'MA',
+      'maranhao': 'MA',
+      'mato grosso': 'MT',
+      'mato grosso do sul': 'MS',
+      'minas gerais': 'MG',
+      'pará': 'PA',
+      'para': 'PA',
+      'paraíba': 'PB',
+      'paraiba': 'PB',
+      'paraná': 'PR',
+      'parana': 'PR',
+      'pernambuco': 'PE',
+      'piauí': 'PI',
+      'piaui': 'PI',
+      'rio de janeiro': 'RJ',
+      'rio grande do norte': 'RN',
+      'rio grande do sul': 'RS',
+      'rondônia': 'RO',
+      'rondonia': 'RO',
+      'roraima': 'RR',
+      'santa catarina': 'SC',
+      'são paulo': 'SP',
+      'sao paulo': 'SP',
+      'sergipe': 'SE',
+      'tocantins': 'TO',
+    };
+
+    return estados[normalizado] ??
+        estado;
   }
 
   // ============================================================
@@ -966,8 +1234,6 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    // Busca novamente no backend para garantir
-    // que a Home fique sincronizada com o banco.
     await carregarRestaurantes(
       silencioso: true,
     );
@@ -1046,6 +1312,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void dispose() {
     _timer?.cancel();
     _bannerTimer?.cancel();
+
+    _localizacaoSubscription?.cancel();
 
     buscaController.removeListener(
       _quandoBuscar,
@@ -1937,23 +2205,54 @@ class _HomeScreenState extends State<HomeScreen> {
                     FontWeight.w500,
               ),
             ),
-            const Row(
+
+            // ==================================================
+            // LOCALIZAÇÃO AUTOMÁTICA
+            // ==================================================
+
+            Row(
               children: [
-                Icon(
+                const Icon(
                   Icons.location_on,
                   size: 16,
                   color: Colors.white,
                 ),
-                SizedBox(width: 4),
-                Text(
-                  'Ipatinga - MG',
-                  style: TextStyle(
-                    fontSize: 15,
-                    fontWeight:
-                        FontWeight.w800,
-                    color: Colors.white,
+                const SizedBox(width: 4),
+
+                Flexible(
+                  child: Text(
+                    _estadoAtual.isNotEmpty
+                        ? '$_cidadeAtual - $_estadoAtual'
+                        : _cidadeAtual,
+                    maxLines: 1,
+                    overflow:
+                        TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(
+                      fontSize: 15,
+                      fontWeight:
+                          FontWeight.w800,
+                      color: Colors.white,
+                    ),
                   ),
                 ),
+
+                if (_localizacaoCarregando) ...[
+                  const SizedBox(width: 7),
+                  const SizedBox(
+                    width: 13,
+                    height: 13,
+                    child:
+                        CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor:
+                          AlwaysStoppedAnimation<
+                              Color>(
+                        Colors.white,
+                      ),
+                    ),
+                  ),
+                ],
               ],
             ),
           ],
@@ -1983,6 +2282,10 @@ class _HomeScreenState extends State<HomeScreen> {
             carregarRestaurantes(),
             carregarPromocoes(),
           ]);
+
+          // Atualiza também a localização ao puxar
+          // a Home para baixo.
+          await _iniciarLocalizacaoTempoReal();
         },
         child: SingleChildScrollView(
           physics:
@@ -3336,9 +3639,6 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _imagemRestaurante(
     Map<String, dynamic> restaurante,
   ) {
-    // IMPORTANTE:
-    // A Home agora prioriza a LOGO.
-    // A capa não é utilizada como imagem do card.
     final imagem =
         _obterLogo(restaurante);
 
