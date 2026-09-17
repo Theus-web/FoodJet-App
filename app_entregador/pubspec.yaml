@@ -15,6 +15,10 @@ dependencies:
   http: ^1.4.0
   shared_preferences: ^2.5.3
   image_picker: ^1.2.3
+  intl: ^0.20.3
+  google_maps_flutter: ^2.13.1
+  socket_io_client: ^3.1.2
+  geolocator: ^14.0.2
 
 dev_dependencies:
   flutter_test:
