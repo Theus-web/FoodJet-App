@@ -1,11 +1,11 @@
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+
 import '../../core/theme/app_theme.dart';
 
 class EarningsScreen extends StatelessWidget {
   const EarningsScreen({super.key});
-
-  get NumberFormat => null;
 
   String money(double value) {
     return NumberFormat.currency(
@@ -20,22 +20,41 @@ class EarningsScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text(
           'Meus ganhos',
-          style: TextStyle(fontWeight: FontWeight.w900),
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+          ),
         ),
       ),
       body: ListView(
         padding: const EdgeInsets.all(18),
         children: [
-          _total('Hoje', 85.40),
+          _total(
+            'Hoje',
+            85.40,
+          ),
+
           const SizedBox(height: 12),
+
           Row(
             children: [
-              Expanded(child: _small('Esta semana', 524.30)),
+              Expanded(
+                child: _small(
+                  'Esta semana',
+                  524.30,
+                ),
+              ),
               const SizedBox(width: 12),
-              Expanded(child: _small('Este mês', 2314.80)),
+              Expanded(
+                child: _small(
+                  'Este mês',
+                  2314.80,
+                ),
+              ),
             ],
           ),
+
           const SizedBox(height: 18),
+
           Container(
             height: 220,
             padding: const EdgeInsets.all(20),
@@ -44,7 +63,8 @@ class EarningsScreen extends StatelessWidget {
               borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Desempenho',
@@ -53,10 +73,13 @@ class EarningsScreen extends StatelessWidget {
                     fontSize: 17,
                   ),
                 ),
+
                 const SizedBox(height: 18),
+
                 Expanded(
                   child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
+                    crossAxisAlignment:
+                        CrossAxisAlignment.end,
                     mainAxisAlignment:
                         MainAxisAlignment.spaceAround,
                     children: [
@@ -73,7 +96,9 @@ class EarningsScreen extends StatelessWidget {
               ],
             ),
           ),
+
           const SizedBox(height: 18),
+
           const Text(
             'Resumo',
             style: TextStyle(
@@ -81,16 +106,32 @@ class EarningsScreen extends StatelessWidget {
               fontWeight: FontWeight.w900,
             ),
           ),
+
           const SizedBox(height: 10),
-          _row('Saldo disponível', money(320.50)),
-          _row('Saldo pendente', money(85.40)),
-          _row('Entregas concluídas', '42'),
+
+          _row(
+            'Saldo disponível',
+            money(320.50),
+          ),
+
+          _row(
+            'Saldo pendente',
+            money(85.40),
+          ),
+
+          _row(
+            'Entregas concluídas',
+            '42',
+          ),
         ],
       ),
     );
   }
 
-  Widget _total(String label, double value) {
+  Widget _total(
+    String label,
+    double value,
+  ) {
     return Container(
       padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
@@ -98,10 +139,18 @@ class EarningsScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(24),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: Colors.white70)),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Colors.white70,
+            ),
+          ),
+
           const SizedBox(height: 5),
+
           Text(
             money(value),
             style: const TextStyle(
@@ -115,7 +164,10 @@ class EarningsScreen extends StatelessWidget {
     );
   }
 
-  Widget _small(String label, double value) {
+  Widget _small(
+    String label,
+    double value,
+  ) {
     return Container(
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
@@ -123,7 +175,8 @@ class EarningsScreen extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           Text(
             label,
@@ -132,7 +185,9 @@ class EarningsScreen extends StatelessWidget {
               fontSize: 12,
             ),
           ),
+
           const SizedBox(height: 5),
+
           Text(
             money(value),
             style: const TextStyle(
@@ -145,9 +200,13 @@ class EarningsScreen extends StatelessWidget {
     );
   }
 
-  Widget _bar(String label, double height) {
+  Widget _bar(
+    String label,
+    double height,
+  ) {
     return Column(
-      mainAxisAlignment: MainAxisAlignment.end,
+      mainAxisAlignment:
+          MainAxisAlignment.end,
       children: [
         Expanded(
           child: Align(
@@ -158,13 +217,16 @@ class EarningsScreen extends StatelessWidget {
                 width: 22,
                 decoration: BoxDecoration(
                   color: FoodJetColors.orange,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius:
+                      BorderRadius.circular(8),
                 ),
               ),
             ),
           ),
         ),
+
         const SizedBox(height: 7),
+
         Text(
           label,
           style: const TextStyle(
@@ -176,7 +238,10 @@ class EarningsScreen extends StatelessWidget {
     );
   }
 
-  Widget _row(String label, String value) {
+  Widget _row(
+    String label,
+    String value,
+  ) {
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(17),
@@ -186,7 +251,10 @@ class EarningsScreen extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(child: Text(label)),
+          Expanded(
+            child: Text(label),
+          ),
+
           Text(
             value,
             style: const TextStyle(
@@ -198,3 +266,4 @@ class EarningsScreen extends StatelessWidget {
     );
   }
 }
+

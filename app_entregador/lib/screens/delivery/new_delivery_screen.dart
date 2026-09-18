@@ -1,177 +1,357 @@
 import 'package:flutter/material.dart';
+
 import '../../core/theme/app_theme.dart';
 import '../../models/pedido.dart';
 import '../../services/delivery_service.dart';
 
 class NewDeliveryScreen extends StatefulWidget {
-  const NewDeliveryScreen({super.key});
+  final Pedido pedido;
+
+  const NewDeliveryScreen({
+    super.key,
+    required this.pedido,
+  });
 
   @override
-  State<NewDeliveryScreen> createState() => _NewDeliveryScreenState();
+  State<NewDeliveryScreen> createState() =>
+      _NewDeliveryScreenState();
 }
 
-class _NewDeliveryScreenState extends State<NewDeliveryScreen> {
-  Pedido? pedido;
-  bool loading = false;
+class _NewDeliveryScreenState
+    extends State<NewDeliveryScreen> {
+  bool _loading = false;
 
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments;
-    if (args is Pedido) {
-      pedido ??= args;
-    }
-  }
+  Pedido get pedido => widget.pedido;
 
-  Future<void> update(String status) async {
-    if (pedido == null) return;
+  Future<void> _updateStatus(String status) async {
+    if (_loading) return;
 
-    setState(() => loading = true);
+    setState(() {
+      _loading = true;
+    });
 
     try {
-      await DeliveryService.updateStatus(pedido!.id, status);
+      await DeliveryService.updateStatus(
+        pedido.id,
+        status,
+      );
 
       if (!mounted) return;
 
-      if (status == 'ENTREGUE' ||
-          status == 'FINALIZADO') {
-        Navigator.pop(context);
-        return;
-      }
+      String mensagem;
 
-      setState(() => loading = false);
+      switch (status) {
+        case 'CHEGUEI_RESTAURANTE':
+          mensagem = 'Chegada ao restaurante registrada.';
+          break;
+
+        case 'EM_ENTREGA':
+          mensagem = 'Entrega iniciada.';
+          break;
+
+        case 'ENTREGUE':
+          mensagem = 'Entrega finalizada com sucesso.';
+          break;
+
+        default:
+          mensagem = 'Status atualizado.';
+      }
 
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Status atualizado: $status'),
-          backgroundColor: FoodJetColors.green,
+          content: Text(mensagem),
+          behavior: SnackBarBehavior.floating,
         ),
       );
+
+      if (status == 'ENTREGUE') {
+        await Future.delayed(
+          const Duration(milliseconds: 700),
+        );
+
+        if (!mounted) return;
+
+        Navigator.of(context).pop(true);
+      }
     } catch (e) {
       if (!mounted) return;
-      setState(() => loading = false);
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            e.toString().replaceFirst('Exception: ', ''),
+            e.toString().replaceFirst(
+              'Exception: ',
+              '',
+            ),
           ),
           backgroundColor: FoodJetColors.red,
+          behavior: SnackBarBehavior.floating,
         ),
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _loading = false;
+        });
+      }
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    if (pedido == null) {
-      return const Scaffold(
-        body: Center(
-          child: Text('Entrega não encontrada.'),
-        ),
-      );
+  String _text(dynamic value) {
+    if (value == null) return '';
+    return value.toString();
+  }
+
+  String _pedidoStatus() {
+    final dynamic value = pedido.status;
+
+    return _text(value).toUpperCase();
+  }
+
+  String _nomeRestaurante() {
+    try {
+      final dynamic restaurante =
+          (pedido as dynamic).restaurante;
+
+      if (restaurante != null) {
+        if (restaurante is Map) {
+          return _text(
+            restaurante['nome'] ??
+                restaurante['name'] ??
+                'Restaurante',
+          );
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final dynamic nome =
+          (pedido as dynamic).restauranteNome;
+
+      if (nome != null && _text(nome).isNotEmpty) {
+        return _text(nome);
+      }
+    } catch (_) {}
+
+    return 'Restaurante';
+  }
+
+  String _enderecoRestaurante() {
+    try {
+      final dynamic endereco =
+          (pedido as dynamic).enderecoRestaurante;
+
+      if (endereco != null &&
+          _text(endereco).isNotEmpty) {
+        return _text(endereco);
+      }
+    } catch (_) {}
+
+    try {
+      final dynamic restaurante =
+          (pedido as dynamic).restaurante;
+
+      if (restaurante is Map) {
+        final value =
+            restaurante['endereco'] ??
+            restaurante['endereco_completo'] ??
+            restaurante['address'];
+
+        if (value != null &&
+            value.toString().isNotEmpty) {
+          return value.toString();
+        }
+      }
+    } catch (_) {}
+
+    return 'Endereço do restaurante';
+  }
+
+  String _enderecoEntrega() {
+    try {
+      final dynamic endereco =
+          (pedido as dynamic).endereco;
+
+      if (endereco != null) {
+        if (endereco is Map) {
+          final rua =
+              endereco['rua'] ??
+              endereco['logradouro'] ??
+              '';
+
+          final numero =
+              endereco['numero'] ?? '';
+
+          final bairro =
+              endereco['bairro'] ?? '';
+
+          final cidade =
+              endereco['cidade'] ?? '';
+
+          final partes = [
+            rua,
+            numero,
+            bairro,
+            cidade,
+          ]
+              .map((e) => e.toString().trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
+
+          if (partes.isNotEmpty) {
+            return partes.join(', ');
+          }
+        }
+
+        if (_text(endereco).isNotEmpty) {
+          return _text(endereco);
+        }
+      }
+    } catch (_) {}
+
+    try {
+      final dynamic enderecoEntrega =
+          (pedido as dynamic).enderecoEntrega;
+
+      if (enderecoEntrega != null &&
+          _text(enderecoEntrega).isNotEmpty) {
+        return _text(enderecoEntrega);
+      }
+    } catch (_) {}
+
+    return 'Endereço de entrega';
+  }
+
+  String _statusTitulo() {
+    switch (_pedidoStatus()) {
+      case 'AGUARDANDO_RESTAURANTE':
+      case 'ACEITO':
+      case 'PREPARANDO':
+      case 'PRONTO':
+        return 'Aguardando entrega';
+
+      case 'EM_ENTREGA':
+        return 'Em entrega';
+
+      case 'ENTREGUE':
+      case 'FINALIZADO':
+        return 'Entrega concluída';
+
+      default:
+        return 'Nova entrega';
+    }
+  }
+
+  Widget _statusCard() {
+    final status = _pedidoStatus();
+
+    IconData icon = Icons.delivery_dining;
+    String titulo = 'Nova entrega';
+    String descricao =
+        'Confira os dados do pedido e siga as etapas.';
+
+    if (status == 'CHEGUEI_RESTAURANTE') {
+      icon = Icons.storefront;
+      titulo = 'No restaurante';
+      descricao =
+          'Você chegou ao restaurante. Aguarde a retirada do pedido.';
+    } else if (status == 'EM_ENTREGA') {
+      icon = Icons.navigation;
+      titulo = 'Pedido em entrega';
+      descricao =
+          'Siga para o endereço do cliente.';
+    } else if (status == 'ENTREGUE' ||
+        status == 'FINALIZADO') {
+      icon = Icons.check_circle;
+      titulo = 'Entrega concluída';
+      descricao =
+          'Este pedido foi finalizado.';
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          'Entrega',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: FoodJetColors.dark,
+        borderRadius: BorderRadius.circular(24),
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
+      child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(22),
+            width: 54,
+            height: 54,
             decoration: BoxDecoration(
-              color: FoodJetColors.dark,
-              borderRadius: BorderRadius.circular(25),
+              color: FoodJetColors.orange.withValues(
+                alpha: 0.18,
+              ),
+              borderRadius: BorderRadius.circular(16),
             ),
+            child: Icon(
+              icon,
+              color: FoodJetColors.orange,
+              size: 29,
+            ),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'ENTREGA EM ANDAMENTO',
-                  style: TextStyle(
-                    color: FoodJetColors.orange,
-                    fontWeight: FontWeight.w900,
-                    fontSize: 11,
-                  ),
-                ),
-                const SizedBox(height: 7),
                 Text(
-                  pedido!.restaurante,
+                  titulo,
                   style: const TextStyle(
                     color: Colors.white,
-                    fontSize: 22,
+                    fontSize: 18,
                     fontWeight: FontWeight.w900,
                   ),
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 5),
                 Text(
-                  pedido!.cliente,
+                  descricao,
                   style: const TextStyle(
                     color: Colors.white70,
+                    fontSize: 13,
+                    height: 1.35,
                   ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-          _address(
-            'RETIRADA',
-            pedido!.enderecoRetirada,
-            Icons.restaurant_rounded,
-          ),
-          const SizedBox(height: 12),
-          _address(
-            'ENTREGA',
-            pedido!.enderecoEntrega,
-            Icons.location_on_rounded,
-          ),
-          const SizedBox(height: 25),
-          _button(
-            'CHEGUEI AO RESTAURANTE',
-            Icons.storefront_rounded,
-            'CHEGUEI_RESTAURANTE',
-          ),
-          const SizedBox(height: 10),
-          _button(
-            'INICIAR ENTREGA',
-            Icons.navigation_rounded,
-            'EM_ENTREGA',
-          ),
-          const SizedBox(height: 10),
-          _button(
-            'FINALIZAR ENTREGA',
-            Icons.check_circle_rounded,
-            'ENTREGUE',
-            primary: true,
           ),
         ],
       ),
     );
   }
 
-  Widget _address(
-    String label,
-    String address,
-    IconData icon,
-  ) {
+  Widget _locationCard({
+    required IconData icon,
+    required String title,
+    required String address,
+  }) {
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(19),
+        borderRadius: BorderRadius.circular(20),
       ),
       child: Row(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            backgroundColor:
-                FoodJetColors.orange.withValues(alpha: .12)
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: FoodJetColors.orange.withValues(
+                alpha: 0.10,
+              ),
+              borderRadius: BorderRadius.circular(13),
+            ),
             child: Icon(
               icon,
               color: FoodJetColors.orange,
+              size: 23,
             ),
           ),
           const SizedBox(width: 13),
@@ -181,20 +361,20 @@ class _NewDeliveryScreenState extends State<NewDeliveryScreen> {
                   CrossAxisAlignment.start,
               children: [
                 Text(
-                  label,
+                  title,
                   style: const TextStyle(
+                    fontSize: 12,
                     color: FoodJetColors.gray,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                   ),
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 5),
                 Text(
-                  address.isEmpty
-                      ? 'Endereço não informado'
-                      : address,
+                  address,
                   style: const TextStyle(
-                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    height: 1.3,
                   ),
                 ),
               ],
@@ -205,37 +385,236 @@ class _NewDeliveryScreenState extends State<NewDeliveryScreen> {
     );
   }
 
-  Widget _button(
-    String text,
+  Widget _infoRow(
     IconData icon,
-    String status, {
-    bool primary = false,
-  }) {
-    return ElevatedButton(
-      onPressed: loading ? null : () => update(status),
-      style: ElevatedButton.styleFrom(
-        backgroundColor:
-            primary ? FoodJetColors.orange : Colors.white,
-        foregroundColor:
-            primary ? Colors.white : FoodJetColors.dark,
-        side: primary
-            ? BorderSide.none
-            : BorderSide(
-                Colors.black.withValues(alpha: .08)
-              ),
+    String label,
+    String value,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        vertical: 7,
       ),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Icon(icon),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: const TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 12,
+          Icon(
+            icon,
+            size: 21,
+            color: FoodJetColors.gray,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: FoodJetColors.gray,
+                fontSize: 13,
+              ),
             ),
           ),
+          Text(
+            value,
+            style: const TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 14,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _actionButton({
+    required String label,
+    required IconData icon,
+    required VoidCallback onPressed,
+    bool primary = true,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton.icon(
+        onPressed: _loading ? null : onPressed,
+        icon: _loading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Colors.white,
+                ),
+              )
+            : Icon(icon),
+        label: Text(
+          _loading ? 'Atualizando...' : label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w900,
+            fontSize: 15,
+          ),
+        ),
+        style: ElevatedButton.styleFrom(
+          backgroundColor: primary
+              ? FoodJetColors.orange
+              : Colors.white,
+          foregroundColor: primary
+              ? Colors.white
+              : FoodJetColors.dark,
+          disabledBackgroundColor:
+              FoodJetColors.gray.withValues(
+            alpha: 0.25,
+          ),
+          disabledForegroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(17),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAction() {
+    final status = _pedidoStatus();
+
+    if (status == 'ENTREGUE' ||
+        status == 'FINALIZADO') {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: FoodJetColors.green.withValues(
+            alpha: 0.12,
+          ),
+          borderRadius: BorderRadius.circular(18),
+        ),
+        child: const Row(
+          children: [
+            Icon(
+              Icons.check_circle,
+              color: FoodJetColors.green,
+            ),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                'Entrega finalizada com sucesso.',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (status == 'EM_ENTREGA') {
+      return _actionButton(
+        label: 'FINALIZAR ENTREGA',
+        icon: Icons.check_circle_outline,
+        onPressed: () {
+          _updateStatus('ENTREGUE');
+        },
+      );
+    }
+
+    if (status == 'CHEGUEI_RESTAURANTE') {
+      return _actionButton(
+        label: 'INICIAR ENTREGA',
+        icon: Icons.navigation_outlined,
+        onPressed: () {
+          _updateStatus('EM_ENTREGA');
+        },
+      );
+    }
+
+    return _actionButton(
+      label: 'CHEGUEI AO RESTAURANTE',
+      icon: Icons.storefront,
+      onPressed: () {
+        _updateStatus('CHEGUEI_RESTAURANTE');
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          'Entrega',
+          style: TextStyle(
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          _statusCard(),
+          const SizedBox(height: 16),
+
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _nomeRestaurante(),
+                  style: const TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                  ),
+                ),
+                const SizedBox(height: 7),
+                _infoRow(
+                  Icons.receipt_long,
+                  'Pedido',
+                  '#${pedido.id}',
+                ),
+                _infoRow(
+                  Icons.payments_outlined,
+                  'Status',
+                  _statusTitulo(),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+
+          _locationCard(
+            icon: Icons.storefront,
+            title: 'RETIRADA',
+            address: _enderecoRestaurante(),
+          ),
+
+          const SizedBox(height: 10),
+
+          _locationCard(
+            icon: Icons.location_on,
+            title: 'ENTREGA',
+            address: _enderecoEntrega(),
+          ),
+
+          const SizedBox(height: 20),
+
+          const Text(
+            'Ações da entrega',
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          _buildAction(),
+
+          const SizedBox(height: 30),
         ],
       ),
     );
