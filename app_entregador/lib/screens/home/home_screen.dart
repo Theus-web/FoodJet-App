@@ -1,6 +1,8 @@
-
 import 'dart:async';
+
 import 'package:flutter/material.dart';
+
+import '../../widgets/map_widget.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -31,13 +33,16 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
 
-    // Simulação de atualização da tela.
-    // Depois podemos conectar ao Socket.IO do FoodJet.
-    timer = Timer.periodic(const Duration(seconds: 10), (_) {
-      if (mounted) {
-        setState(() {});
-      }
-    });
+    // Atualização periódica da interface.
+    // Posteriormente podemos conectar ao Socket.IO do FoodJet.
+    timer = Timer.periodic(
+      const Duration(seconds: 10),
+      (_) {
+        if (mounted) {
+          setState(() {});
+        }
+      },
+    );
   }
 
   @override
@@ -69,7 +74,9 @@ class _HomeScreenState extends State<HomeScreen> {
         content: Row(
           children: [
             Icon(
-              disponivel ? Icons.check_circle : Icons.pause_circle,
+              disponivel
+                  ? Icons.check_circle
+                  : Icons.pause_circle,
               color: Colors.white,
             ),
             const SizedBox(width: 10),
@@ -158,7 +165,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildHeader() {
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(18, 14, 18, 12),
+      padding: const EdgeInsets.fromLTRB(
+        18,
+        14,
+        18,
+        12,
+      ),
       child: Row(
         children: [
           // Avatar
@@ -184,7 +196,8 @@ class _HomeScreenState extends State<HomeScreen> {
           // Nome
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Olá, Entregador! 👋',
@@ -208,9 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           // Notificações
           GestureDetector(
-            onTap: () {
-              _mostrarNotificacoes();
-            },
+            onTap: _mostrarNotificacoes,
             child: Container(
               width: 44,
               height: 44,
@@ -248,22 +259,28 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // MAPA
+  // MAPA REAL - OPENSTREETMAP
   // ============================================================
 
   Widget _buildMap() {
-    return Container(
+    return SizedBox(
       height: 330,
-      margin: const EdgeInsets.fromLTRB(0, 0, 0, 0),
       child: Stack(
         children: [
-          // Fundo do mapa
-          CustomPaint(
-            painter: FoodJetMapPainter(),
-            child: Container(),
+          // ======================================================
+          // MAPA REAL
+          // ======================================================
+
+          const Positioned.fill(
+            child: MapWidget(
+              zoom: 14,
+            ),
           ),
 
-          // Status
+          // ======================================================
+          // STATUS
+          // ======================================================
+
           Positioned(
             top: 16,
             left: 16,
@@ -277,7 +294,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(18),
+                  borderRadius:
+                      BorderRadius.circular(18),
                   boxShadow: [
                     BoxShadow(
                       color: Colors.black.withOpacity(.10),
@@ -289,7 +307,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: Row(
                   children: [
                     AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
+                      duration:
+                          const Duration(milliseconds: 250),
                       width: 12,
                       height: 12,
                       decoration: BoxDecoration(
@@ -299,10 +318,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         shape: BoxShape.circle,
                       ),
                     ),
+
                     const SizedBox(width: 10),
+
                     Expanded(
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                        crossAxisAlignment:
+                            CrossAxisAlignment.start,
                         children: [
                           Text(
                             disponivel
@@ -325,16 +347,20 @@ class _HomeScreenState extends State<HomeScreen> {
                         ],
                       ),
                     ),
+
                     Container(
-                      padding: const EdgeInsets.symmetric(
+                      padding:
+                          const EdgeInsets.symmetric(
                         horizontal: 12,
                         vertical: 7,
                       ),
                       decoration: BoxDecoration(
                         color: disponivel
                             ? green.withOpacity(.10)
-                            : foodJetOrange.withOpacity(.10),
-                        borderRadius: BorderRadius.circular(10),
+                            : foodJetOrange
+                                .withOpacity(.10),
+                        borderRadius:
+                            BorderRadius.circular(10),
                       ),
                       child: Text(
                         disponivel ? 'ONLINE' : 'ATIVAR',
@@ -353,43 +379,79 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // Botão localização
+          // ======================================================
+          // BOTÃO MINHA LOCALIZAÇÃO
+          // ======================================================
+
           Positioned(
             right: 16,
             top: 105,
             child: _mapButton(
               Icons.my_location_rounded,
-              () {},
+              () {
+                ScaffoldMessenger.of(context)
+                    .hideCurrentSnackBar();
+
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'A localização GPS será conectada nesta etapa.',
+                    ),
+                  ),
+                );
+              },
             ),
           ),
 
-          // Botão filtros
+          // ======================================================
+          // FILTROS
+          // ======================================================
+
           Positioned(
             right: 16,
             top: 160,
             child: _mapButton(
               Icons.tune_rounded,
-              () {},
+              () {
+                ScaffoldMessenger.of(context)
+                    .hideCurrentSnackBar();
+
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'Filtros de entrega em breve.',
+                    ),
+                  ),
+                );
+              },
             ),
           ),
 
+          // ======================================================
           // SOS
+          // ======================================================
+
           Positioned(
             right: 16,
             bottom: 72,
             child: GestureDetector(
               onTap: _mostrarSOS,
               child: Container(
-                padding: const EdgeInsets.symmetric(
+                padding:
+                    const EdgeInsets.symmetric(
                   horizontal: 15,
                   vertical: 12,
                 ),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
+                  borderRadius:
+                      BorderRadius.circular(16),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(.12),
+                      color:
+                          Colors.black.withOpacity(.12),
                       blurRadius: 14,
                     ),
                   ],
@@ -415,22 +477,28 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // Card de ganhos sobre o mapa
+          // ======================================================
+          // CARD DE GANHOS SOBRE O MAPA
+          // ======================================================
+
           Positioned(
             left: 16,
             right: 16,
             bottom: 14,
             child: Container(
-              padding: const EdgeInsets.symmetric(
+              padding:
+                  const EdgeInsets.symmetric(
                 horizontal: 20,
                 vertical: 15,
               ),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius:
+                    BorderRadius.circular(20),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(.13),
+                    color:
+                        Colors.black.withOpacity(.13),
                     blurRadius: 18,
                     offset: const Offset(0, 5),
                   ),
@@ -442,18 +510,24 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: 43,
                     height: 43,
                     decoration: BoxDecoration(
-                      color: foodJetOrange.withOpacity(.11),
-                      borderRadius: BorderRadius.circular(13),
+                      color:
+                          foodJetOrange.withOpacity(.11),
+                      borderRadius:
+                          BorderRadius.circular(13),
                     ),
                     child: const Icon(
-                      Icons.account_balance_wallet_rounded,
+                      Icons
+                          .account_balance_wallet_rounded,
                       color: foodJetOrange,
                     ),
                   ),
+
                   const SizedBox(width: 12),
+
                   Expanded(
                     child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment:
+                          CrossAxisAlignment.start,
                       children: [
                         const Text(
                           'Ganhos de hoje',
@@ -474,6 +548,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ],
                     ),
                   ),
+
                   const Icon(
                     Icons.chevron_right_rounded,
                     color: Colors.black38,
@@ -487,7 +562,10 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _mapButton(IconData icon, VoidCallback onTap) {
+  Widget _mapButton(
+    IconData icon,
+    VoidCallback onTap,
+  ) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -518,7 +596,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildResumoGanhos() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        18,
+        16,
+        0,
+      ),
       child: Row(
         children: [
           Expanded(
@@ -600,7 +683,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDisponibilidade() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 18, 16, 0),
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        18,
+        16,
+        0,
+      ),
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
@@ -618,8 +706,9 @@ class _HomeScreenState extends State<HomeScreen> {
           borderRadius: BorderRadius.circular(22),
           boxShadow: [
             BoxShadow(
-              color: (disponivel ? green : foodJetOrange)
-                  .withOpacity(.22),
+              color:
+                  (disponivel ? green : foodJetOrange)
+                      .withOpacity(.22),
               blurRadius: 18,
               offset: const Offset(0, 7),
             ),
@@ -642,10 +731,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 size: 28,
               ),
             ),
+
             const SizedBox(width: 13),
+
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Text(
                     disponivel
@@ -663,20 +755,25 @@ class _HomeScreenState extends State<HomeScreen> {
                         ? 'O FoodJet avisará quando surgir uma rota.'
                         : 'Ative sua disponibilidade e comece a ganhar.',
                     style: TextStyle(
-                      color: Colors.white.withOpacity(.88),
+                      color:
+                          Colors.white.withOpacity(.88),
                       fontSize: 11,
                     ),
                   ),
                 ],
               ),
             ),
+
             Switch(
               value: disponivel,
-              onChanged: (_) => alternarDisponibilidade(),
+              onChanged: (_) =>
+                  alternarDisponibilidade(),
               activeColor: Colors.white,
-              activeTrackColor: Colors.white.withOpacity(.35),
+              activeTrackColor:
+                  Colors.white.withOpacity(.35),
               inactiveThumbColor: Colors.white,
-              inactiveTrackColor: Colors.white.withOpacity(.25),
+              inactiveTrackColor:
+                  Colors.white.withOpacity(.25),
             ),
           ],
         ),
@@ -690,9 +787,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildEntregaAtual() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 20, 16, 0),
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        20,
+        16,
+        0,
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           const Text(
             'Entregas',
@@ -701,6 +804,7 @@ class _HomeScreenState extends State<HomeScreen> {
               fontWeight: FontWeight.w900,
             ),
           ),
+
           const SizedBox(height: 10),
 
           if (!disponivel)
@@ -709,7 +813,8 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius:
+                    BorderRadius.circular(20),
                 border: Border.all(
                   color: const Color(0xFFEDEDED),
                 ),
@@ -720,7 +825,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     width: 65,
                     height: 65,
                     decoration: BoxDecoration(
-                      color: foodJetOrange.withOpacity(.09),
+                      color:
+                          foodJetOrange.withOpacity(.09),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -729,7 +835,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       size: 34,
                     ),
                   ),
+
                   const SizedBox(height: 13),
+
                   const Text(
                     'Nenhuma entrega no momento',
                     style: TextStyle(
@@ -737,7 +845,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       fontSize: 15,
                     ),
                   ),
+
                   const SizedBox(height: 5),
+
                   const Text(
                     'Fique disponível para receber novas corridas.',
                     textAlign: TextAlign.center,
@@ -761,31 +871,36 @@ class _HomeScreenState extends State<HomeScreen> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(21),
+        borderRadius:
+            BorderRadius.circular(21),
         border: Border.all(
           color: foodJetOrange.withOpacity(.30),
           width: 1.4,
         ),
         boxShadow: [
           BoxShadow(
-            color: foodJetOrange.withOpacity(.08),
+            color:
+                foodJetOrange.withOpacity(.08),
             blurRadius: 18,
           ),
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(
+                padding:
+                    const EdgeInsets.symmetric(
                   horizontal: 9,
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
                   color: green.withOpacity(.10),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius:
+                      BorderRadius.circular(8),
                 ),
                 child: const Text(
                   'NOVA ENTREGA',
@@ -796,7 +911,9 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
+
               const Spacer(),
+
               const Text(
                 'R\$ 12,50',
                 style: TextStyle(
@@ -811,23 +928,27 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 18),
 
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment.start,
             children: [
               Column(
                 children: [
                   Container(
                     width: 11,
                     height: 11,
-                    decoration: const BoxDecoration(
+                    decoration:
+                        const BoxDecoration(
                       color: foodJetOrange,
                       shape: BoxShape.circle,
                     ),
                   ),
+
                   Container(
                     width: 2,
                     height: 36,
                     color: Colors.black12,
                   ),
+
                   const Icon(
                     Icons.location_on,
                     color: green,
@@ -840,7 +961,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
               const Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Restaurante Parceiro',
@@ -884,16 +1006,21 @@ class _HomeScreenState extends State<HomeScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () {},
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: foodJetDark,
+                  style:
+                      OutlinedButton.styleFrom(
+                    foregroundColor:
+                        foodJetDark,
                     side: const BorderSide(
                       color: Color(0xFFE5E5E5),
                     ),
-                    padding: const EdgeInsets.symmetric(
+                    padding:
+                        const EdgeInsets.symmetric(
                       vertical: 14,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(13),
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(13),
                     ),
                   ),
                   child: const Text(
@@ -904,19 +1031,27 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                 ),
               ),
+
               const SizedBox(width: 10),
+
               Expanded(
                 child: ElevatedButton(
                   onPressed: () {},
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: foodJetOrange,
-                    foregroundColor: Colors.white,
+                  style:
+                      ElevatedButton.styleFrom(
+                    backgroundColor:
+                        foodJetOrange,
+                    foregroundColor:
+                        Colors.white,
                     elevation: 0,
-                    padding: const EdgeInsets.symmetric(
+                    padding:
+                        const EdgeInsets.symmetric(
                       vertical: 14,
                     ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(13),
+                    shape:
+                        RoundedRectangleBorder(
+                      borderRadius:
+                          BorderRadius.circular(13),
                     ),
                   ),
                   child: const Text(
@@ -940,12 +1075,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildDicas() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 22, 16, 0),
+      padding: const EdgeInsets.fromLTRB(
+        16,
+        22,
+        16,
+        0,
+      ),
       child: Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
           color: foodJetDark,
-          borderRadius: BorderRadius.circular(21),
+          borderRadius:
+              BorderRadius.circular(21),
         ),
         child: Row(
           children: [
@@ -953,18 +1094,23 @@ class _HomeScreenState extends State<HomeScreen> {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: foodJetOrange.withOpacity(.18),
-                borderRadius: BorderRadius.circular(14),
+                color:
+                    foodJetOrange.withOpacity(.18),
+                borderRadius:
+                    BorderRadius.circular(14),
               ),
               child: const Icon(
                 Icons.lightbulb_outline_rounded,
                 color: foodJetOrange,
               ),
             ),
+
             const SizedBox(width: 13),
+
             const Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Dica FoodJet',
@@ -1002,7 +1148,12 @@ class _HomeScreenState extends State<HomeScreen> {
       slivers: [
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 22, 20, 15),
+            padding: const EdgeInsets.fromLTRB(
+              20,
+              22,
+              20,
+              15,
+            ),
             child: Row(
               children: [
                 const Expanded(
@@ -1014,14 +1165,17 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                   ),
                 ),
+
                 Container(
-                  padding: const EdgeInsets.symmetric(
+                  padding:
+                      const EdgeInsets.symmetric(
                     horizontal: 12,
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
                     color: Colors.white,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius:
+                        BorderRadius.circular(12),
                   ),
                   child: const Row(
                     children: [
@@ -1047,20 +1201,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
         SliverToBoxAdapter(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
+            padding:
+                const EdgeInsets.symmetric(
+              horizontal: 16,
+            ),
             child: Container(
               padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
-                gradient: const LinearGradient(
+                gradient:
+                    const LinearGradient(
                   colors: [
                     foodJetOrange,
                     Color(0xFFFB923C),
                   ],
                 ),
-                borderRadius: BorderRadius.circular(24),
+                borderRadius:
+                    BorderRadius.circular(24),
               ),
               child: const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Text(
                     'Ganhos esta semana',
@@ -1082,7 +1242,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   Row(
                     children: [
                       Icon(
-                        Icons.local_shipping_outlined,
+                        Icons
+                            .local_shipping_outlined,
                         color: Colors.white,
                         size: 18,
                       ),
@@ -1091,7 +1252,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         '0 entregas realizadas',
                         style: TextStyle(
                           color: Colors.white,
-                          fontWeight: FontWeight.w700,
+                          fontWeight:
+                              FontWeight.w700,
                           fontSize: 12,
                         ),
                       ),
@@ -1110,7 +1272,8 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(20),
+                borderRadius:
+                    BorderRadius.circular(20),
               ),
               child: Column(
                 children: [
@@ -1151,9 +1314,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _ganhoLinha(String dia, String valor) {
+  Widget _ganhoLinha(
+    String dia,
+    String valor,
+  ) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 9),
+      padding:
+          const EdgeInsets.symmetric(vertical: 9),
       child: Row(
         children: [
           Expanded(
@@ -1182,7 +1349,12 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _buildAjuda() {
     return ListView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(18, 22, 18, 30),
+      padding: const EdgeInsets.fromLTRB(
+        18,
+        22,
+        18,
+        30,
+      ),
       children: [
         const Text(
           'Como podemos ajudar?',
@@ -1191,7 +1363,9 @@ class _HomeScreenState extends State<HomeScreen> {
             fontWeight: FontWeight.w900,
           ),
         ),
+
         const SizedBox(height: 7),
+
         const Text(
           'Encontre respostas ou fale com o suporte FoodJet.',
           style: TextStyle(
@@ -1199,15 +1373,18 @@ class _HomeScreenState extends State<HomeScreen> {
             fontSize: 13,
           ),
         ),
+
         const SizedBox(height: 20),
 
         Container(
-          padding: const EdgeInsets.symmetric(
+          padding:
+              const EdgeInsets.symmetric(
             horizontal: 15,
           ),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
+            borderRadius:
+                BorderRadius.circular(16),
           ),
           child: const TextField(
             decoration: InputDecoration(
@@ -1251,17 +1428,26 @@ class _HomeScreenState extends State<HomeScreen> {
 
         ElevatedButton.icon(
           onPressed: () {},
-          icon: const Icon(Icons.chat_bubble_outline),
-          label: const Text('Falar com suporte FoodJet'),
+          icon: const Icon(
+            Icons.chat_bubble_outline,
+          ),
+          label: const Text(
+            'Falar com suporte FoodJet',
+          ),
           style: ElevatedButton.styleFrom(
-            backgroundColor: foodJetOrange,
-            foregroundColor: Colors.white,
+            backgroundColor:
+                foodJetOrange,
+            foregroundColor:
+                Colors.white,
             elevation: 0,
-            padding: const EdgeInsets.symmetric(
+            padding:
+                const EdgeInsets.symmetric(
               vertical: 16,
             ),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(15),
+            shape:
+                RoundedRectangleBorder(
+              borderRadius:
+                  BorderRadius.circular(15),
             ),
           ),
         ),
@@ -1275,11 +1461,13 @@ class _HomeScreenState extends State<HomeScreen> {
     String subtitulo,
   ) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+      margin:
+          const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(17),
+        borderRadius:
+            BorderRadius.circular(17),
       ),
       child: Row(
         children: [
@@ -1287,29 +1475,36 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 43,
             height: 43,
             decoration: BoxDecoration(
-              color: foodJetOrange.withOpacity(.09),
-              borderRadius: BorderRadius.circular(13),
+              color:
+                  foodJetOrange.withOpacity(.09),
+              borderRadius:
+                  BorderRadius.circular(13),
             ),
             child: Icon(
               icon,
               color: foodJetOrange,
             ),
           ),
+
           const SizedBox(width: 13),
+
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 Text(
                   titulo,
                   style: const TextStyle(
-                    fontWeight: FontWeight.w800,
+                    fontWeight:
+                        FontWeight.w800,
                   ),
                 ),
                 const SizedBox(height: 3),
                 Text(
                   subtitulo,
-                  style: const TextStyle(
+                  style:
+                      const TextStyle(
                     color: Colors.black54,
                     fontSize: 11,
                   ),
@@ -1317,6 +1512,7 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
+
           const Icon(
             Icons.chevron_right,
             color: Colors.black38,
@@ -1332,8 +1528,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildMenu() {
     return ListView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(18, 22, 18, 30),
+      physics:
+          const BouncingScrollPhysics(),
+      padding: const EdgeInsets.fromLTRB(
+        18,
+        22,
+        18,
+        30,
+      ),
       children: [
         const Text(
           'Menu',
@@ -1349,7 +1551,8 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius:
+                BorderRadius.circular(20),
           ),
           child: Row(
             children: [
@@ -1357,7 +1560,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 width: 55,
                 height: 55,
                 decoration: BoxDecoration(
-                  color: foodJetOrange.withOpacity(.10),
+                  color:
+                      foodJetOrange.withOpacity(.10),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(
@@ -1366,16 +1570,20 @@ class _HomeScreenState extends State<HomeScreen> {
                   size: 29,
                 ),
               ),
+
               const SizedBox(width: 13),
+
               const Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Text(
                       'Matheus',
                       style: TextStyle(
                         fontSize: 17,
-                        fontWeight: FontWeight.w900,
+                        fontWeight:
+                            FontWeight.w900,
                       ),
                     ),
                     SizedBox(height: 3),
@@ -1389,6 +1597,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
+
               const Icon(
                 Icons.chevron_right,
               ),
@@ -1445,10 +1654,12 @@ class _HomeScreenState extends State<HomeScreen> {
     bool danger = false,
   }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
+      margin:
+          const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        borderRadius:
+            BorderRadius.circular(16),
       ),
       child: ListTile(
         onTap: () {},
@@ -1486,7 +1697,8 @@ class _HomeScreenState extends State<HomeScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(.08),
+            color:
+                Colors.black.withOpacity(.08),
             blurRadius: 20,
             offset: const Offset(0, -5),
           ),
@@ -1501,10 +1713,13 @@ class _HomeScreenState extends State<HomeScreen> {
             paginaAtual = index;
           });
         },
-        indicatorColor: foodJetOrange.withOpacity(.12),
+        indicatorColor:
+            foodJetOrange.withOpacity(.12),
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
+            icon: Icon(
+              Icons.home_outlined,
+            ),
             selectedIcon: Icon(
               Icons.home_rounded,
               color: foodJetOrange,
@@ -1512,15 +1727,21 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Início',
           ),
           NavigationDestination(
-            icon: Icon(Icons.account_balance_wallet_outlined),
+            icon: Icon(
+              Icons
+                  .account_balance_wallet_outlined,
+            ),
             selectedIcon: Icon(
-              Icons.account_balance_wallet_rounded,
+              Icons
+                  .account_balance_wallet_rounded,
               color: foodJetOrange,
             ),
             label: 'Ganhos',
           ),
           NavigationDestination(
-            icon: Icon(Icons.help_outline_rounded),
+            icon: Icon(
+              Icons.help_outline_rounded,
+            ),
             selectedIcon: Icon(
               Icons.help_rounded,
               color: foodJetOrange,
@@ -1528,7 +1749,9 @@ class _HomeScreenState extends State<HomeScreen> {
             label: 'Ajuda',
           ),
           NavigationDestination(
-            icon: Icon(Icons.menu_rounded),
+            icon: Icon(
+              Icons.menu_rounded,
+            ),
             selectedIcon: Icon(
               Icons.menu_open_rounded,
               color: foodJetOrange,
@@ -1552,35 +1775,46 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(
+            padding:
+                const EdgeInsets.fromLTRB(
               20,
               5,
               20,
               25,
             ),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize:
+                  MainAxisSize.min,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Notificações',
                   style: TextStyle(
                     fontSize: 22,
-                    fontWeight: FontWeight.w900,
+                    fontWeight:
+                        FontWeight.w900,
                   ),
                 ),
+
                 const SizedBox(height: 20),
+
                 Container(
-                  padding: const EdgeInsets.all(18),
+                  padding:
+                      const EdgeInsets.all(18),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF8F8F8),
-                    borderRadius: BorderRadius.circular(17),
+                    color:
+                        const Color(0xFFF8F8F8),
+                    borderRadius:
+                        BorderRadius.circular(17),
                   ),
                   child: const Row(
                     children: [
                       Icon(
-                        Icons.notifications_none,
-                        color: foodJetOrange,
+                        Icons
+                            .notifications_none,
+                        color:
+                            foodJetOrange,
                       ),
                       SizedBox(width: 12),
                       Expanded(
@@ -1614,65 +1848,89 @@ class _HomeScreenState extends State<HomeScreen> {
       builder: (context) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(
+            padding:
+                const EdgeInsets.fromLTRB(
               20,
               5,
               20,
               30,
             ),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize:
+                  MainAxisSize.min,
               children: [
                 Container(
                   width: 65,
                   height: 65,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFEE2E2),
+                  decoration:
+                      const BoxDecoration(
+                    color: Color(0xFFFEE2E2),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
                     Icons.emergency_rounded,
-                    color: Color(0xFFDC2626),
+                    color:
+                        Color(0xFFDC2626),
                     size: 32,
                   ),
                 ),
+
                 const SizedBox(height: 15),
+
                 const Text(
                   'Central de emergência',
                   style: TextStyle(
                     fontSize: 21,
-                    fontWeight: FontWeight.w900,
+                    fontWeight:
+                        FontWeight.w900,
                   ),
                 ),
+
                 const SizedBox(height: 7),
+
                 const Text(
                   'Use esta opção somente em uma situação de emergência.',
-                  textAlign: TextAlign.center,
+                  textAlign:
+                      TextAlign.center,
                   style: TextStyle(
                     color: Colors.black54,
                     fontSize: 12,
                   ),
                 ),
+
                 const SizedBox(height: 22),
+
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
                     onPressed: () {},
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFDC2626),
-                      foregroundColor: Colors.white,
+                    style:
+                        ElevatedButton.styleFrom(
+                      backgroundColor:
+                          const Color(
+                        0xFFDC2626,
+                      ),
+                      foregroundColor:
+                          Colors.white,
                       elevation: 0,
-                      padding: const EdgeInsets.symmetric(
+                      padding:
+                          const EdgeInsets
+                              .symmetric(
                         vertical: 16,
                       ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(15),
+                      shape:
+                          RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(
+                          15,
+                        ),
                       ),
                     ),
                     child: const Text(
                       'Preciso de ajuda',
                       style: TextStyle(
-                        fontWeight: FontWeight.w900,
+                        fontWeight:
+                            FontWeight.w900,
                       ),
                     ),
                   ),
@@ -1685,187 +1943,3 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 }
-
-// ================================================================
-// MAPA VISUAL FOODJET
-// ================================================================
-
-class FoodJetMapPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final backgroundPaint = Paint()
-      ..color = const Color(0xFFEFF2EA);
-
-    canvas.drawRect(
-      Offset.zero & size,
-      backgroundPaint,
-    );
-
-    // Áreas verdes
-    final greenPaint = Paint()
-      ..color = const Color(0xFFE2E9D8);
-
-    canvas.drawCircle(
-      Offset(size.width * .17, size.height * .40),
-      75,
-      greenPaint,
-    );
-
-    canvas.drawCircle(
-      Offset(size.width * .82, size.height * .30),
-      85,
-      greenPaint,
-    );
-
-    canvas.drawCircle(
-      Offset(size.width * .78, size.height * .83),
-      70,
-      greenPaint,
-    );
-
-    // Ruas
-    final roadPaint = Paint()
-      ..color = Colors.white
-      ..strokeWidth = 10
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final smallRoadPaint = Paint()
-      ..color = const Color(0xFFF8F8F8)
-      ..strokeWidth = 5
-      ..style = PaintingStyle.stroke;
-
-    final path1 = Path()
-      ..moveTo(0, size.height * .72)
-      ..quadraticBezierTo(
-        size.width * .25,
-        size.height * .55,
-        size.width * .52,
-        size.height * .63,
-      )
-      ..quadraticBezierTo(
-        size.width * .76,
-        size.height * .72,
-        size.width,
-        size.height * .43,
-      );
-
-    canvas.drawPath(path1, roadPaint);
-
-    final path2 = Path()
-      ..moveTo(size.width * .62, 0)
-      ..quadraticBezierTo(
-        size.width * .58,
-        size.height * .27,
-        size.width * .70,
-        size.height * .50,
-      )
-      ..quadraticBezierTo(
-        size.width * .79,
-        size.height * .67,
-        size.width * .73,
-        size.height,
-      );
-
-    canvas.drawPath(path2, roadPaint);
-
-    final path3 = Path()
-      ..moveTo(0, size.height * .23)
-      ..quadraticBezierTo(
-        size.width * .30,
-        size.height * .30,
-        size.width * .52,
-        size.height * .18,
-      )
-      ..quadraticBezierTo(
-        size.width * .76,
-        size.height * .08,
-        size.width,
-        size.height * .18,
-      );
-
-    canvas.drawPath(path3, smallRoadPaint);
-
-    // Rota FoodJet
-    final routePaint = Paint()
-      ..color = const Color(0xFFF97316)
-      ..strokeWidth = 4
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-
-    final route = Path()
-      ..moveTo(size.width * .20, size.height * .72)
-      ..quadraticBezierTo(
-        size.width * .33,
-        size.height * .55,
-        size.width * .51,
-        size.height * .61,
-      )
-      ..quadraticBezierTo(
-        size.width * .65,
-        size.height * .67,
-        size.width * .76,
-        size.height * .43,
-      );
-
-    canvas.drawPath(route, routePaint);
-
-    // Localização do entregador
-    final locationPaint = Paint()
-      ..color = const Color(0xFFF97316);
-
-    canvas.drawCircle(
-      Offset(
-        size.width * .20,
-        size.height * .72,
-      ),
-      15,
-      locationPaint,
-    );
-
-    final innerPaint = Paint()
-      ..color = Colors.white;
-
-    canvas.drawCircle(
-      Offset(
-        size.width * .20,
-        size.height * .72,
-      ),
-      6,
-      innerPaint,
-    );
-
-    // Destino
-    final destinationPaint = Paint()
-      ..color = const Color(0xFF16A34A);
-
-    canvas.drawCircle(
-      Offset(
-        size.width * .76,
-        size.height * .43,
-      ),
-      13,
-      destinationPaint,
-    );
-
-    final pinPaint = Paint()
-      ..color = Colors.white;
-
-    canvas.drawCircle(
-      Offset(
-        size.width * .76,
-        size.height * .43,
-      ),
-      5,
-      pinPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(
-    covariant CustomPainter oldDelegate,
-  ) {
-    return false;
-  }
-}
-
