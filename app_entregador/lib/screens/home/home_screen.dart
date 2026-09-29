@@ -2860,32 +2860,156 @@ class _OfertaEntregaDialogState
   }
 
   String enderecoRestaurante() {
-    final direto = campo([
-      'endereco_restaurante',
-      'restaurante_endereco',
-      'endereco_retirada',
-      'endereco_coleta',
-    ]);
+  final direto = campo([
+    'endereco_restaurante',
+    'restaurante_endereco',
+    'endereco_retirada',
+    'endereco_coleta',
+  ]);
 
-    if (direto.isNotEmpty) {
-      return direto;
+  if (direto.isNotEmpty) {
+    return direto;
+  }
+
+  final restaurante = widget.pedido['restaurante'];
+
+  if (restaurante is Map) {
+    final endereco =
+        restaurante['endereco'] ??
+        restaurante['address'];
+
+    final formatado = formatarEndereco(endereco);
+
+    if (formatado.isNotEmpty) {
+      return formatado;
+    }
+  }
+
+  return 'Endereço não informado';
+}
+
+String formatarEndereco(dynamic endereco) {
+  if (endereco == null) {
+    return '';
+  }
+
+  // ================================================
+  // ENDEREÇO JÁ COMO TEXTO
+  // ================================================
+
+  if (endereco is String) {
+    final texto = endereco.trim();
+
+    if (texto.isEmpty ||
+        texto == 'null' ||
+        texto == '{}') {
+      return '';
     }
 
-    final restaurante =
-        widget.pedido['restaurante'];
+    return texto;
+  }
 
-    if (restaurante is Map) {
-      final endereco =
-          restaurante['endereco'] ??
-          restaurante['address'];
+  // ================================================
+  // ENDEREÇO COMO OBJETO
+  // ================================================
 
-      if (endereco != null) {
-        return endereco.toString();
+  if (endereco is Map) {
+    String valor(List<String> chaves) {
+      for (final chave in chaves) {
+        final item = endereco[chave];
+
+        if (item != null) {
+          final texto = item.toString().trim();
+
+          if (texto.isNotEmpty &&
+              texto != 'null') {
+            return texto;
+          }
+        }
+      }
+
+      return '';
+    }
+
+    final rua = valor([
+      'logradouro',
+      'rua',
+      'endereco',
+      'avenida',
+      'av',
+    ]);
+
+    final numero = valor([
+      'numero',
+      'número',
+    ]);
+
+    final complemento = valor([
+      'complemento',
+      'complement',
+    ]);
+
+    final bairro = valor([
+      'bairro',
+    ]);
+
+    final cidade = valor([
+      'cidade',
+      'municipio',
+      'município',
+    ]);
+
+    final estado = valor([
+      'estado',
+      'uf',
+    ]);
+
+    final cep = valor([
+      'cep',
+      'CEP',
+    ]);
+
+    final partes = <String>[];
+
+    if (rua.isNotEmpty) {
+      partes.add(rua);
+    }
+
+    if (numero.isNotEmpty) {
+      if (partes.isNotEmpty) {
+        partes[0] =
+            '${partes[0]}, $numero';
+      } else {
+        partes.add(numero);
       }
     }
 
-    return 'Endereço não informado';
+    if (complemento.isNotEmpty) {
+      partes.add(complemento);
+    }
+
+    if (bairro.isNotEmpty) {
+      partes.add(bairro);
+    }
+
+    if (cidade.isNotEmpty &&
+        estado.isNotEmpty) {
+      partes.add('$cidade - $estado');
+    } else if (cidade.isNotEmpty) {
+      partes.add(cidade);
+    } else if (estado.isNotEmpty) {
+      partes.add(estado);
+    }
+
+    if (cep.isNotEmpty) {
+      partes.add('CEP $cep');
+    }
+
+    return partes.join(' • ');
   }
+
+  return '';
+}
 
   // ============================================================
   // CLIENTE
@@ -2952,42 +3076,51 @@ class _OfertaEntregaDialogState
   // ============================================================
 
   double? valorEntrega() {
-    final valor =
-        widget.pedido['valor_entrega'] ??
-        widget.pedido['taxa_entrega'] ??
-        widget.pedido[
-            'valor_entregador'] ??
-        widget.pedido[
-            'ganho_entregador'];
+  final valor =
+      widget.pedido['valor_entrega'] ??
+      widget.pedido['taxa_entrega'] ??
+      widget.pedido['valor_entregador'] ??
+      widget.pedido['ganho_entregador'];
 
-    if (valor == null) {
-      return null;
-    }
+  if (valor == null) {
+    return null;
+  }
 
-    if (valor is num) {
-      return valor.toDouble();
-    }
+  if (valor is num) {
+    return valor.toDouble();
+  }
 
-    final textoValor = valor
-        .toString()
-        .replaceAll(
-          'R\$',
-          '',
-        )
-        .replaceAll(
-          '.',
-          '',
-        )
-        .replaceAll(
-          ',',
-          '.',
-        )
-        .trim();
+  final texto = valor
+      .toString()
+      .trim()
+      .replaceAll('R\$', '')
+      .replaceAll(' ', '');
 
+  if (texto.isEmpty) {
+    return null;
+  }
+
+  // Formato brasileiro:
+  // R$ 12,50
+  if (texto.contains(',') && texto.contains('.')) {
+    final normalizado = texto
+        .replaceAll('.', '')
+        .replaceAll(',', '.');
+
+    return double.tryParse(normalizado);
+  
+
+  // R$ 12,50
+  if (texto.contains(',')) {
     return double.tryParse(
-      textoValor,
+      texto.replaceAll(',', '.'),
     );
   }
+
+  // 12.50 vindo do PostgreSQL/API
+  // NÃO remover o ponto.
+  return double.tryParse(texto);
+}
 
   String valorFormatado() {
     final valor =

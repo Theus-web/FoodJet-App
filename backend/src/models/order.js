@@ -1861,27 +1861,129 @@ async function listarPorCliente(
 }
 
 
-// ======================================================
-// PEDIDOS DISPONÍVEIS PARA ENTREGA
-// ======================================================
+// ============================================================
+// LISTAR PEDIDOS DISPONÍVEIS PARA ENTREGADORES
+// ============================================================
 
 async function listarDisponiveisEntrega() {
+    const resultado = await pool.query(
+        `
+        SELECT
+            p.*,
 
-    const resultado =
-        await pool.query(
-            `
-            SELECT *
-            FROM pedidos
-            WHERE
-                status = 'PRONTO'
-                AND entregador_id IS NULL
-            ORDER BY id ASC
-            `
-        );
+            -- ==================================================
+            -- RESTAURANTE
+            -- ==================================================
 
-    return resultado.rows.map(
-        montarPedido
+            r.nome AS restaurante_nome,
+            r.endereco AS endereco_restaurante,
+            r.imagem AS restaurante_imagem,
+
+            -- ==================================================
+            -- CLIENTE
+            -- ==================================================
+
+            u.nome AS cliente_nome
+
+        FROM pedidos p
+
+        LEFT JOIN restaurantes r
+            ON r.id = p.restaurante_id
+
+        LEFT JOIN usuarios u
+            ON u.id = p.cliente_id
+
+        WHERE
+            p.status = 'PRONTO'
+            AND p.entregador_id IS NULL
+
+        ORDER BY p.id ASC
+        `
     );
+
+    return resultado.rows.map((row) => {
+        const pedido = montarPedido(row);
+
+        // ======================================================
+        // ENDEREÇO DO RESTAURANTE
+        // ======================================================
+
+        let enderecoRestaurante =
+            row.endereco_restaurante ?? null;
+
+        if (
+            enderecoRestaurante === null ||
+            enderecoRestaurante === undefined
+        ) {
+            enderecoRestaurante = null;
+        }
+
+        // ======================================================
+        // OBJETO RESTAURANTE
+        // ======================================================
+
+        const restaurante = {
+            id: row.restaurante_id,
+            nome: row.restaurante_nome || "Restaurante",
+            endereco: enderecoRestaurante,
+            imagem: row.restaurante_imagem || null,
+        };
+
+        // ======================================================
+        // RETORNO ENRIQUECIDO PARA O ENTREGADOR
+        // ======================================================
+
+        return {
+            ...pedido,
+
+            // ID
+            id: row.id,
+
+            // Restaurante
+            restauranteId: row.restaurante_id,
+            restaurante_id: row.restaurante_id,
+            restauranteNome:
+                row.restaurante_nome || "Restaurante",
+            restaurante_nome:
+                row.restaurante_nome || "Restaurante",
+            enderecoRestaurante:
+                enderecoRestaurante,
+            endereco_restaurante:
+                enderecoRestaurante,
+            restaurante: restaurante,
+
+            // Cliente
+            clienteId: row.cliente_id,
+            cliente_id: row.cliente_id,
+            clienteNome:
+                row.cliente_nome || "Cliente",
+            cliente_nome:
+                row.cliente_nome || "Cliente",
+
+            // Endereço de entrega
+            enderecoEntrega:
+                row.endereco,
+            endereco_entrega:
+                row.endereco,
+
+            // Valores
+            valorPedido:
+                row.total,
+            valor_pedido:
+                row.total,
+
+            taxaEntrega:
+                row.taxa_entrega,
+            taxa_entrega:
+                row.taxa_entrega,
+
+            // Informações adicionais
+            pagamento:
+                row.pagamento,
+            status:
+                row.status,
+        };
+    });
 }
 
 
