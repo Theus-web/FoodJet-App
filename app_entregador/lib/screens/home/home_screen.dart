@@ -3101,15 +3101,16 @@ String formatarEndereco(dynamic endereco) {
   }
 
   // Formato brasileiro:
-  // R$ 12,50
+  // R$ 1.234,50
   if (texto.contains(',') && texto.contains('.')) {
     final normalizado = texto
         .replaceAll('.', '')
         .replaceAll(',', '.');
 
     return double.tryParse(normalizado);
-  
+  }
 
+  // Formato brasileiro simples:
   // R$ 12,50
   if (texto.contains(',')) {
     return double.tryParse(
@@ -3117,8 +3118,8 @@ String formatarEndereco(dynamic endereco) {
     );
   }
 
-  // 12.50 vindo do PostgreSQL/API
-  // NÃO remover o ponto.
+  // Formato decimal da API/PostgreSQL:
+  // 12.50
   return double.tryParse(texto);
 }
 
