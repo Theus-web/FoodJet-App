@@ -60,7 +60,7 @@ class SupportScreen extends StatelessWidget {
           backgroundColor: (danger
                   ? FoodJetColors.red
                   : FoodJetColors.orange)
-              .withOpacity(.1),
+              .withValues(alpha: .1),
           child: Icon(
             icon,
             color: danger

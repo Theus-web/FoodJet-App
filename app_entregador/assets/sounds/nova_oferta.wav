@@ -1,0 +1,3 @@
+await _audioPlayer.play(
+  AssetSource('sounds/nova_oferta.wav'),
+);

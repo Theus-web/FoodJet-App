@@ -1,8 +1,11 @@
+
 const { pool } = require("../config/database");
 
 // ============================================================
 // FOODJET - MODEL ENTREGADORES
-// Compatível com a estrutura PostgreSQL atual:
+// PostgreSQL
+//
+// Estrutura esperada:
 //
 // id
 // nome
@@ -12,6 +15,11 @@ const { pool } = require("../config/database");
 // status
 // online
 // dados JSONB
+// ============================================================
+
+
+// ============================================================
+// NORMALIZAR DADOS
 // ============================================================
 
 function normalizarDados(entregador = {}) {
@@ -25,13 +33,25 @@ function normalizarDados(entregador = {}) {
     return {
         ...dadosExistentes,
 
-        veiculo: entregador.veiculo ?? dadosExistentes.veiculo ?? null,
+        veiculo:
+            entregador.veiculo ??
+            dadosExistentes.veiculo ??
+            null,
 
-        placa: entregador.placa ?? dadosExistentes.placa ?? null,
+        placa:
+            entregador.placa ??
+            dadosExistentes.placa ??
+            null,
 
-        renavam: entregador.renavam ?? dadosExistentes.renavam ?? null,
+        renavam:
+            entregador.renavam ??
+            dadosExistentes.renavam ??
+            null,
 
-        cnh: entregador.cnh ?? dadosExistentes.cnh ?? null,
+        cnh:
+            entregador.cnh ??
+            dadosExistentes.cnh ??
+            null,
 
         categoriaCnh:
             entregador.categoriaCnh ??
@@ -125,6 +145,15 @@ async function criar(entregador) {
 
     const dados = normalizarDados(entregador);
 
+    const status =
+        entregador.status
+            ? String(entregador.status)
+                .trim()
+                .toUpperCase()
+            : "OFFLINE";
+
+    const online = entregador.online === true;
+
     const resultado = await pool.query(
         `
         INSERT INTO entregadores (
@@ -147,6 +176,7 @@ async function criar(entregador) {
             $7,
             $8::jsonb
         )
+
         ON CONFLICT (id)
         DO UPDATE SET
             nome = EXCLUDED.nome,
@@ -156,6 +186,7 @@ async function criar(entregador) {
             status = EXCLUDED.status,
             online = EXCLUDED.online,
             dados = EXCLUDED.dados
+
         RETURNING
             id,
             nome,
@@ -168,12 +199,15 @@ async function criar(entregador) {
         `,
         [
             String(entregador.id),
+
             entregador.nome
                 ? String(entregador.nome).trim()
                 : null,
 
             entregador.email
-                ? String(entregador.email).trim().toLowerCase()
+                ? String(entregador.email)
+                    .trim()
+                    .toLowerCase()
                 : null,
 
             entregador.telefone
@@ -184,11 +218,9 @@ async function criar(entregador) {
                 ? String(entregador.cpf).trim()
                 : null,
 
-            entregador.status
-                ? String(entregador.status).trim().toUpperCase()
-                : "DISPONIVEL",
+            status,
 
-            entregador.online === true,
+            online,
 
             JSON.stringify(dados)
         ]
@@ -203,7 +235,8 @@ async function criar(entregador) {
 // ============================================================
 
 async function listar() {
-    const resultado = await pool.query(`
+    const resultado = await pool.query(
+        `
         SELECT
             id,
             nome,
@@ -215,7 +248,8 @@ async function listar() {
             dados
         FROM entregadores
         ORDER BY id DESC
-    `);
+        `
+    );
 
     return resultado.rows.map(formatarEntregador);
 }
@@ -226,6 +260,10 @@ async function listar() {
 // ============================================================
 
 async function buscarPorId(id) {
+    if (!id) {
+        return null;
+    }
+
     const resultado = await pool.query(
         `
         SELECT
@@ -257,10 +295,24 @@ async function buscarPorId(id) {
 // ============================================================
 
 async function atualizarStatus(id, status) {
+    if (!id) {
+        return null;
+    }
+
+    if (!status) {
+        throw new Error("Status do entregador é obrigatório");
+    }
+
+    const statusNormalizado =
+        String(status)
+            .trim()
+            .toUpperCase();
+
     const resultado = await pool.query(
         `
         UPDATE entregadores
-        SET status = $2
+        SET
+            status = $2
         WHERE id = $1
         RETURNING
             id,
@@ -274,7 +326,7 @@ async function atualizarStatus(id, status) {
         `,
         [
             String(id),
-            String(status).trim().toUpperCase()
+            statusNormalizado
         ]
     );
 
@@ -291,10 +343,22 @@ async function atualizarStatus(id, status) {
 // ============================================================
 
 async function atualizarOnline(id, online) {
+    if (!id) {
+        return null;
+    }
+
+    const onlineNormalizado = Boolean(online);
+
+    const status = onlineNormalizado
+        ? "DISPONIVEL"
+        : "OFFLINE";
+
     const resultado = await pool.query(
         `
         UPDATE entregadores
-        SET online = $2
+        SET
+            online = $2,
+            status = $3
         WHERE id = $1
         RETURNING
             id,
@@ -308,7 +372,8 @@ async function atualizarOnline(id, online) {
         `,
         [
             String(id),
-            Boolean(online)
+            onlineNormalizado,
+            status
         ]
     );
 
@@ -325,6 +390,10 @@ async function atualizarOnline(id, online) {
 // ============================================================
 
 async function atualizarDados(id, novosDados = {}) {
+    if (!id) {
+        return null;
+    }
+
     const atual = await buscarPorId(id);
 
     if (!atual) {
@@ -333,7 +402,8 @@ async function atualizarDados(id, novosDados = {}) {
 
     const dadosAtuais =
         atual.dados &&
-        typeof atual.dados === "object"
+        typeof atual.dados === "object" &&
+        !Array.isArray(atual.dados)
             ? atual.dados
             : {};
 
@@ -346,7 +416,8 @@ async function atualizarDados(id, novosDados = {}) {
     const resultado = await pool.query(
         `
         UPDATE entregadores
-        SET dados = $2::jsonb
+        SET
+            dados = $2::jsonb
         WHERE id = $1
         RETURNING
             id,
@@ -383,43 +454,99 @@ function formatarEntregador(row) {
 
     const dados =
         row.dados &&
-        typeof row.dados === "object"
+        typeof row.dados === "object" &&
+        !Array.isArray(row.dados)
             ? row.dados
             : {};
 
     return {
         id: row.id,
+
         nome: row.nome,
+
         email: row.email,
+
         telefone: row.telefone,
+
         cpf: row.cpf,
+
         status: row.status,
-        online: row.online,
 
-        // Dados específicos do entregador
-        veiculo: dados.veiculo ?? null,
-        placa: dados.placa ?? null,
-        renavam: dados.renavam ?? null,
+        online: row.online === true,
 
-        cnh: dados.cnh ?? null,
-        categoriaCnh: dados.categoriaCnh ?? null,
+        // ====================================================
+        // DADOS DO VEÍCULO
+        // ====================================================
 
-        dataNascimento: dados.dataNascimento ?? null,
+        veiculo:
+            dados.veiculo ?? null,
 
-        endereco: dados.endereco ?? null,
-        cep: dados.cep ?? null,
-        rua: dados.rua ?? null,
-        numero: dados.numero ?? null,
-        complemento: dados.complemento ?? null,
-        bairro: dados.bairro ?? null,
-        cidade: dados.cidade ?? null,
-        estado: dados.estado ?? null,
+        placa:
+            dados.placa ?? null,
 
-        cnhFrente: dados.cnhFrente ?? null,
-        cnhVerso: dados.cnhVerso ?? null,
-        crlv: dados.crlv ?? null,
+        renavam:
+            dados.renavam ?? null,
+
+        // ====================================================
+        // CNH
+        // ====================================================
+
+        cnh:
+            dados.cnh ?? null,
+
+        categoriaCnh:
+            dados.categoriaCnh ?? null,
+
+        dataNascimento:
+            dados.dataNascimento ?? null,
+
+        // ====================================================
+        // ENDEREÇO
+        // ====================================================
+
+        endereco:
+            dados.endereco ?? null,
+
+        cep:
+            dados.cep ?? null,
+
+        rua:
+            dados.rua ?? null,
+
+        numero:
+            dados.numero ?? null,
+
+        complemento:
+            dados.complemento ?? null,
+
+        bairro:
+            dados.bairro ?? null,
+
+        cidade:
+            dados.cidade ?? null,
+
+        estado:
+            dados.estado ?? null,
+
+        // ====================================================
+        // DOCUMENTOS
+        // ====================================================
+
+        cnhFrente:
+            dados.cnhFrente ?? null,
+
+        cnhVerso:
+            dados.cnhVerso ?? null,
+
+        crlv:
+            dados.crlv ?? null,
+
         comprovanteEndereco:
             dados.comprovanteEndereco ?? null,
+
+        // ====================================================
+        // JSON COMPLETO
+        // ====================================================
 
         dados
     };
@@ -438,3 +565,4 @@ module.exports = {
     atualizarOnline,
     atualizarDados
 };
+

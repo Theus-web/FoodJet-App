@@ -303,8 +303,8 @@ class _MapWidgetState extends State<MapWidget> {
                 markers: [
                   Marker(
                     point: markerPosition,
-                    width: 72,
-                    height: 72,
+                    width: 32,
+                    height: 32,
                     child: Stack(
                       alignment: Alignment.center,
                       children: [
@@ -368,17 +368,8 @@ class _MapWidgetState extends State<MapWidget> {
             ],
           ),
 
-          // ========================================================
-          // STATUS GPS
-          // ========================================================
-
-          Positioned(
-            top: 12,
-            left: 12,
-            right: 12,
-            child: _buildLocationStatus(),
-          ),
-
+          
+         
           // ========================================================
           // BOTÃO CENTRALIZAR
           // ========================================================
@@ -397,78 +388,7 @@ class _MapWidgetState extends State<MapWidget> {
   // STATUS
   // ============================================================
 
-  Widget _buildLocationStatus() {
-    return Align(
-      alignment: Alignment.topLeft,
-      child: Container(
-        padding:
-            const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 9,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius:
-              BorderRadius.circular(14),
-          boxShadow: [
-            BoxShadow(
-              color:
-                  Colors.black.withOpacity(0.10),
-              blurRadius: 10,
-              offset:
-                  const Offset(0, 3),
-            ),
-          ],
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (_carregandoLocalizacao)
-              const SizedBox(
-                width: 15,
-                height: 15,
-                child:
-                    CircularProgressIndicator(
-                  strokeWidth: 2,
-                  color:
-                      Color(0xFFF97316),
-                ),
-              )
-            else
-              Container(
-                width: 10,
-                height: 10,
-                decoration:
-                    BoxDecoration(
-                  shape: BoxShape.circle,
-                  color:
-                      _localizacaoAtiva
-                          ? const Color(
-                              0xFF16A34A,
-                            )
-                          : const Color(
-                              0xFFEF4444,
-                            ),
-                ),
-              ),
-
-            const SizedBox(width: 8),
-
-            Text(
-              _mensagemLocalizacao,
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight:
-                    FontWeight.w600,
-                color:
-                    Color(0xFF171717),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
+  
 
   // ============================================================
   // BOTÃO

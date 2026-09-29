@@ -1,35 +1,96 @@
+
 const express = require("express");
+
 const router = express.Router();
 
 const deliveryController = require("../controllers/deliveryController");
 
 console.log("✅ ROTA ENTREGADORES CARREGADA");
 
-// Cadastro
-router.post("/", deliveryController.create);
+// ============================================================
+// CADASTRAR ENTREGADOR
+// ============================================================
 
-// Lista
-router.get("/", deliveryController.list);
+router.post(
+    "/",
+    deliveryController.create
+);
 
-// Online / Offline
-router.put("/:id/status", deliveryController.status);
+// ============================================================
+// LISTAR ENTREGADORES
+// ============================================================
 
-// Pedido atual do entregador
-router.get("/:id/orders", deliveryController.myOrders);
+router.get(
+    "/",
+    deliveryController.list
+);
 
-// Entregas disponíveis
-router.get("/available/orders", deliveryController.availableOrders);
+// ============================================================
+// PEDIDOS DISPONÍVEIS
+//
+// IMPORTANTE:
+// Esta rota precisa ficar ANTES de /:id/orders
+// para não ser interpretada como um ID.
+// ============================================================
 
-// Aceitar entrega
-router.put("/:id/orders/:orderId/accept", deliveryController.acceptOrder);
+router.get(
+    "/available/orders",
+    deliveryController.availableOrders
+);
 
-// Chegou ao restaurante
-router.put("/orders/:orderId/arrived", deliveryController.arrivedRestaurant);
+// ============================================================
+// PEDIDOS DO ENTREGADOR
+// ============================================================
 
-// Saiu para entrega
-router.put("/orders/:orderId/start", deliveryController.startDelivery);
+router.get(
+    "/:id/orders",
+    deliveryController.myOrders
+);
 
-// Finalizar entrega
-router.put("/orders/:orderId/finish", deliveryController.finishDelivery);
+// ============================================================
+// ONLINE / OFFLINE
+// ============================================================
+
+router.put(
+    "/:id/status",
+    deliveryController.status
+);
+
+// ============================================================
+// ACEITAR PEDIDO
+// ============================================================
+
+router.put(
+    "/:id/orders/:orderId/accept",
+    deliveryController.acceptOrder
+);
+
+// ============================================================
+// CHEGOU AO RESTAURANTE
+// ============================================================
+
+router.put(
+    "/orders/:orderId/arrived",
+    deliveryController.arrivedRestaurant
+);
+
+// ============================================================
+// INICIAR ENTREGA
+// ============================================================
+
+router.put(
+    "/orders/:orderId/start",
+    deliveryController.startDelivery
+);
+
+// ============================================================
+// FINALIZAR ENTREGA
+// ============================================================
+
+router.put(
+    "/orders/:orderId/finish",
+    deliveryController.finishDelivery
+);
 
 module.exports = router;
+

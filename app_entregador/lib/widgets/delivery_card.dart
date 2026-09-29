@@ -24,10 +24,10 @@ class DeliveryCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: Colors.black.withOpacity(.05)),
+        border: Border.all(color: Colors.black.withValues(alpha: .05)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(.08),
+            color: Colors.black.withValues(alpha: .08),
             blurRadius: 24,
             offset: const Offset(0, 10),
           ),
@@ -42,7 +42,7 @@ class DeliveryCard extends StatelessWidget {
                 width: 46,
                 height: 46,
                 decoration: BoxDecoration(
-                  color: FoodJetColors.orange.withOpacity(.12),
+                  color: FoodJetColors.orange.withValues(alpha: .12),
                   borderRadius: BorderRadius.circular(14),
                 ),
                 child: const Icon(

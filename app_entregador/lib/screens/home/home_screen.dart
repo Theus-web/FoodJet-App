@@ -1,7 +1,10 @@
 import 'dart:async';
 
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 
+import '../../services/auth_service.dart';
+import '../../services/delivery_service.dart';
 import '../../widgets/map_widget.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -13,97 +16,438 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   // ============================================================
-  // FOODJET
+  // ESTADO
   // ============================================================
 
-  static const Color foodJetOrange = Color(0xFFF97316);
-  static const Color foodJetDark = Color(0xFF171717);
-  static const Color background = Color(0xFFF7F7F7);
-  static const Color green = Color(0xFF16A34A);
-
   bool disponivel = false;
+  bool alterandoDisponibilidade = false;
+
+  String? entregadorId;
+  String nomeEntregador = 'Entregador';
+
   int paginaAtual = 0;
 
   double ganhosHoje = 0.0;
   int entregasHoje = 0;
 
-  Timer? timer;
+  Timer? _timerOfertas;
+
+  bool _buscandoOferta = false;
+  bool _ofertaAberta = false;
+
+  Map<String, dynamic>? _ofertaAtual;
+
+  final AudioPlayer _audioPlayer = AudioPlayer();
+
+  // ============================================================
+  // CORES FOODJET
+  // ============================================================
+
+  static const Color laranja = Color(0xFFF97316);
+  static const Color fundo = Color(0xFFF7F7F7);
+  static const Color verde = Color(0xFF16A34A);
+  static const Color vermelho = Color(0xFFDC2626);
+
+  // ============================================================
+  // INIT
+  // ============================================================
 
   @override
   void initState() {
     super.initState();
 
-    // Atualização periódica da interface.
-    // Posteriormente podemos conectar ao Socket.IO do FoodJet.
-    timer = Timer.periodic(
-      const Duration(seconds: 10),
+    _carregarDados();
+
+    _timerOfertas = Timer.periodic(
+      const Duration(seconds: 5),
       (_) {
-        if (mounted) {
-          setState(() {});
-        }
+        _verificarOfertas();
       },
     );
   }
 
+  // ============================================================
+  // CARREGAR DADOS
+  // ============================================================
+
+  Future<void> _carregarDados() async {
+    try {
+      final usuario = await AuthService.getUsuario();
+
+      if (!mounted) return;
+
+      if (usuario == null) {
+        return;
+      }
+
+      final id =
+          usuario['id'] ?? usuario['usuario_id'] ?? usuario['entregador_id'];
+
+      final nome = usuario['nome'] ?? usuario['name'] ?? 'Entregador';
+
+      final online = usuario['online'] == true ||
+          usuario['online']?.toString().toLowerCase() == 'true';
+
+      setState(() {
+        entregadorId = id?.toString();
+
+        nomeEntregador = nome.toString();
+
+        disponivel = online;
+      });
+
+      await _carregarResumo();
+
+      if (disponivel) {
+        _verificarOfertas();
+      }
+    } catch (e) {
+      debugPrint(
+        '❌ Erro ao carregar Home: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // RESUMO
+  // ============================================================
+
+  Future<void> _carregarResumo() async {
+    try {
+      final pedidos = await DeliveryService.meusPedidos();
+
+      if (!mounted) return;
+
+      double total = 0;
+      int quantidade = 0;
+
+      final agora = DateTime.now();
+
+      for (final pedido in pedidos) {
+        final status = (pedido['status'] ?? '').toString().toUpperCase();
+
+        if (status != 'ENTREGUE') {
+          continue;
+        }
+
+        final dataTexto = pedido['entregue_em'] ??
+            pedido['atualizado_em'] ??
+            pedido['criado_em'];
+
+        DateTime? data;
+
+        if (dataTexto != null) {
+          data = DateTime.tryParse(
+            dataTexto.toString(),
+          );
+        }
+
+        if (data != null) {
+          if (data.year != agora.year ||
+              data.month != agora.month ||
+              data.day != agora.day) {
+            continue;
+          }
+        }
+
+        final valor = pedido['valor_entrega'] ??
+            pedido['taxa_entrega'] ??
+            pedido['valor_entregador'] ??
+            pedido['ganho_entregador'];
+
+        double? valorNumerico;
+
+        if (valor is num) {
+          valorNumerico = valor.toDouble();
+        } else if (valor != null) {
+          valorNumerico = double.tryParse(
+            valor
+                .toString()
+                .replaceAll('R\$', '')
+                .replaceAll('.', '')
+                .replaceAll(',', '.')
+                .trim(),
+          );
+        }
+
+        if (valorNumerico != null) {
+          total += valorNumerico;
+        }
+
+        quantidade++;
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        ganhosHoje = total;
+        entregasHoje = quantidade;
+      });
+    } catch (e) {
+      debugPrint(
+        '⚠️ Não foi possível carregar resumo: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // ONLINE / OFFLINE
+  // ============================================================
+
+  Future<void> alternarDisponibilidade() async {
+    if (alterandoDisponibilidade) return;
+
+    if (entregadorId == null || entregadorId!.isEmpty) {
+      _mostrarMensagem(
+        'ID do entregador não encontrado.',
+        erro: true,
+      );
+      return;
+    }
+
+    final novoStatus = !disponivel;
+
+    setState(() {
+      alterandoDisponibilidade = true;
+    });
+
+    try {
+      final entregador = await DeliveryService.alterarStatus(
+        id: entregadorId!,
+        online: novoStatus,
+      );
+
+      if (!mounted) return;
+
+      final online = entregador.online;
+
+      setState(() {
+        disponivel = online;
+      });
+
+      if (online) {
+        _mostrarMensagem(
+          'Você está online e pode receber ofertas.',
+        );
+
+        await _verificarOfertas();
+      } else {
+        _mostrarMensagem(
+          'Você está offline.',
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+
+      _mostrarMensagem(
+        e.toString().replaceFirst(
+              'Exception: ',
+              '',
+            ),
+        erro: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          alterandoDisponibilidade = false;
+        });
+      }
+    }
+  }
+
+  // ============================================================
+  // BUSCAR OFERTAS REAIS
+  // ============================================================
+
+  Future<void> _verificarOfertas() async {
+    if (!mounted) return;
+
+    if (!disponivel) return;
+
+    if (entregadorId == null || entregadorId!.isEmpty) {
+      return;
+    }
+
+    if (_buscandoOferta || _ofertaAberta) {
+      return;
+    }
+
+    _buscandoOferta = true;
+
+    try {
+      final pedidos = await DeliveryService.buscarPedidosDisponiveis();
+
+      if (!mounted || pedidos.isEmpty) {
+        return;
+      }
+
+      final oferta = pedidos.first;
+
+      final pedidoId = _obterPedidoId(oferta);
+
+      if (pedidoId == null || pedidoId.isEmpty) {
+        debugPrint(
+          '⚠️ Pedido sem ID: $oferta',
+        );
+        return;
+      }
+
+      debugPrint(
+        '🚨 NOVA OFERTA: $pedidoId',
+      );
+
+      _ofertaAtual = oferta;
+      _ofertaAberta = true;
+
+      await _tocarSomOferta();
+
+      if (!mounted) return;
+
+      final resultado = await showGeneralDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        barrierLabel: 'Nova oferta',
+        barrierColor: Colors.black.withOpacity(0.72),
+        transitionDuration: const Duration(
+          milliseconds: 300,
+        ),
+        pageBuilder: (
+          context,
+          animation,
+          secondaryAnimation,
+        ) {
+          return _OfertaEntregaDialog(
+            pedido: oferta,
+            entregadorId: entregadorId!,
+          );
+        },
+        transitionBuilder: (
+          context,
+          animation,
+          secondaryAnimation,
+          child,
+        ) {
+          final curva = CurvedAnimation(
+            parent: animation,
+            curve: Curves.easeOutBack,
+          );
+
+          return ScaleTransition(
+            scale: curva,
+            child: child,
+          );
+        },
+      );
+
+      if (!mounted) return;
+
+      if (resultado == true) {
+        await _carregarResumo();
+
+        _mostrarMensagem(
+          'Entrega aceita! Vá até o restaurante.',
+        );
+      } else if (resultado == false) {
+        debugPrint(
+          'Oferta recusada.',
+        );
+      }
+    } catch (e) {
+      debugPrint(
+        '❌ Erro ao verificar ofertas: $e',
+      );
+    } finally {
+      _ofertaAtual = null;
+      _ofertaAberta = false;
+      _buscandoOferta = false;
+    }
+  }
+
+  // ============================================================
+  // SOM
+  // ============================================================
+
+  Future<void> _tocarSomOferta() async {
+    try {
+      await _audioPlayer.stop();
+
+      await _audioPlayer.play(
+        AssetSource(
+          'sounds/nova_oferta.wav',
+        ),
+      );
+    } catch (e) {
+      debugPrint(
+        '⚠️ Erro ao tocar som: $e',
+      );
+    }
+  }
+
+  // ============================================================
+  // ID DO PEDIDO
+  // ============================================================
+
+  String? _obterPedidoId(
+    Map<String, dynamic> pedido,
+  ) {
+    final id = pedido['id'] ?? pedido['pedido_id'] ?? pedido['order_id'];
+
+    if (id == null) {
+      return null;
+    }
+
+    return id.toString();
+  }
+
+  // ============================================================
+  // MENSAGEM
+  // ============================================================
+
+  void _mostrarMensagem(
+    String mensagem, {
+    bool erro = false,
+  }) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            mensagem,
+          ),
+          backgroundColor: erro ? vermelho : verde,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.all(16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              14,
+            ),
+          ),
+        ),
+      );
+  }
+
+  // ============================================================
+  // DISPOSE
+  // ============================================================
+
   @override
   void dispose() {
-    timer?.cancel();
+    _timerOfertas?.cancel();
+    _audioPlayer.dispose();
+
     super.dispose();
   }
 
   // ============================================================
-  // STATUS DO ENTREGADOR
-  // ============================================================
-
-  void alternarDisponibilidade() {
-    setState(() {
-      disponivel = !disponivel;
-    });
-
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        backgroundColor:
-            disponivel ? green : const Color(0xFF333333),
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.all(16),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-        ),
-        content: Row(
-          children: [
-            Icon(
-              disponivel
-                  ? Icons.check_circle
-                  : Icons.pause_circle,
-              color: Colors.white,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                disponivel
-                    ? 'Você está disponível para receber entregas.'
-                    : 'Você está indisponível.',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // HOME
+  // BUILD
   // ============================================================
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: background,
+      backgroundColor: fundo,
       body: SafeArea(
         child: IndexedStack(
           index: paginaAtual,
@@ -124,37 +468,27 @@ class _HomeScreenState extends State<HomeScreen> {
   // ============================================================
 
   Widget _buildInicio() {
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: [
-        SliverToBoxAdapter(
-          child: _buildHeader(),
-        ),
-
-        SliverToBoxAdapter(
-          child: _buildMap(),
-        ),
-
-        SliverToBoxAdapter(
-          child: _buildResumoGanhos(),
-        ),
-
-        SliverToBoxAdapter(
-          child: _buildDisponibilidade(),
-        ),
-
-        SliverToBoxAdapter(
-          child: _buildEntregaAtual(),
-        ),
-
-        SliverToBoxAdapter(
-          child: _buildDicas(),
-        ),
-
-        const SliverToBoxAdapter(
-          child: SizedBox(height: 30),
-        ),
-      ],
+    return RefreshIndicator(
+      color: laranja,
+      onRefresh: () async {
+        await _carregarDados();
+      },
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.only(bottom: 30),
+        children: [
+          _buildHeader(),
+          const SizedBox(height: 14),
+          _buildStatusCard(),
+          const SizedBox(height: 14),
+          _buildMapa(),
+          const SizedBox(height: 14),
+          _buildResumoHoje(),
+          const SizedBox(height: 14),
+          _buildSos(),
+          const SizedBox(height: 20),
+        ],
+      ),
     );
   }
 
@@ -163,93 +497,90 @@ class _HomeScreenState extends State<HomeScreen> {
   // ============================================================
 
   Widget _buildHeader() {
-    return Container(
-      color: Colors.white,
+    return Padding(
       padding: const EdgeInsets.fromLTRB(
         18,
         14,
         18,
-        12,
+        4,
       ),
       child: Row(
         children: [
-          // Avatar
           Container(
             width: 48,
             height: 48,
             decoration: BoxDecoration(
-              color: foodJetOrange.withOpacity(.12),
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: foodJetOrange.withOpacity(.20),
+              color: const Color(0xFFFFEBDD),
+              borderRadius: BorderRadius.circular(
+                16,
               ),
             ),
             child: const Icon(
-              Icons.person,
-              color: foodJetOrange,
-              size: 27,
+              Icons.delivery_dining,
+              color: laranja,
+              size: 29,
             ),
           ),
-
           const SizedBox(width: 12),
 
-          // Nome
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Olá, Entregador! 👋',
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.black54,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                const Text(
-                  'Matheus',
-                  style: TextStyle(
-                    fontSize: 19,
-                    fontWeight: FontWeight.w800,
-                    color: foodJetDark,
-                  ),
-                ),
-              ],
-            ),
-          ),
 
-          // Notificações
-          GestureDetector(
-            onTap: _mostrarNotificacoes,
-            child: Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: const Color(0xFFF5F5F5),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Stack(
-                alignment: Alignment.center,
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.only(top: 1),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Icon(
-                    Icons.notifications_none_rounded,
-                    color: foodJetDark,
-                    size: 25,
+                  const Text(
+                    'Olá, entregador! 🛵',
+                    style: TextStyle(
+                      fontSize: 18,
+                      color: Colors.black87,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-                  Positioned(
-                    top: 9,
-                    right: 9,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: foodJetOrange,
-                        shape: BoxShape.circle,
-                      ),
+                  const SizedBox(height: 3),
+                  Text(
+                    nomeEntregador,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      color: Colors.black54,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
+              ),
+            ),
+          ),
+         
+         
+          Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(
+                14,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(
+                    0.05,
+                  ),
+                  blurRadius: 10,
+                ),
+              ],
+            ),
+            child: IconButton(
+              onPressed: () {
+                _mostrarMensagem(
+                  'Nenhuma nova notificação.',
+                );
+              },
+              icon: const Icon(
+                Icons.notifications_none,
+                size: 23,
               ),
             ),
           ),
@@ -259,332 +590,177 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // MAPA REAL - OPENSTREETMAP
+  // STATUS ONLINE
   // ============================================================
 
-  Widget _buildMap() {
-    return SizedBox(
-      height: 330,
-      child: Stack(
-        children: [
-          // ======================================================
-          // MAPA REAL
-          // ======================================================
-
-          const Positioned.fill(
-            child: MapWidget(
-              zoom: 14,
-            ),
+  Widget _buildStatusCard() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 18,
+      ),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(
+            22,
           ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(
+                0.05,
+              ),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            AnimatedContainer(
+              duration: const Duration(
+                milliseconds: 250,
+              ),
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: disponivel
+                    ? const Color(
+                        0xFFE9F9EF,
+                      )
+                    : const Color(
+                        0xFFF1F1F1,
+                      ),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                disponivel
+                    ? Icons.radio_button_checked
+                    : Icons.radio_button_off,
+                color: disponivel ? verde : Colors.grey,
+                size: 28,
+              ),
+            ),
+            const SizedBox(width: 13),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    disponivel ? 'Você está online' : 'Você está offline',
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    disponivel
+                        ? 'Aguardando novas ofertas'
+                        : 'Fique online para receber ofertas',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Switch.adaptive(
+              value: disponivel,
+              activeColor: laranja,
+              onChanged: alterandoDisponibilidade
+                  ? null
+                  : (_) {
+                      alternarDisponibilidade();
+                    },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-          // ======================================================
-          // STATUS
-          // ======================================================
+  // ============================================================
+  // MAPA
+  // ============================================================
 
-          Positioned(
-            top: 16,
-            left: 16,
-            right: 16,
-            child: GestureDetector(
-              onTap: alternarDisponibilidade,
+  Widget _buildMapa() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 18,
+      ),
+      child: Container(
+        height: 285,
+        clipBehavior: Clip.antiAlias,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(
+            24,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(
+                0.06,
+              ),
+              blurRadius: 16,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            const Positioned.fill(
+              child: MapWidget(),
+            ),
+            Positioned(
+              top: 14,
+              left: 14,
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 15,
-                  vertical: 12,
+                  horizontal: 12,
+                  vertical: 9,
                 ),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  borderRadius:
-                      BorderRadius.circular(18),
+                  borderRadius: BorderRadius.circular(
+                    14,
+                  ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(.10),
-                      blurRadius: 18,
-                      offset: const Offset(0, 5),
+                      color: Colors.black.withOpacity(
+                        0.12,
+                      ),
+                      blurRadius: 10,
                     ),
                   ],
                 ),
                 child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    AnimatedContainer(
-                      duration:
-                          const Duration(milliseconds: 250),
-                      width: 12,
-                      height: 12,
+                    Container(
+                      width: 8,
+                      height: 8,
                       decoration: BoxDecoration(
-                        color: disponivel
-                            ? green
-                            : const Color(0xFF9CA3AF),
+                        color: disponivel ? verde : Colors.grey,
                         shape: BoxShape.circle,
                       ),
                     ),
-
-                    const SizedBox(width: 10),
-
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment:
-                            CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            disponivel
-                                ? 'Você está disponível'
-                                : 'Você está indisponível',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              fontSize: 14,
-                            ),
-                          ),
-                          Text(
-                            disponivel
-                                ? 'Aguardando novas entregas'
-                                : 'Fique disponível para receber rotas',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: Colors.black54,
-                            ),
-                          ),
-                        ],
-                      ),
+                    const SizedBox(
+                      width: 7,
                     ),
-
-                    Container(
-                      padding:
-                          const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 7,
-                      ),
-                      decoration: BoxDecoration(
-                        color: disponivel
-                            ? green.withOpacity(.10)
-                            : foodJetOrange
-                                .withOpacity(.10),
-                        borderRadius:
-                            BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        disponivel ? 'ONLINE' : 'ATIVAR',
-                        style: TextStyle(
-                          color: disponivel
-                              ? green
-                              : foodJetOrange,
-                          fontWeight: FontWeight.w900,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-
-          // ======================================================
-          // BOTÃO MINHA LOCALIZAÇÃO
-          // ======================================================
-
-          Positioned(
-            right: 16,
-            top: 105,
-            child: _mapButton(
-              Icons.my_location_rounded,
-              () {
-                ScaffoldMessenger.of(context)
-                    .hideCurrentSnackBar();
-
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'A localização GPS será conectada nesta etapa.',
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // ======================================================
-          // FILTROS
-          // ======================================================
-
-          Positioned(
-            right: 16,
-            top: 160,
-            child: _mapButton(
-              Icons.tune_rounded,
-              () {
-                ScaffoldMessenger.of(context)
-                    .hideCurrentSnackBar();
-
-                ScaffoldMessenger.of(context)
-                    .showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Filtros de entrega em breve.',
-                    ),
-                  ),
-                );
-              },
-            ),
-          ),
-
-          // ======================================================
-          // SOS
-          // ======================================================
-
-          Positioned(
-            right: 16,
-            bottom: 72,
-            child: GestureDetector(
-              onTap: _mostrarSOS,
-              child: Container(
-                padding:
-                    const EdgeInsets.symmetric(
-                  horizontal: 15,
-                  vertical: 12,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius:
-                      BorderRadius.circular(16),
-                  boxShadow: [
-                    BoxShadow(
-                      color:
-                          Colors.black.withOpacity(.12),
-                      blurRadius: 14,
-                    ),
-                  ],
-                ),
-                child: const Row(
-                  children: [
-                    Icon(
-                      Icons.emergency_rounded,
-                      color: Color(0xFFDC2626),
-                      size: 20,
-                    ),
-                    SizedBox(width: 7),
                     Text(
-                      'SOS',
-                      style: TextStyle(
-                        color: Color(0xFFDC2626),
-                        fontWeight: FontWeight.w900,
+                      disponivel ? 'Procurando entregas' : 'Offline',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                   ],
                 ),
               ),
-            ),
-          ),
-
-          // ======================================================
-          // CARD DE GANHOS SOBRE O MAPA
-          // ======================================================
-
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 14,
-            child: Container(
-              padding:
-                  const EdgeInsets.symmetric(
-                horizontal: 20,
-                vertical: 15,
-              ),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(20),
-                boxShadow: [
-                  BoxShadow(
-                    color:
-                        Colors.black.withOpacity(.13),
-                    blurRadius: 18,
-                    offset: const Offset(0, 5),
-                  ),
-                ],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 43,
-                    height: 43,
-                    decoration: BoxDecoration(
-                      color:
-                          foodJetOrange.withOpacity(.11),
-                      borderRadius:
-                          BorderRadius.circular(13),
-                    ),
-                    child: const Icon(
-                      Icons
-                          .account_balance_wallet_rounded,
-                      color: foodJetOrange,
-                    ),
-                  ),
-
-                  const SizedBox(width: 12),
-
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment:
-                          CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Ganhos de hoje',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.black54,
-                          ),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          'R\$ ${ganhosHoje.toStringAsFixed(2).replaceAll('.', ',')}',
-                          style: const TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.w900,
-                            color: foodJetDark,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const Icon(
-                    Icons.chevron_right_rounded,
-                    color: Colors.black38,
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _mapButton(
-    IconData icon,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(.12),
-              blurRadius: 12,
             ),
           ],
-        ),
-        child: Icon(
-          icon,
-          color: foodJetDark,
-          size: 21,
         ),
       ),
     );
@@ -594,37 +770,27 @@ class _HomeScreenState extends State<HomeScreen> {
   // RESUMO
   // ============================================================
 
-  Widget _buildResumoGanhos() {
+  Widget _buildResumoHoje() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        16,
-        18,
-        16,
-        0,
+      padding: const EdgeInsets.symmetric(
+        horizontal: 18,
       ),
       child: Row(
         children: [
           Expanded(
-            child: _statCard(
-              icon: Icons.local_shipping_rounded,
-              title: 'Entregas',
-              value: '$entregasHoje',
+            child: _buildResumoCard(
+              titulo: 'Ganhos hoje',
+              valor:
+                  'R\$ ${ganhosHoje.toStringAsFixed(2).replaceAll('.', ',')}',
+              icone: Icons.account_balance_wallet_outlined,
             ),
           ),
-          const SizedBox(width: 10),
+          const SizedBox(width: 12),
           Expanded(
-            child: _statCard(
-              icon: Icons.timer_outlined,
-              title: 'Tempo online',
-              value: '0h 00m',
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _statCard(
-              icon: Icons.star_rounded,
-              title: 'Avaliação',
-              value: '5,0',
+            child: _buildResumoCard(
+              titulo: 'Entregas',
+              valor: entregasHoje.toString(),
+              icone: Icons.local_shipping_outlined,
             ),
           ),
         ],
@@ -632,362 +798,148 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _statCard({
-    required IconData icon,
-    required String title,
-    required String value,
+  Widget _buildResumoCard({
+    required String titulo,
+    required String valor,
+    required IconData icone,
   }) {
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 13,
-      ),
+      padding: const EdgeInsets.all(17),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(17),
-        border: Border.all(
-          color: const Color(0xFFEDEDED),
-        ),
-      ),
-      child: Column(
-        children: [
-          Icon(
-            icon,
-            color: foodJetOrange,
-            size: 21,
-          ),
-          const SizedBox(height: 7),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.w900,
-              fontSize: 16,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 10,
-              color: Colors.black54,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // DISPONIBILIDADE
-  // ============================================================
-
-  Widget _buildDisponibilidade() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        16,
-        18,
-        16,
-        0,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: disponivel
-                ? [
-                    const Color(0xFF15803D),
-                    const Color(0xFF22C55E),
-                  ]
-                : [
-                    foodJetOrange,
-                    const Color(0xFFFB923C),
-                  ],
-          ),
-          borderRadius: BorderRadius.circular(22),
-          boxShadow: [
-            BoxShadow(
-              color:
-                  (disponivel ? green : foodJetOrange)
-                      .withOpacity(.22),
-              blurRadius: 18,
-              offset: const Offset(0, 7),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(.18),
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                disponivel
-                    ? Icons.delivery_dining_rounded
-                    : Icons.pause_circle_outline_rounded,
-                color: Colors.white,
-                size: 28,
-              ),
-            ),
-
-            const SizedBox(width: 13),
-
-            Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    disponivel
-                        ? 'Pronto para entregar'
-                        : 'Quer receber entregas?',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 3),
-                  Text(
-                    disponivel
-                        ? 'O FoodJet avisará quando surgir uma rota.'
-                        : 'Ative sua disponibilidade e comece a ganhar.',
-                    style: TextStyle(
-                      color:
-                          Colors.white.withOpacity(.88),
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            Switch(
-              value: disponivel,
-              onChanged: (_) =>
-                  alternarDisponibilidade(),
-              activeColor: Colors.white,
-              activeTrackColor:
-                  Colors.white.withOpacity(.35),
-              inactiveThumbColor: Colors.white,
-              inactiveTrackColor:
-                  Colors.white.withOpacity(.25),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
-  // ENTREGA ATUAL
-  // ============================================================
-
-  Widget _buildEntregaAtual() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        16,
-        20,
-        16,
-        0,
-      ),
-      child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Entregas',
-            style: TextStyle(
-              fontSize: 19,
-              fontWeight: FontWeight.w900,
-            ),
-          ),
-
-          const SizedBox(height: 10),
-
-          if (!disponivel)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(20),
-                border: Border.all(
-                  color: const Color(0xFFEDEDED),
-                ),
-              ),
-              child: Column(
-                children: [
-                  Container(
-                    width: 65,
-                    height: 65,
-                    decoration: BoxDecoration(
-                      color:
-                          foodJetOrange.withOpacity(.09),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.two_wheeler_rounded,
-                      color: foodJetOrange,
-                      size: 34,
-                    ),
-                  ),
-
-                  const SizedBox(height: 13),
-
-                  const Text(
-                    'Nenhuma entrega no momento',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      fontSize: 15,
-                    ),
-                  ),
-
-                  const SizedBox(height: 5),
-
-                  const Text(
-                    'Fique disponível para receber novas corridas.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.black54,
-                      fontSize: 12,
-                    ),
-                  ),
-                ],
-              ),
-            )
-          else
-            _buildEntregaDisponivel(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEntregaDisponivel() {
-    return Container(
-      padding: const EdgeInsets.all(18),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(21),
-        border: Border.all(
-          color: foodJetOrange.withOpacity(.30),
-          width: 1.4,
+        borderRadius: BorderRadius.circular(
+          20,
         ),
         boxShadow: [
           BoxShadow(
-            color:
-                foodJetOrange.withOpacity(.08),
-            blurRadius: 18,
+            color: Colors.black.withOpacity(
+              0.04,
+            ),
+            blurRadius: 12,
           ),
         ],
       ),
       child: Column(
-        crossAxisAlignment:
-            CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(
-                  horizontal: 9,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: green.withOpacity(.10),
-                  borderRadius:
-                      BorderRadius.circular(8),
-                ),
-                child: const Text(
-                  'NOVA ENTREGA',
-                  style: TextStyle(
-                    color: green,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: const Color(0xFFFFF1E8),
+              borderRadius: BorderRadius.circular(
+                12,
               ),
-
-              const Spacer(),
-
-              const Text(
-                'R\$ 12,50',
-                style: TextStyle(
-                  fontWeight: FontWeight.w900,
-                  fontSize: 19,
-                  color: foodJetOrange,
-                ),
-              ),
-            ],
+            ),
+            child: Icon(
+              icone,
+              color: laranja,
+              size: 21,
+            ),
           ),
+          const SizedBox(height: 13),
+          Text(
+            titulo,
+            style: const TextStyle(
+              fontSize: 12,
+              color: Colors.black54,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            valor,
+            style: const TextStyle(
+              fontSize: 21,
+              fontWeight: FontWeight.w900,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 
-          const SizedBox(height: 18),
+  // ============================================================
+  // SOS
+  // ============================================================
 
-          Row(
-            crossAxisAlignment:
-                CrossAxisAlignment.start,
-            children: [
-              Column(
-                children: [
-                  Container(
-                    width: 11,
-                    height: 11,
-                    decoration:
-                        const BoxDecoration(
-                      color: foodJetOrange,
-                      shape: BoxShape.circle,
+  Widget _buildSos() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(
+        horizontal: 18,
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(
+          20,
+        ),
+        onTap: () {
+          showDialog(
+            context: context,
+            builder: (_) {
+              return AlertDialog(
+                title: const Text(
+                  'SOS FoodJet',
+                ),
+                content: const Text(
+                  'Em uma situação de emergência, procure um local seguro e acione os serviços de emergência.',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(
+                      context,
                     ),
-                  ),
-
-                  Container(
-                    width: 2,
-                    height: 36,
-                    color: Colors.black12,
-                  ),
-
-                  const Icon(
-                    Icons.location_on,
-                    color: green,
-                    size: 17,
+                    child: const Text(
+                      'Fechar',
+                    ),
                   ),
                 ],
+              );
+            },
+          );
+        },
+        child: Container(
+          padding: const EdgeInsets.all(
+            17,
+          ),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF0F0),
+            borderRadius: BorderRadius.circular(
+              20,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: const BoxDecoration(
+                  color: vermelho,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.emergency,
+                  color: Colors.white,
+                ),
               ),
-
-              const SizedBox(width: 12),
-
+              const SizedBox(
+                width: 12,
+              ),
               const Expanded(
                 child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'Restaurante Parceiro',
+                      'SOS',
                       style: TextStyle(
-                        fontWeight: FontWeight.w800,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 15,
+                        color: vermelho,
                       ),
                     ),
-                    SizedBox(height: 3),
-                    Text(
-                      'Av. Minas Gerais, 120',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.black54,
-                      ),
+                    SizedBox(
+                      height: 2,
                     ),
-                    SizedBox(height: 16),
                     Text(
-                      'Cliente',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      'Rua das Flores, 250',
+                      'Precisa de ajuda?',
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.black54,
@@ -996,143 +948,12 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
-            ],
-          ),
-
-          const SizedBox(height: 18),
-
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: () {},
-                  style:
-                      OutlinedButton.styleFrom(
-                    foregroundColor:
-                        foodJetDark,
-                    side: const BorderSide(
-                      color: Color(0xFFE5E5E5),
-                    ),
-                    padding:
-                        const EdgeInsets.symmetric(
-                      vertical: 14,
-                    ),
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(13),
-                    ),
-                  ),
-                  child: const Text(
-                    'Ver rota',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 10),
-
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {},
-                  style:
-                      ElevatedButton.styleFrom(
-                    backgroundColor:
-                        foodJetOrange,
-                    foregroundColor:
-                        Colors.white,
-                    elevation: 0,
-                    padding:
-                        const EdgeInsets.symmetric(
-                      vertical: 14,
-                    ),
-                    shape:
-                        RoundedRectangleBorder(
-                      borderRadius:
-                          BorderRadius.circular(13),
-                    ),
-                  ),
-                  child: const Text(
-                    'Aceitar entrega',
-                    style: TextStyle(
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
+              const Icon(
+                Icons.chevron_right,
+                color: Colors.black38,
               ),
             ],
           ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // DICAS
-  // ============================================================
-
-  Widget _buildDicas() {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(
-        16,
-        22,
-        16,
-        0,
-      ),
-      child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: foodJetDark,
-          borderRadius:
-              BorderRadius.circular(21),
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 46,
-              height: 46,
-              decoration: BoxDecoration(
-                color:
-                    foodJetOrange.withOpacity(.18),
-                borderRadius:
-                    BorderRadius.circular(14),
-              ),
-              child: const Icon(
-                Icons.lightbulb_outline_rounded,
-                color: foodJetOrange,
-              ),
-            ),
-
-            const SizedBox(width: 13),
-
-            const Expanded(
-              child: Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Dica FoodJet',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 14,
-                    ),
-                  ),
-                  SizedBox(height: 4),
-                  Text(
-                    'Mantenha sua localização ativada para receber melhores rotas.',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 11,
-                      height: 1.35,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -1143,189 +964,359 @@ class _HomeScreenState extends State<HomeScreen> {
   // ============================================================
 
   Widget _buildGanhos() {
-    return CustomScrollView(
-      physics: const BouncingScrollPhysics(),
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(
-              20,
-              22,
-              20,
-              15,
-            ),
-            child: Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'Meus ganhos',
-                    style: TextStyle(
-                      fontSize: 26,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                ),
-
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius:
-                        BorderRadius.circular(12),
-                  ),
-                  child: const Row(
-                    children: [
-                      Text(
-                        'Esta semana',
-                        style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      SizedBox(width: 5),
-                      Icon(
-                        Icons.keyboard_arrow_down,
-                        size: 17,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        18,
+        20,
+        18,
+        30,
+      ),
+      children: [
+        const Text(
+          'Meus ganhos',
+          style: TextStyle(
+            fontSize: 27,
+            fontWeight: FontWeight.w900,
           ),
         ),
-
-        SliverToBoxAdapter(
-          child: Padding(
-            padding:
-                const EdgeInsets.symmetric(
-              horizontal: 16,
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(22),
-              decoration: BoxDecoration(
-                gradient:
-                    const LinearGradient(
-                  colors: [
-                    foodJetOrange,
-                    Color(0xFFFB923C),
-                  ],
-                ),
-                borderRadius:
-                    BorderRadius.circular(24),
-              ),
-              child: const Column(
-                crossAxisAlignment:
-                    CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Ganhos esta semana',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                    ),
-                  ),
-                  SizedBox(height: 6),
-                  Text(
-                    'R\$ 0,00',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 34,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  SizedBox(height: 16),
-                  Row(
-                    children: [
-                      Icon(
-                        Icons
-                            .local_shipping_outlined,
-                        color: Colors.white,
-                        size: 18,
-                      ),
-                      SizedBox(width: 7),
-                      Text(
-                        '0 entregas realizadas',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight:
-                              FontWeight.w700,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+        const SizedBox(height: 6),
+        const Text(
+          'Acompanhe seus ganhos e entregas.',
+          style: TextStyle(
+            color: Colors.black54,
           ),
         ),
-
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius:
-                    BorderRadius.circular(20),
-              ),
-              child: Column(
-                children: [
-                  _ganhoLinha(
-                    'Segunda-feira',
-                    'R\$ 0,00',
-                  ),
-                  _ganhoLinha(
-                    'Terça-feira',
-                    'R\$ 0,00',
-                  ),
-                  _ganhoLinha(
-                    'Quarta-feira',
-                    'R\$ 0,00',
-                  ),
-                  _ganhoLinha(
-                    'Quinta-feira',
-                    'R\$ 0,00',
-                  ),
-                  _ganhoLinha(
-                    'Sexta-feira',
-                    'R\$ 0,00',
-                  ),
-                  _ganhoLinha(
-                    'Sábado',
-                    'R\$ 0,00',
-                  ),
-                  _ganhoLinha(
-                    'Domingo',
-                    'R\$ 0,00',
-                  ),
-                ],
-              ),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(
+            22,
+          ),
+          decoration: BoxDecoration(
+            color: laranja,
+            borderRadius: BorderRadius.circular(
+              25,
             ),
           ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Ganhos de hoje',
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(
+                height: 5,
+              ),
+              Text(
+                'R\$ ${ganhosHoje.toStringAsFixed(2).replaceAll('.', ',')}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 34,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+              const SizedBox(
+                height: 12,
+              ),
+              Text(
+                '$entregasHoje entregas concluídas',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 13,
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 18),
+        _buildInfoLinha(
+          Icons.today,
+          'Entregas hoje',
+          '$entregasHoje',
+        ),
+        _buildInfoLinha(
+          Icons.account_balance_wallet_outlined,
+          'Total recebido',
+          'R\$ ${ganhosHoje.toStringAsFixed(2).replaceAll('.', ',')}',
         ),
       ],
     );
   }
 
-  Widget _ganhoLinha(
-    String dia,
+  // ============================================================
+  // AJUDA
+  // ============================================================
+
+  Widget _buildAjuda() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        18,
+        20,
+        18,
+        30,
+      ),
+      children: [
+        const Text(
+          'Ajuda',
+          style: TextStyle(
+            fontSize: 27,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 8),
+        const Text(
+          'Como podemos ajudar?',
+          style: TextStyle(
+            color: Colors.black54,
+          ),
+        ),
+        const SizedBox(height: 20),
+        _buildAjudaItem(
+          Icons.local_shipping_outlined,
+          'Como funciona uma entrega?',
+        ),
+        _buildAjudaItem(
+          Icons.payments_outlined,
+          'Dúvidas sobre ganhos',
+        ),
+        _buildAjudaItem(
+          Icons.support_agent,
+          'Falar com suporte',
+        ),
+        _buildAjudaItem(
+          Icons.report_problem_outlined,
+          'Reportar um problema',
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAjudaItem(
+    IconData icone,
+    String titulo,
+  ) {
+    return Container(
+      margin: const EdgeInsets.only(
+        bottom: 10,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(
+          18,
+        ),
+      ),
+      child: ListTile(
+        leading: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: const Color(0xFFFFF1E8),
+            borderRadius: BorderRadius.circular(
+              13,
+            ),
+          ),
+          child: Icon(
+            icone,
+            color: laranja,
+          ),
+        ),
+        title: Text(
+          titulo,
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        trailing: const Icon(
+          Icons.chevron_right,
+        ),
+        onTap: () {
+          _mostrarMensagem(
+            'Em breve você poderá acessar esta opção.',
+          );
+        },
+      ),
+    );
+  }
+
+  // ============================================================
+  // MENU
+  // ============================================================
+
+  Widget _buildMenu() {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        18,
+        20,
+        18,
+        30,
+      ),
+      children: [
+        const Text(
+          'Menu',
+          style: TextStyle(
+            fontSize: 27,
+            fontWeight: FontWeight.w900,
+          ),
+        ),
+        const SizedBox(height: 20),
+        Container(
+          padding: const EdgeInsets.all(
+            18,
+          ),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(
+              22,
+            ),
+          ),
+          child: Row(
+            children: [
+              Container(
+                width: 58,
+                height: 58,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFFFEBDD),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.person,
+                  color: laranja,
+                  size: 30,
+                ),
+              ),
+              const SizedBox(
+                width: 13,
+              ),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      nomeEntregador,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(
+                      height: 3,
+                    ),
+                    const Text(
+                      'Entregador FoodJet',
+                      style: TextStyle(
+                        color: Colors.black54,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        _buildMenuItem(
+          Icons.person_outline,
+          'Meu perfil',
+        ),
+        _buildMenuItem(
+          Icons.account_balance_wallet_outlined,
+          'Financeiro',
+        ),
+        _buildMenuItem(
+          Icons.description_outlined,
+          'Termos e condições',
+        ),
+        _buildMenuItem(
+          Icons.privacy_tip_outlined,
+          'Privacidade',
+        ),
+        _buildMenuItem(
+          Icons.logout,
+          'Sair',
+          vermelho,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMenuItem(
+    IconData icone,
+    String titulo, [
+    Color? cor,
+  ]) {
+    return Container(
+      margin: const EdgeInsets.only(
+        bottom: 8,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(
+          17,
+        ),
+      ),
+      child: ListTile(
+        leading: Icon(
+          icone,
+          color: cor ?? Colors.black87,
+        ),
+        title: Text(
+          titulo,
+          style: TextStyle(
+            fontWeight: FontWeight.w600,
+            color: cor ?? Colors.black87,
+          ),
+        ),
+        trailing: const Icon(
+          Icons.chevron_right,
+          color: Colors.black38,
+        ),
+        onTap: () {
+          _mostrarMensagem(
+            titulo,
+          );
+        },
+      ),
+    );
+  }
+
+  // ============================================================
+  // INFO
+  // ============================================================
+
+  Widget _buildInfoLinha(
+    IconData icone,
+    String titulo,
     String valor,
   ) {
-    return Padding(
-      padding:
-          const EdgeInsets.symmetric(vertical: 9),
+    return Container(
+      margin: const EdgeInsets.only(
+        bottom: 10,
+      ),
+      padding: const EdgeInsets.all(
+        16,
+      ),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(
+          17,
+        ),
+      ),
       child: Row(
         children: [
+          Icon(
+            icone,
+            color: laranja,
+          ),
+          const SizedBox(
+            width: 12,
+          ),
           Expanded(
             child: Text(
-              dia,
+              titulo,
               style: const TextStyle(
                 fontWeight: FontWeight.w600,
               ),
@@ -1343,603 +1334,833 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // AJUDA
-  // ============================================================
-
-  Widget _buildAjuda() {
-    return ListView(
-      physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
-        18,
-        22,
-        18,
-        30,
-      ),
-      children: [
-        const Text(
-          'Como podemos ajudar?',
-          style: TextStyle(
-            fontSize: 25,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-
-        const SizedBox(height: 7),
-
-        const Text(
-          'Encontre respostas ou fale com o suporte FoodJet.',
-          style: TextStyle(
-            color: Colors.black54,
-            fontSize: 13,
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
-        Container(
-          padding:
-              const EdgeInsets.symmetric(
-            horizontal: 15,
-          ),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius:
-                BorderRadius.circular(16),
-          ),
-          child: const TextField(
-            decoration: InputDecoration(
-              icon: Icon(
-                Icons.search,
-                color: foodJetOrange,
-              ),
-              hintText: 'Digite sua dúvida',
-              border: InputBorder.none,
-            ),
-          ),
-        ),
-
-        const SizedBox(height: 18),
-
-        _helpItem(
-          Icons.security_rounded,
-          'Central de segurança',
-          'Precisa de ajuda durante uma entrega?',
-        ),
-
-        _helpItem(
-          Icons.local_shipping_outlined,
-          'Problemas com uma entrega',
-          'Resolva problemas relacionados às suas corridas.',
-        ),
-
-        _helpItem(
-          Icons.account_balance_wallet_outlined,
-          'Ganhos e repasses',
-          'Consulte informações sobre seus pagamentos.',
-        ),
-
-        _helpItem(
-          Icons.person_outline_rounded,
-          'Minha conta',
-          'Atualize seus dados pessoais e documentos.',
-        ),
-
-        const SizedBox(height: 10),
-
-        ElevatedButton.icon(
-          onPressed: () {},
-          icon: const Icon(
-            Icons.chat_bubble_outline,
-          ),
-          label: const Text(
-            'Falar com suporte FoodJet',
-          ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor:
-                foodJetOrange,
-            foregroundColor:
-                Colors.white,
-            elevation: 0,
-            padding:
-                const EdgeInsets.symmetric(
-              vertical: 16,
-            ),
-            shape:
-                RoundedRectangleBorder(
-              borderRadius:
-                  BorderRadius.circular(15),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _helpItem(
-    IconData icon,
-    String titulo,
-    String subtitulo,
-  ) {
-    return Container(
-      margin:
-          const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(17),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 43,
-            height: 43,
-            decoration: BoxDecoration(
-              color:
-                  foodJetOrange.withOpacity(.09),
-              borderRadius:
-                  BorderRadius.circular(13),
-            ),
-            child: Icon(
-              icon,
-              color: foodJetOrange,
-            ),
-          ),
-
-          const SizedBox(width: 13),
-
-          Expanded(
-            child: Column(
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                Text(
-                  titulo,
-                  style: const TextStyle(
-                    fontWeight:
-                        FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitulo,
-                  style:
-                      const TextStyle(
-                    color: Colors.black54,
-                    fontSize: 11,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const Icon(
-            Icons.chevron_right,
-            color: Colors.black38,
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ============================================================
-  // MENU
-  // ============================================================
-
-  Widget _buildMenu() {
-    return ListView(
-      physics:
-          const BouncingScrollPhysics(),
-      padding: const EdgeInsets.fromLTRB(
-        18,
-        22,
-        18,
-        30,
-      ),
-      children: [
-        const Text(
-          'Menu',
-          style: TextStyle(
-            fontSize: 26,
-            fontWeight: FontWeight.w900,
-          ),
-        ),
-
-        const SizedBox(height: 20),
-
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius:
-                BorderRadius.circular(20),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 55,
-                height: 55,
-                decoration: BoxDecoration(
-                  color:
-                      foodJetOrange.withOpacity(.10),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.person,
-                  color: foodJetOrange,
-                  size: 29,
-                ),
-              ),
-
-              const SizedBox(width: 13),
-
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment:
-                      CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Matheus',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight:
-                            FontWeight.w900,
-                      ),
-                    ),
-                    SizedBox(height: 3),
-                    Text(
-                      'Entregador FoodJet',
-                      style: TextStyle(
-                        color: Colors.black54,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const Icon(
-                Icons.chevron_right,
-              ),
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 18),
-
-        _menuItem(
-          Icons.person_outline,
-          'Meu perfil',
-        ),
-
-        _menuItem(
-          Icons.description_outlined,
-          'Documentos',
-        ),
-
-        _menuItem(
-          Icons.account_balance_outlined,
-          'Dados bancários',
-        ),
-
-        _menuItem(
-          Icons.two_wheeler_outlined,
-          'Forma de entrega',
-        ),
-
-        _menuItem(
-          Icons.notifications_none_rounded,
-          'Notificações',
-        ),
-
-        _menuItem(
-          Icons.settings_outlined,
-          'Configurações',
-        ),
-
-        const SizedBox(height: 15),
-
-        _menuItem(
-          Icons.logout_rounded,
-          'Sair da conta',
-          danger: true,
-        ),
-      ],
-    );
-  }
-
-  Widget _menuItem(
-    IconData icon,
-    String titulo, {
-    bool danger = false,
-  }) {
-    return Container(
-      margin:
-          const EdgeInsets.only(bottom: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius:
-            BorderRadius.circular(16),
-      ),
-      child: ListTile(
-        onTap: () {},
-        leading: Icon(
-          icon,
-          color: danger
-              ? const Color(0xFFDC2626)
-              : foodJetDark,
-        ),
-        title: Text(
-          titulo,
-          style: TextStyle(
-            color: danger
-                ? const Color(0xFFDC2626)
-                : foodJetDark,
-            fontWeight: FontWeight.w700,
-            fontSize: 14,
-          ),
-        ),
-        trailing: const Icon(
-          Icons.chevron_right,
-          color: Colors.black26,
-        ),
-      ),
-    );
-  }
-
-  // ============================================================
   // BOTTOM NAVIGATION
   // ============================================================
 
   Widget _buildBottomNavigation() {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color:
-                Colors.black.withOpacity(.08),
-            blurRadius: 20,
-            offset: const Offset(0, -5),
+    return NavigationBar(
+      selectedIndex: paginaAtual,
+      onDestinationSelected: (index) {
+        setState(() {
+          paginaAtual = index;
+        });
+
+        if (index == 0) {
+          _carregarDados();
+        }
+      },
+      backgroundColor: Colors.white,
+      elevation: 8,
+      indicatorColor: const Color(0xFFFFEBDD),
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(
+            Icons.home_outlined,
           ),
-        ],
-      ),
-      child: NavigationBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        selectedIndex: paginaAtual,
-        onDestinationSelected: (index) {
-          setState(() {
-            paginaAtual = index;
-          });
-        },
-        indicatorColor:
-            foodJetOrange.withOpacity(.12),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(
-              Icons.home_outlined,
-            ),
-            selectedIcon: Icon(
-              Icons.home_rounded,
-              color: foodJetOrange,
-            ),
-            label: 'Início',
+          selectedIcon: Icon(
+            Icons.home,
+            color: laranja,
           ),
-          NavigationDestination(
-            icon: Icon(
-              Icons
-                  .account_balance_wallet_outlined,
-            ),
-            selectedIcon: Icon(
-              Icons
-                  .account_balance_wallet_rounded,
-              color: foodJetOrange,
-            ),
-            label: 'Ganhos',
+          label: 'Início',
+        ),
+        NavigationDestination(
+          icon: Icon(
+            Icons.account_balance_wallet_outlined,
           ),
-          NavigationDestination(
-            icon: Icon(
-              Icons.help_outline_rounded,
-            ),
-            selectedIcon: Icon(
-              Icons.help_rounded,
-              color: foodJetOrange,
-            ),
-            label: 'Ajuda',
+          selectedIcon: Icon(
+            Icons.account_balance_wallet,
+            color: laranja,
           ),
-          NavigationDestination(
-            icon: Icon(
-              Icons.menu_rounded,
-            ),
-            selectedIcon: Icon(
-              Icons.menu_open_rounded,
-              color: foodJetOrange,
-            ),
-            label: 'Menu',
+          label: 'Ganhos',
+        ),
+        NavigationDestination(
+          icon: Icon(
+            Icons.help_outline,
           ),
-        ],
-      ),
+          selectedIcon: Icon(
+            Icons.help,
+            color: laranja,
+          ),
+          label: 'Ajuda',
+        ),
+        NavigationDestination(
+          icon: Icon(
+            Icons.menu,
+          ),
+          selectedIcon: Icon(
+            Icons.menu,
+            color: laranja,
+          ),
+          label: 'Menu',
+        ),
+      ],
+    );
+  }
+}
+
+// ==================================================================
+// DIALOG DA OFERTA
+// ==================================================================
+
+class _OfertaEntregaDialog extends StatefulWidget {
+  final Map<String, dynamic> pedido;
+  final String entregadorId;
+
+  const _OfertaEntregaDialog({
+    required this.pedido,
+    required this.entregadorId,
+  });
+
+  @override
+  State<_OfertaEntregaDialog> createState() => _OfertaEntregaDialogState();
+}
+
+class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
+  static const int tempoInicial = 20;
+
+  int segundos = tempoInicial;
+
+  Timer? timer;
+
+  bool processando = false;
+
+  String? erro;
+
+  @override
+  void initState() {
+    super.initState();
+
+    timer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) {
+        if (!mounted) return;
+
+        if (segundos <= 1) {
+          timer?.cancel();
+
+          Navigator.of(context).pop();
+
+          return;
+        }
+
+        setState(() {
+          segundos--;
+        });
+      },
     );
   }
 
+  @override
+  void dispose() {
+    timer?.cancel();
+
+    super.dispose();
+  }
+
   // ============================================================
-  // NOTIFICAÇÕES
+  // ACEITAR
   // ============================================================
 
-  void _mostrarNotificacoes() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
+  Future<void> aceitar() async {
+    if (processando) return;
+
+    final pedidoId = obterPedidoId();
+
+    if (pedidoId == null) {
+      setState(() {
+        erro = 'Não foi possível identificar o pedido.';
+      });
+
+      return;
+    }
+
+    setState(() {
+      processando = true;
+      erro = null;
+    });
+
+    try {
+      await DeliveryService.aceitarEntrega(
+        entregadorId: widget.entregadorId,
+        pedidoId: pedidoId,
+      );
+
+      if (!mounted) return;
+
+      timer?.cancel();
+
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        processando = false;
+        erro = e.toString().replaceFirst(
+              'Exception: ',
+              '',
+            );
+      });
+    }
+  }
+
+  // ============================================================
+  // RECUSAR
+  // ============================================================
+
+  void recusar() {
+    if (processando) return;
+
+    timer?.cancel();
+
+    Navigator.of(context).pop(false);
+  }
+
+  // ============================================================
+  // ID
+  // ============================================================
+
+  String? obterPedidoId() {
+    final id = widget.pedido['id'] ??
+        widget.pedido['pedido_id'] ??
+        widget.pedido['order_id'];
+
+    if (id == null) {
+      return null;
+    }
+
+    return id.toString();
+  }
+
+  // ============================================================
+  // TEXTO
+  // ============================================================
+
+  String texto(dynamic valor) {
+    if (valor == null) {
+      return '';
+    }
+
+    final resultado = valor.toString().trim();
+
+    if (resultado.isEmpty || resultado == 'null') {
+      return '';
+    }
+
+    return resultado;
+  }
+
+  String campo(
+    List<String> nomes,
+  ) {
+    for (final nome in nomes) {
+      final valor = texto(widget.pedido[nome]);
+
+      if (valor.isNotEmpty) {
+        return valor;
+      }
+    }
+
+    return '';
+  }
+
+  // ============================================================
+  // RESTAURANTE
+  // ============================================================
+
+  String nomeRestaurante() {
+    final direto = campo([
+      'restaurante_nome',
+      'nome_restaurante',
+    ]);
+
+    if (direto.isNotEmpty) {
+      return direto;
+    }
+
+    final restaurante = widget.pedido['restaurante'];
+
+    if (restaurante is Map) {
+      final nome = restaurante['nome'] ?? restaurante['name'];
+
+      if (nome != null) {
+        return nome.toString();
+      }
+    }
+
+    return 'Restaurante';
+  }
+
+  String enderecoRestaurante() {
+    final direto = campo([
+      'endereco_restaurante',
+      'restaurante_endereco',
+      'endereco_retirada',
+      'endereco_coleta',
+    ]);
+
+    if (direto.isNotEmpty) {
+      return direto;
+    }
+
+    final restaurante = widget.pedido['restaurante'];
+
+    if (restaurante is Map) {
+      final endereco = restaurante['endereco'] ?? restaurante['address'];
+
+      if (endereco != null) {
+        return endereco.toString();
+      }
+    }
+
+    return 'Endereço não informado';
+  }
+
+  // ============================================================
+  // CLIENTE
+  // ============================================================
+
+  String nomeCliente() {
+    final direto = campo([
+      'cliente_nome',
+      'nome_cliente',
+      'usuario_nome',
+      'nome_usuario',
+    ]);
+
+    if (direto.isNotEmpty) {
+      return direto;
+    }
+
+    final cliente = widget.pedido['cliente'];
+
+    if (cliente is Map) {
+      final nome = cliente['nome'] ?? cliente['name'];
+
+      if (nome != null) {
+        return nome.toString();
+      }
+    }
+
+    return 'Cliente';
+  }
+
+  String enderecoEntrega() {
+    final direto = campo([
+      'endereco_entrega',
+      'endereco_cliente',
+      'endereco_destino',
+      'endereco',
+    ]);
+
+    if (direto.isNotEmpty) {
+      return direto;
+    }
+
+    final cliente = widget.pedido['cliente'];
+
+    if (cliente is Map) {
+      final endereco = cliente['endereco'] ?? cliente['address'];
+
+      if (endereco != null) {
+        return endereco.toString();
+      }
+    }
+
+    return 'Endereço não informado';
+  }
+
+  // ============================================================
+  // VALOR
+  // ============================================================
+
+  double? valorEntrega() {
+    final valor = widget.pedido['valor_entrega'] ??
+        widget.pedido['taxa_entrega'] ??
+        widget.pedido['valor_entregador'] ??
+        widget.pedido['ganho_entregador'];
+
+    if (valor == null) {
+      return null;
+    }
+
+    if (valor is num) {
+      return valor.toDouble();
+    }
+
+    final textoValor = valor
+        .toString()
+        .replaceAll(
+          'R\$',
+          '',
+        )
+        .replaceAll(
+          '.',
+          '',
+        )
+        .replaceAll(
+          ',',
+          '.',
+        )
+        .trim();
+
+    return double.tryParse(
+      textoValor,
+    );
+  }
+
+  String valorFormatado() {
+    final valor = valorEntrega();
+
+    if (valor == null) {
+      return 'R\$ --';
+    }
+
+    return 'R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')}';
+  }
+
+  // ============================================================
+  // DISTÂNCIA
+  // ============================================================
+
+  String distancia() {
+    final valor = campo([
+      'distancia_km',
+      'distancia',
+      'km',
+    ]);
+
+    if (valor.isEmpty) {
+      return '';
+    }
+
+    if (valor.toLowerCase().contains('km')) {
+      return valor;
+    }
+
+    return '$valor km';
+  }
+
+  // ============================================================
+  // BUILD
+  // ============================================================
+
+  @override
+  Widget build(
+    BuildContext context,
+  ) {
+    final km = distancia();
+
+    final urgente = segundos <= 5;
+
+    return Material(
+      color: Colors.transparent,
+      child: SafeArea(
+        child: Align(
+          alignment: Alignment.bottomCenter,
           child: Padding(
-            padding:
-                const EdgeInsets.fromLTRB(
-              20,
-              5,
-              20,
-              25,
+            padding: const EdgeInsets.all(
+              14,
             ),
-            child: Column(
-              mainAxisSize:
-                  MainAxisSize.min,
-              crossAxisAlignment:
-                  CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Notificações',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight:
-                        FontWeight.w900,
-                  ),
+            child: Container(
+              width: double.infinity,
+              constraints: const BoxConstraints(
+                maxWidth: 500,
+              ),
+              padding: const EdgeInsets.fromLTRB(
+                20,
+                18,
+                20,
+                20,
+              ),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(
+                  28,
                 ),
-
-                const SizedBox(height: 20),
-
-                Container(
-                  padding:
-                      const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color:
-                        const Color(0xFFF8F8F8),
-                    borderRadius:
-                        BorderRadius.circular(17),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Colors.black38,
+                    blurRadius: 30,
+                    spreadRadius: 5,
+                    offset: Offset(
+                      0,
+                      -8,
+                    ),
                   ),
-                  child: const Row(
+                ],
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ------------------------------------------------
+                  // TOPO
+                  // ------------------------------------------------
+
+                  Row(
                     children: [
-                      Icon(
-                        Icons
-                            .notifications_none,
-                        color:
-                            foodJetOrange,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: const Color(
+                            0xFFFFF1E8,
+                          ),
+                          borderRadius: BorderRadius.circular(
+                            30,
+                          ),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.local_shipping,
+                              size: 17,
+                              color: Color(
+                                0xFFF97316,
+                              ),
+                            ),
+                            SizedBox(
+                              width: 6,
+                            ),
+                            Text(
+                              'NOVA OFERTA',
+                              style: TextStyle(
+                                color: Color(
+                                  0xFFF97316,
+                                ),
+                                fontWeight: FontWeight.w900,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          'Você ainda não possui novas notificações.',
-                          style: TextStyle(
-                            fontSize: 13,
+                      const Spacer(),
+                      Container(
+                        width: 52,
+                        height: 52,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: urgente
+                              ? Colors.red.shade50
+                              : const Color(
+                                  0xFFFFF1E8,
+                                ),
+                          border: Border.all(
+                            color: urgente
+                                ? Colors.red
+                                : const Color(
+                                    0xFFF97316,
+                                  ),
+                            width: 3,
+                          ),
+                        ),
+                        child: Center(
+                          child: Text(
+                            '$segundos',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w900,
+                              color: urgente
+                                  ? Colors.red
+                                  : const Color(
+                                      0xFFF97316,
+                                    ),
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                ),
-              ],
+
+                  const SizedBox(
+                    height: 18,
+                  ),
+
+                  // ------------------------------------------------
+                  // VALOR
+                  // ------------------------------------------------
+
+                  Row(
+                    children: [
+                      const Text(
+                        'Você recebe',
+                        style: TextStyle(
+                          color: Colors.black54,
+                          fontSize: 14,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        valorFormatado(),
+                        style: const TextStyle(
+                          fontSize: 30,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  if (km.isNotEmpty) ...[
+                    const SizedBox(
+                      height: 4,
+                    ),
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.route,
+                          size: 17,
+                          color: Colors.black54,
+                        ),
+                        const SizedBox(
+                          width: 6,
+                        ),
+                        Text(
+                          km,
+                          style: const TextStyle(
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+
+                  const SizedBox(
+                    height: 20,
+                  ),
+
+                  // ------------------------------------------------
+                  // RESTAURANTE
+                  // ------------------------------------------------
+
+                  _local(
+                    icone: Icons.storefront,
+                    titulo: 'Retirar em',
+                    nome: nomeRestaurante(),
+                    endereco: enderecoRestaurante(),
+                    cor: const Color(
+                      0xFFF97316,
+                    ),
+                  ),
+
+                  Padding(
+                    padding: const EdgeInsets.only(
+                      left: 19,
+                    ),
+                    child: Container(
+                      width: 2,
+                      height: 20,
+                      color: Colors.black12,
+                    ),
+                  ),
+
+                  // ------------------------------------------------
+                  // CLIENTE
+                  // ------------------------------------------------
+
+                  _local(
+                    icone: Icons.person,
+                    titulo: 'Entregar para',
+                    nome: nomeCliente(),
+                    endereco: enderecoEntrega(),
+                    cor: const Color(
+                      0xFF333333,
+                    ),
+                  ),
+
+                  // ------------------------------------------------
+                  // ERRO
+                  // ------------------------------------------------
+
+                  if (erro != null) ...[
+                    const SizedBox(
+                      height: 14,
+                    ),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(
+                        12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(
+                          12,
+                        ),
+                      ),
+                      child: Text(
+                        erro!,
+                        style: TextStyle(
+                          color: Colors.red.shade700,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(
+                    height: 20,
+                  ),
+
+                  // ------------------------------------------------
+                  // BOTÕES
+                  // ------------------------------------------------
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: SizedBox(
+                          height: 56,
+                          child: OutlinedButton(
+                            onPressed: processando ? null : recusar,
+                            style: OutlinedButton.styleFrom(
+                              side: const BorderSide(
+                                color: Colors.black12,
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  16,
+                                ),
+                              ),
+                            ),
+                            child: const Text(
+                              'Recusar',
+                              style: TextStyle(
+                                color: Colors.black87,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(
+                        width: 12,
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: SizedBox(
+                          height: 56,
+                          child: ElevatedButton(
+                            onPressed: processando ? null : aceitar,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(
+                                0xFFF97316,
+                              ),
+                              foregroundColor: Colors.white,
+                              elevation: 0,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(
+                                  16,
+                                ),
+                              ),
+                            ),
+                            child: processando
+                                ? const SizedBox(
+                                    width: 23,
+                                    height: 23,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2.5,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text(
+                                    'ACEITAR ENTREGA',
+                                    style: TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   // ============================================================
-  // SOS
+  // LOCAL
   // ============================================================
 
-  void _mostrarSOS() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.white,
-      showDragHandle: true,
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding:
-                const EdgeInsets.fromLTRB(
-              20,
-              5,
-              20,
-              30,
+  Widget _local({
+    required IconData icone,
+    required String titulo,
+    required String nome,
+    required String endereco,
+    required Color cor,
+  }) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 40,
+          height: 40,
+          decoration: BoxDecoration(
+            color: cor.withOpacity(
+              0.10,
             ),
-            child: Column(
-              mainAxisSize:
-                  MainAxisSize.min,
-              children: [
-                Container(
-                  width: 65,
-                  height: 65,
-                  decoration:
-                      const BoxDecoration(
-                    color: Color(0xFFFEE2E2),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.emergency_rounded,
-                    color:
-                        Color(0xFFDC2626),
-                    size: 32,
-                  ),
-                ),
-
-                const SizedBox(height: 15),
-
-                const Text(
-                  'Central de emergência',
-                  style: TextStyle(
-                    fontSize: 21,
-                    fontWeight:
-                        FontWeight.w900,
-                  ),
-                ),
-
-                const SizedBox(height: 7),
-
-                const Text(
-                  'Use esta opção somente em uma situação de emergência.',
-                  textAlign:
-                      TextAlign.center,
-                  style: TextStyle(
-                    color: Colors.black54,
-                    fontSize: 12,
-                  ),
-                ),
-
-                const SizedBox(height: 22),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: () {},
-                    style:
-                        ElevatedButton.styleFrom(
-                      backgroundColor:
-                          const Color(
-                        0xFFDC2626,
-                      ),
-                      foregroundColor:
-                          Colors.white,
-                      elevation: 0,
-                      padding:
-                          const EdgeInsets
-                              .symmetric(
-                        vertical: 16,
-                      ),
-                      shape:
-                          RoundedRectangleBorder(
-                        borderRadius:
-                            BorderRadius.circular(
-                          15,
-                        ),
-                      ),
-                    ),
-                    child: const Text(
-                      'Preciso de ajuda',
-                      style: TextStyle(
-                        fontWeight:
-                            FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            shape: BoxShape.circle,
           ),
-        );
-      },
+          child: Icon(
+            icone,
+            color: cor,
+            size: 20,
+          ),
+        ),
+        const SizedBox(
+          width: 12,
+        ),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                titulo,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.black45,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(
+                height: 2,
+              ),
+              Text(
+                nome,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(
+                height: 2,
+              ),
+              Text(
+                endereco,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: Colors.black54,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

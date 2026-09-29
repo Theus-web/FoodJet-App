@@ -1,4 +1,3 @@
-
 const Order = require("../models/order");
 
 const {
@@ -15,10 +14,7 @@ const {
 // SOCKET.IO
 // ======================================================
 //
-// Envia a atualização somente depois que o PostgreSQL
-// confirmar a alteração.
-//
-// Salas utilizadas pelo server.js:
+// Salas:
 //
 // pedido_<id>
 // restaurante_<id>
@@ -26,7 +22,10 @@ const {
 //
 // ======================================================
 
-function emitirAtualizacaoPedido(pedido, evento = "status_pedido_atualizado") {
+function emitirAtualizacaoPedido(
+    pedido,
+    evento = "status_pedido_atualizado"
+) {
 
     try {
 
@@ -37,19 +36,15 @@ function emitirAtualizacaoPedido(pedido, evento = "status_pedido_atualizado") {
             );
 
             return;
-
         }
 
-        if (
-            !global.io
-        ) {
+        if (!global.io) {
 
             console.warn(
                 "⚠️ SOCKET.IO: global.io não está disponível."
             );
 
             return;
-
         }
 
 
@@ -108,6 +103,7 @@ function emitirAtualizacaoPedido(pedido, evento = "status_pedido_atualizado") {
                     pedido.restauranteId
                 ).trim();
 
+
             const salaRestaurante =
                 `restaurante_${restauranteId}`;
 
@@ -124,7 +120,6 @@ function emitirAtualizacaoPedido(pedido, evento = "status_pedido_atualizado") {
                 "🏪 SOCKET.IO → RESTAURANTE:",
                 salaRestaurante
             );
-
         }
 
 
@@ -145,6 +140,7 @@ function emitirAtualizacaoPedido(pedido, evento = "status_pedido_atualizado") {
                     pedido.entregadorId
                 ).trim();
 
+
             const salaEntregador =
                 `entregador_${entregadorId}`;
 
@@ -161,22 +157,8 @@ function emitirAtualizacaoPedido(pedido, evento = "status_pedido_atualizado") {
                 "🏍️ SOCKET.IO → ENTREGADOR:",
                 salaEntregador
             );
-
         }
 
-
-        // ==================================================
-        // NOVO PEDIDO PARA RESTAURANTE
-        // ==================================================
-        //
-        // Esse evento é usado quando o pedido já está
-        // disponível para o restaurante.
-        //
-        // Não é emitido automaticamente para qualquer
-        // atualização. Somente quando solicitado pelo
-        // controller.
-        //
-        // ==================================================
 
     } catch (erro) {
 
@@ -184,14 +166,12 @@ function emitirAtualizacaoPedido(pedido, evento = "status_pedido_atualizado") {
             "❌ ERRO AO EMITIR SOCKET.IO:",
             erro.message
         );
-
     }
-
 }
 
 
 // ======================================================
-// EMITIR NOVO PEDIDO
+// EMITIR NOVO PEDIDO PARA RESTAURANTE
 // ======================================================
 
 function emitirNovoPedidoRestaurante(pedido) {
@@ -205,8 +185,8 @@ function emitirNovoPedidoRestaurante(pedido) {
         ) {
 
             return;
-
         }
+
 
         if (
             pedido.restauranteId === undefined ||
@@ -217,7 +197,6 @@ function emitirNovoPedidoRestaurante(pedido) {
         ) {
 
             return;
-
         }
 
 
@@ -253,15 +232,931 @@ function emitirNovoPedidoRestaurante(pedido) {
             pedido.id
         );
 
+
     } catch (erro) {
 
         console.error(
             "❌ ERRO AO EMITIR NOVO PEDIDO:",
             erro.message
         );
+    }
+}
 
+
+// ======================================================
+// DISTÂNCIA ENTRE DOIS PONTOS
+// ======================================================
+//
+// Fórmula de Haversine.
+//
+// Retorna distância em quilômetros.
+//
+// ======================================================
+
+function calcularDistanciaKm(
+    latitude1,
+    longitude1,
+    latitude2,
+    longitude2
+) {
+
+    const lat1 =
+        Number(latitude1);
+
+    const lon1 =
+        Number(longitude1);
+
+    const lat2 =
+        Number(latitude2);
+
+    const lon2 =
+        Number(longitude2);
+
+
+    if (
+        !Number.isFinite(lat1) ||
+        !Number.isFinite(lon1) ||
+        !Number.isFinite(lat2) ||
+        !Number.isFinite(lon2)
+    ) {
+
+        return null;
     }
 
+
+    const raioTerraKm =
+        6371;
+
+
+    const diferencaLatitude =
+        (
+            lat2 - lat1
+        ) *
+        Math.PI /
+        180;
+
+
+    const diferencaLongitude =
+        (
+            lon2 - lon1
+        ) *
+        Math.PI /
+        180;
+
+
+    const a =
+        Math.sin(
+            diferencaLatitude / 2
+        ) *
+        Math.sin(
+            diferencaLatitude / 2
+        ) +
+
+        Math.cos(
+            lat1 * Math.PI / 180
+        ) *
+
+        Math.cos(
+            lat2 * Math.PI / 180
+        ) *
+
+        Math.sin(
+            diferencaLongitude / 2
+        ) *
+
+        Math.sin(
+            diferencaLongitude / 2
+        );
+
+
+    const c =
+        2 *
+        Math.atan2(
+            Math.sqrt(a),
+            Math.sqrt(1 - a)
+        );
+
+
+    return (
+        raioTerraKm * c
+    );
+}
+
+
+// ======================================================
+// EXTRAIR LOCALIZAÇÃO
+// ======================================================
+
+function extrairLocalizacao(objeto) {
+
+    if (!objeto) {
+        return null;
+    }
+
+
+    let dados =
+        objeto;
+
+
+    if (
+        typeof objeto === "string"
+    ) {
+
+        try {
+
+            dados =
+                JSON.parse(
+                    objeto
+                );
+
+        } catch (erro) {
+
+            return null;
+        }
+    }
+
+
+    if (
+        typeof dados !== "object" ||
+        dados === null
+    ) {
+
+        return null;
+    }
+
+
+    // ==================================================
+    // LOCALIZAÇÃO DIRETA
+    // ==================================================
+
+    let latitude =
+        dados.latitude ??
+        dados.lat ??
+        dados.location?.latitude ??
+        dados.location?.lat ??
+        dados.localizacao?.latitude ??
+        dados.localizacao?.lat ??
+        dados.coordenadas?.latitude ??
+        dados.coordenadas?.lat;
+
+
+    let longitude =
+        dados.longitude ??
+        dados.lng ??
+        dados.lon ??
+        dados.location?.longitude ??
+        dados.location?.lng ??
+        dados.location?.lon ??
+        dados.localizacao?.longitude ??
+        dados.localizacao?.lng ??
+        dados.localizacao?.lon ??
+        dados.coordenadas?.longitude ??
+        dados.coordenadas?.lng ??
+        dados.coordenadas?.lon;
+
+
+    latitude =
+        Number(latitude);
+
+    longitude =
+        Number(longitude);
+
+
+    if (
+        !Number.isFinite(latitude) ||
+        !Number.isFinite(longitude)
+    ) {
+
+        return null;
+    }
+
+
+    return {
+
+        latitude,
+
+        longitude,
+
+    };
+}
+
+
+// ======================================================
+// OBTER LOCALIZAÇÃO DO RESTAURANTE
+// ======================================================
+
+function obterLocalizacaoRestaurante(
+    restaurante
+) {
+
+    if (!restaurante) {
+        return null;
+    }
+
+
+    // ==================================================
+    // PRIMEIRO: DADOS
+    // ==================================================
+
+    let localizacao =
+        extrairLocalizacao(
+            restaurante.dados
+        );
+
+
+    if (localizacao) {
+        return localizacao;
+    }
+
+
+    // ==================================================
+    // SEGUNDO: ENDEREÇO
+    // ==================================================
+
+    localizacao =
+        extrairLocalizacao(
+            restaurante.endereco
+        );
+
+
+    if (localizacao) {
+        return localizacao;
+    }
+
+
+    // ==================================================
+    // TERCEIRO: OBJETO INTEIRO
+    // ==================================================
+
+    localizacao =
+        extrairLocalizacao(
+            restaurante
+        );
+
+
+    return localizacao;
+}
+
+
+// ======================================================
+// OBTER LOCALIZAÇÃO DO ENTREGADOR
+// ======================================================
+
+function obterLocalizacaoEntregador(
+    entregador
+) {
+
+    if (!entregador) {
+        return null;
+    }
+
+
+    // ==================================================
+    // DADOS
+    // ==================================================
+
+    const localizacao =
+        extrairLocalizacao(
+            entregador.dados
+        );
+
+
+    if (localizacao) {
+        return localizacao;
+    }
+
+
+    // ==================================================
+    // OBJETO INTEIRO
+    // ==================================================
+
+    return extrairLocalizacao(
+        entregador
+    );
+}
+
+
+// ======================================================
+// DISTRIBUIR PEDIDO PARA ENTREGADOR
+// ======================================================
+//
+// Regras:
+//
+// 1. Pedido precisa estar PRONTO.
+// 2. Pedido não pode possuir entregador.
+// 3. Restaurante precisa possuir GPS.
+// 4. Entregador precisa estar ONLINE.
+// 5. Entregador precisa possuir GPS.
+// 6. Entregador não pode possuir outra entrega ativa.
+// 7. Escolhe o mais próximo.
+// 8. Reserva atomicamente no PostgreSQL.
+// 9. Emite Socket somente para o entregador reservado.
+//
+// ======================================================
+
+async function distribuirPedidoParaEntregador(
+    pedido
+) {
+
+    try {
+
+        if (
+            !pedido ||
+            !pedido.id
+        ) {
+
+            return null;
+        }
+
+
+        const pedidoId =
+            String(
+                pedido.id
+            ).trim();
+
+
+        const restauranteId =
+            String(
+                pedido.restauranteId || ""
+            ).trim();
+
+
+        if (!restauranteId) {
+
+            console.warn(
+                "⚠️ DISTRIBUIÇÃO: restaurante não identificado."
+            );
+
+            return null;
+        }
+
+
+        console.log("");
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "🏍️ FOODJET - DISTRIBUIÇÃO AUTOMÁTICA"
+        );
+
+        console.log(
+            "========================================"
+        );
+
+        console.log(
+            "📦 PEDIDO:",
+            pedidoId
+        );
+
+        console.log(
+            "🏪 RESTAURANTE:",
+            restauranteId
+        );
+
+
+        // ==================================================
+        // BUSCAR RESTAURANTE
+        // ==================================================
+
+        const restauranteResultado =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    nome,
+                    endereco,
+                    dados
+                FROM restaurantes
+                WHERE id = $1
+                LIMIT 1
+                `,
+                [
+                    restauranteId,
+                ]
+            );
+
+
+        const restaurante =
+            restauranteResultado.rows[0];
+
+
+        if (!restaurante) {
+
+            console.warn(
+                "⚠️ DISTRIBUIÇÃO: restaurante não encontrado."
+            );
+
+            return null;
+        }
+
+
+        // ==================================================
+        // GPS DO RESTAURANTE
+        // ==================================================
+
+        const localizacaoRestaurante =
+            obterLocalizacaoRestaurante(
+                restaurante
+            );
+
+
+        if (!localizacaoRestaurante) {
+
+            console.warn(
+                "⚠️ DISTRIBUIÇÃO: restaurante sem latitude/longitude."
+            );
+
+            console.warn(
+                "ℹ️ O pedido permanecerá PRONTO até existir localização."
+            );
+
+            return null;
+        }
+
+
+        console.log(
+            "📍 RESTAURANTE LAT:",
+            localizacaoRestaurante.latitude
+        );
+
+        console.log(
+            "📍 RESTAURANTE LNG:",
+            localizacaoRestaurante.longitude
+        );
+
+
+        // ==================================================
+        // BUSCAR ENTREGADORES ONLINE
+        // ==================================================
+
+        const entregadoresResultado =
+            await pool.query(
+                `
+                SELECT
+                    id,
+                    nome,
+                    telefone,
+                    status,
+                    online,
+                    dados
+                FROM entregadores
+                WHERE
+                    online = true
+                ORDER BY id ASC
+                `
+            );
+
+
+        const entregadores =
+            entregadoresResultado.rows || [];
+
+
+        if (
+            entregadores.length === 0
+        ) {
+
+            console.log(
+                "ℹ️ NENHUM ENTREGADOR ONLINE."
+            );
+
+            console.log(
+                "ℹ️ PEDIDO CONTINUARÁ PRONTO."
+            );
+
+            return null;
+        }
+
+
+        // ==================================================
+        // BUSCAR ENTREGADORES OCUPADOS
+        // ==================================================
+
+        const ocupadosResultado =
+            await pool.query(
+                `
+                SELECT DISTINCT
+                    entregador_id
+                FROM pedidos
+                WHERE
+                    entregador_id IS NOT NULL
+                    AND status IN (
+                        'ENTREGADOR_A_CAMINHO',
+                        'EM_ENTREGA',
+                        'SAIU_RESTAURANTE',
+                        'CHEGUEI_RESTAURANTE',
+                        'CHEGUEI',
+                        'ACEITO'
+                    )
+                `
+            );
+
+
+        const entregadoresOcupados =
+            new Set(
+                ocupadosResultado.rows
+                    .map(
+                        linha =>
+                            String(
+                                linha.entregador_id
+                            ).trim()
+                    )
+            );
+
+
+        console.log(
+            "🚫 ENTREGADORES OCUPADOS:",
+            entregadoresOcupados.size
+        );
+
+
+        // ==================================================
+        // CALCULAR DISTÂNCIAS
+        // ==================================================
+
+        const candidatos = [];
+
+
+        for (
+            const entregador
+            of entregadores
+        ) {
+
+            const entregadorId =
+                String(
+                    entregador.id
+                ).trim();
+
+
+            // ----------------------------------------------
+            // IGNORAR OCUPADO
+            // ----------------------------------------------
+
+            if (
+                entregadoresOcupados.has(
+                    entregadorId
+                )
+            ) {
+
+                console.log(
+                    "⏭️ ENTREGADOR OCUPADO:",
+                    entregador.nome,
+                    entregadorId
+                );
+
+                continue;
+            }
+
+
+            // ----------------------------------------------
+            // LOCALIZAÇÃO
+            // ----------------------------------------------
+
+            const localizacaoEntregador =
+                obterLocalizacaoEntregador(
+                    entregador
+                );
+
+
+            if (!localizacaoEntregador) {
+
+                console.log(
+                    "⏭️ ENTREGADOR SEM GPS:",
+                    entregador.nome,
+                    entregadorId
+                );
+
+                continue;
+            }
+
+
+            // ----------------------------------------------
+            // DISTÂNCIA
+            // ----------------------------------------------
+
+            const distanciaKm =
+                calcularDistanciaKm(
+
+                    localizacaoEntregador.latitude,
+
+                    localizacaoEntregador.longitude,
+
+                    localizacaoRestaurante.latitude,
+
+                    localizacaoRestaurante.longitude
+
+                );
+
+
+            if (
+                distanciaKm === null
+            ) {
+
+                continue;
+            }
+
+
+            candidatos.push({
+
+                id:
+                    entregadorId,
+
+                nome:
+                    entregador.nome,
+
+                telefone:
+                    entregador.telefone,
+
+                latitude:
+                    localizacaoEntregador.latitude,
+
+                longitude:
+                    localizacaoEntregador.longitude,
+
+                distanciaKm,
+
+            });
+        }
+
+
+        // ==================================================
+        // NENHUM CANDIDATO
+        // ==================================================
+
+        if (
+            candidatos.length === 0
+        ) {
+
+            console.log(
+                "ℹ️ NENHUM ENTREGADOR DISPONÍVEL COM GPS."
+            );
+
+            console.log(
+                "ℹ️ PEDIDO CONTINUARÁ PRONTO."
+            );
+
+            return null;
+        }
+
+
+        // ==================================================
+        // ORDENAR PELO MAIS PRÓXIMO
+        // ==================================================
+
+        candidatos.sort(
+            (
+                a,
+                b
+            ) =>
+                a.distanciaKm -
+                b.distanciaKm
+        );
+
+
+        console.log(
+            "📊 CANDIDATOS:"
+        );
+
+
+        candidatos.forEach(
+            candidato => {
+
+                console.log(
+                    `🏍️ ${candidato.nome} → ${candidato.distanciaKm.toFixed(2)} km`
+                );
+
+            }
+        );
+
+
+        // ==================================================
+        // TENTAR RESERVAR
+        // ==================================================
+        //
+        // Importante:
+        //
+        // WHERE entregador_id IS NULL
+        //
+        // Isso impede que duas requisições concorrentes
+        // reservem o mesmo pedido.
+        //
+        // ==================================================
+
+        for (
+            const candidato
+            of candidatos
+        ) {
+
+            console.log("");
+            console.log(
+                "🎯 TENTANDO RESERVAR:"
+            );
+
+            console.log(
+                "🏍️ ENTREGADOR:",
+                candidato.id
+            );
+
+            console.log(
+                "📏 DISTÂNCIA:",
+                candidato.distanciaKm.toFixed(2),
+                "km"
+            );
+
+
+            const reserva =
+                await pool.query(
+                    `
+                    UPDATE pedidos
+                    SET
+                        entregador_id = $1,
+                        atualizado_em = NOW()
+                    WHERE
+                        id = $2
+                        AND status = 'PRONTO'
+                        AND entregador_id IS NULL
+                    RETURNING *
+                    `,
+                    [
+                        candidato.id,
+                        pedidoId,
+                    ]
+                );
+
+
+            // ==================================================
+            // NÃO RESERVOU
+            // ==================================================
+
+            if (
+                reserva.rowCount === 0
+            ) {
+
+                console.log(
+                    "⚠️ PEDIDO JÁ FOI RESERVADO."
+                );
+
+                console.log(
+                    "➡️ Nenhuma outra reserva será feita."
+                );
+
+                continue;
+            }
+
+
+            // ==================================================
+            // RESERVADO
+            // ==================================================
+
+            console.log("");
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "✅ PEDIDO RESERVADO"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "📦 PEDIDO:",
+                pedidoId
+            );
+
+            console.log(
+                "🏍️ ENTREGADOR:",
+                candidato.id
+            );
+
+            console.log(
+                "👤 NOME:",
+                candidato.nome
+            );
+
+            console.log(
+                "📏 DISTÂNCIA:",
+                candidato.distanciaKm.toFixed(2),
+                "km"
+            );
+
+
+            // ==================================================
+            // BUSCAR PEDIDO ATUALIZADO
+            // ==================================================
+
+            const pedidoAtualizado =
+                await Order.buscarPorId(
+                    pedidoId
+                );
+
+
+            if (!pedidoAtualizado) {
+
+                console.warn(
+                    "⚠️ Pedido reservado, mas não foi possível remontar o pedido."
+                );
+
+                return null;
+            }
+
+
+            // ==================================================
+            // SOCKET EXCLUSIVO
+            // ==================================================
+
+            if (
+                global.io
+            ) {
+
+                const salaEntregador =
+                    `entregador_${candidato.id}`;
+
+
+                global.io
+                    .to(salaEntregador)
+                    .emit(
+                        "nova_entrega",
+                        {
+
+                            ...pedidoAtualizado,
+
+                            distanciaRestauranteKm:
+                                Number(
+                                    candidato.distanciaKm.toFixed(2)
+                                ),
+
+                            entregaOferta:
+                                true,
+
+                            ofertaStatus:
+                                "PENDENTE",
+
+                        }
+                    );
+
+
+                console.log(
+                    "📡 NOVA ENTREGA ENVIADA"
+                );
+
+                console.log(
+                    "🏍️ SALA:",
+                    salaEntregador
+                );
+
+                console.log(
+                    "📦 PEDIDO:",
+                    pedidoId
+                );
+            }
+
+
+            // ==================================================
+            // ATUALIZAÇÃO DO PEDIDO
+            // ==================================================
+
+            emitirAtualizacaoPedido(
+                pedidoAtualizado,
+                "pedido_entregador_reservado"
+            );
+
+
+            console.log(
+                "========================================"
+            );
+
+
+            return pedidoAtualizado;
+        }
+
+
+        return null;
+
+
+    } catch (erro) {
+
+        console.error("");
+        console.error(
+            "========================================"
+        );
+
+        console.error(
+            "❌ ERRO NA DISTRIBUIÇÃO AUTOMÁTICA"
+        );
+
+        console.error(
+            "========================================"
+        );
+
+        console.error(
+            erro
+        );
+
+        return null;
+    }
 }
 
 
@@ -276,9 +1171,11 @@ function obterUsuarioAutenticado(req) {
         req.user ||
         null;
 
+
     if (!usuario) {
         return null;
     }
+
 
     const id =
         usuario.id ||
@@ -287,13 +1184,21 @@ function obterUsuarioAutenticado(req) {
         usuario._id ||
         null;
 
+
     if (!id) {
         return null;
     }
 
+
     return {
+
         ...usuario,
-        id: String(id).trim(),
+
+        id:
+            String(
+                id
+            ).trim(),
+
     };
 }
 
@@ -301,26 +1206,10 @@ function obterUsuarioAutenticado(req) {
 // ======================================================
 // PROCESSAR ESTORNO DO PEDIDO
 // ======================================================
-//
-// Compatível com:
-//
-// - PIX
-// - CARTÃO DE CRÉDITO
-//
-// Estrutura atual da tabela pagamentos_asaas:
-//
-// pagamento_id
-// pedido_id
-// external_reference
-// status
-// valor
-// dados
-// criado_em
-// atualizado_em
-//
-// ======================================================
 
-async function processarEstornoPedido(pedidoAtual) {
+async function processarEstornoPedido(
+    pedidoAtual
+) {
 
     if (
         !pedidoAtual ||
@@ -332,16 +1221,20 @@ async function processarEstornoPedido(pedidoAtual) {
         );
     }
 
+
     console.log("");
     console.log(
         "========================================"
     );
+
     console.log(
         "💸 FOODJET - PROCESSAR ESTORNO"
     );
+
     console.log(
         "========================================"
     );
+
     console.log(
         "🆔 PEDIDO:",
         pedidoAtual.id
@@ -353,6 +1246,7 @@ async function processarEstornoPedido(pedidoAtual) {
     // ==================================================
 
     let pagamentoAsaas = null;
+
 
     try {
 
@@ -388,8 +1282,10 @@ async function processarEstornoPedido(pedidoAtual) {
                 ]
             );
 
+
         pagamentoAsaas =
             resultado.rows[0] || null;
+
 
     } catch (erroBanco) {
 
@@ -397,6 +1293,7 @@ async function processarEstornoPedido(pedidoAtual) {
             "❌ ERRO AO BUSCAR PAGAMENTO ASAAS:",
             erroBanco.message
         );
+
 
         throw new Error(
             "Não foi possível verificar o pagamento do pedido: " +
@@ -423,11 +1320,21 @@ async function processarEstornoPedido(pedidoAtual) {
             "========================================"
         );
 
+
         return {
-            encontrado: false,
-            estornado: false,
-            emProcessamento: false,
-            statusAsaas: null,
+
+            encontrado:
+                false,
+
+            estornado:
+                false,
+
+            emProcessamento:
+                false,
+
+            statusAsaas:
+                null,
+
         };
     }
 
@@ -470,17 +1377,27 @@ async function processarEstornoPedido(pedidoAtual) {
             "========================================"
         );
 
+
         return {
-            encontrado: true,
-            estornado: false,
-            emProcessamento: false,
-            statusAsaas: null,
+
+            encontrado:
+                true,
+
+            estornado:
+                false,
+
+            emProcessamento:
+                false,
+
+            statusAsaas:
+                null,
+
         };
     }
 
 
     // ==================================================
-    // STATUS ATUAL NO BANCO
+    // STATUS BANCO
     // ==================================================
 
     const statusBanco =
@@ -512,11 +1429,21 @@ async function processarEstornoPedido(pedidoAtual) {
             "========================================"
         );
 
+
         return {
-            encontrado: true,
-            estornado: true,
-            emProcessamento: false,
-            statusAsaas: "REFUNDED",
+
+            encontrado:
+                true,
+
+            estornado:
+                true,
+
+            emProcessamento:
+                false,
+
+            statusAsaas:
+                "REFUNDED",
+
         };
     }
 
@@ -548,11 +1475,21 @@ async function processarEstornoPedido(pedidoAtual) {
             "========================================"
         );
 
+
         return {
-            encontrado: true,
-            estornado: false,
-            emProcessamento: true,
-            statusAsaas: statusBanco,
+
+            encontrado:
+                true,
+
+            estornado:
+                false,
+
+            emProcessamento:
+                true,
+
+            statusAsaas:
+                statusBanco,
+
         };
     }
 
@@ -565,7 +1502,9 @@ async function processarEstornoPedido(pedidoAtual) {
         "🔎 CONSULTANDO STATUS ATUAL NO ASAAS..."
     );
 
+
     let pagamentoAtualizado;
+
 
     try {
 
@@ -574,12 +1513,14 @@ async function processarEstornoPedido(pedidoAtual) {
                 pagamentoId
             );
 
+
     } catch (erroConsulta) {
 
         console.error(
             "❌ ERRO AO CONSULTAR PAGAMENTO NO ASAAS:",
             erroConsulta.message
         );
+
 
         throw new Error(
             "Não foi possível consultar o pagamento no Asaas: " +
@@ -618,6 +1559,7 @@ async function processarEstornoPedido(pedidoAtual) {
             "✅ PAGAMENTO JÁ ESTÁ ESTORNADO NO ASAAS."
         );
 
+
         try {
 
             await pool.query(
@@ -634,6 +1576,7 @@ async function processarEstornoPedido(pedidoAtual) {
                 ]
             );
 
+
         } catch (erroBanco) {
 
             console.error(
@@ -641,23 +1584,34 @@ async function processarEstornoPedido(pedidoAtual) {
                 erroBanco.message
             );
 
+
             throw new Error(
                 "O pagamento já está estornado no Asaas, mas houve erro ao atualizar o banco: " +
                 erroBanco.message
             );
         }
 
+
         return {
-            encontrado: true,
-            estornado: true,
-            emProcessamento: false,
-            statusAsaas: "REFUNDED",
+
+            encontrado:
+                true,
+
+            estornado:
+                true,
+
+            emProcessamento:
+                false,
+
+            statusAsaas:
+                "REFUNDED",
+
         };
     }
 
 
     // ==================================================
-    // ESTORNO EM PROCESSAMENTO NO ASAAS
+    // ESTORNO EM PROCESSAMENTO
     // ==================================================
 
     if (
@@ -668,6 +1622,7 @@ async function processarEstornoPedido(pedidoAtual) {
         console.log(
             "ℹ️ ESTORNO JÁ ESTÁ EM PROCESSAMENTO NO ASAAS."
         );
+
 
         try {
 
@@ -685,6 +1640,7 @@ async function processarEstornoPedido(pedidoAtual) {
                 ]
             );
 
+
         } catch (erroBanco) {
 
             console.error(
@@ -693,30 +1649,36 @@ async function processarEstornoPedido(pedidoAtual) {
             );
         }
 
+
         return {
-            encontrado: true,
-            estornado: false,
-            emProcessamento: true,
+
+            encontrado:
+                true,
+
+            estornado:
+                false,
+
+            emProcessamento:
+                true,
+
             statusAsaas,
+
         };
     }
 
 
     // ==================================================
-    // PAGAMENTOS QUE PODEM SER ESTORNADOS
+    // STATUS PAGAMENTO
     // ==================================================
 
-    const pagamentoPago = [
-        "RECEIVED",
-        "CONFIRMED",
-    ].includes(
-        statusAsaas
-    );
+    const pagamentoPago =
+        [
+            "RECEIVED",
+            "CONFIRMED",
+        ].includes(
+            statusAsaas
+        );
 
-
-    // ==================================================
-    // PAGAMENTO NÃO ESTÁ EM STATUS ESTORNÁVEL
-    // ==================================================
 
     if (!pagamentoPago) {
 
@@ -737,11 +1699,20 @@ async function processarEstornoPedido(pedidoAtual) {
             "========================================"
         );
 
+
         return {
-            encontrado: true,
-            estornado: false,
-            emProcessamento: false,
+
+            encontrado:
+                true,
+
+            estornado:
+                false,
+
+            emProcessamento:
+                false,
+
             statusAsaas,
+
         };
     }
 
@@ -759,11 +1730,8 @@ async function processarEstornoPedido(pedidoAtual) {
     );
 
 
-    // ==================================================
-    // SOLICITAR ESTORNO
-    // ==================================================
-
     let resultadoEstorno;
+
 
     try {
 
@@ -771,6 +1739,7 @@ async function processarEstornoPedido(pedidoAtual) {
             await estornarPagamento(
                 pagamentoId
             );
+
 
     } catch (erroEstorno) {
 
@@ -811,6 +1780,7 @@ async function processarEstornoPedido(pedidoAtual) {
             "========================================"
         );
 
+
         throw new Error(
             erroEstorno.message ||
             "Não foi possível estornar o pagamento."
@@ -819,7 +1789,7 @@ async function processarEstornoPedido(pedidoAtual) {
 
 
     // ==================================================
-    // IDENTIFICAR STATUS RETORNADO
+    // STATUS RETORNADO
     // ==================================================
 
     const statusRetornado =
@@ -838,11 +1808,8 @@ async function processarEstornoPedido(pedidoAtual) {
     );
 
 
-    // ==================================================
-    // DEFINIR STATUS PARA O BANCO
-    // ==================================================
-
     let novoStatusBanco;
+
 
     if (
         statusRetornado === "REFUNDED"
@@ -886,6 +1853,7 @@ async function processarEstornoPedido(pedidoAtual) {
             ]
         );
 
+
     } catch (erroBanco) {
 
         console.error(
@@ -893,16 +1861,13 @@ async function processarEstornoPedido(pedidoAtual) {
             erroBanco.message
         );
 
+
         throw new Error(
             "O estorno foi solicitado ao Asaas, mas não foi possível atualizar o registro do pagamento no banco: " +
             erroBanco.message
         );
     }
 
-
-    // ==================================================
-    // LOG FINAL
-    // ==================================================
 
     if (
         novoStatusBanco === "REFUNDED"
@@ -919,6 +1884,7 @@ async function processarEstornoPedido(pedidoAtual) {
         );
     }
 
+
     console.log(
         "📊 STATUS BANCO:",
         novoStatusBanco
@@ -931,7 +1897,8 @@ async function processarEstornoPedido(pedidoAtual) {
 
     return {
 
-        encontrado: true,
+        encontrado:
+            true,
 
         estornado:
             novoStatusBanco === "REFUNDED",
@@ -942,6 +1909,7 @@ async function processarEstornoPedido(pedidoAtual) {
 
         statusAsaas:
             novoStatusBanco,
+
     };
 }
 
@@ -958,26 +1926,33 @@ async function create(req, res) {
         console.log(
             "========================================"
         );
+
         console.log(
             "📦 CONTROLLER - CRIAR PEDIDO"
         );
+
         console.log(
             "========================================"
         );
 
+
         const usuario =
             obterUsuarioAutenticado(req);
+
 
         if (!usuario) {
 
             return res.status(401).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Cliente não identificado. Faça login novamente.",
+
             });
         }
+
 
         const body =
             req.body || {};
@@ -987,10 +1962,12 @@ async function create(req, res) {
 
             return res.status(400).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Restaurante não identificado.",
+
             });
         }
 
@@ -1002,63 +1979,81 @@ async function create(req, res) {
 
             return res.status(400).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "O pedido precisa possuir pelo menos um item.",
+
             });
         }
 
-        // ======================================================
-// BLOQUEIO: PIX NÃO PODE CRIAR PEDIDO ANTES DO PAGAMENTO
-// ======================================================
 
-const formaPagamento =
-    String(
-        body.pagamento ||
-        body.formaPagamento ||
-        ""
-    )
-        .trim()
-        .toUpperCase();
+        // ==================================================
+        // PIX PRIMEIRO
+        // ==================================================
 
-if (formaPagamento === "PIX") {
+        const formaPagamento =
+            String(
+                body.pagamento ||
+                body.formaPagamento ||
+                ""
+            )
+                .trim()
+                .toUpperCase();
 
-    console.log("");
-    console.log(
-        "========================================"
-    );
-    console.log(
-        "🚫 FOODJET - PIX BLOQUEADO NO /api/orders"
-    );
-    console.log(
-        "🚫 PEDIDO NÃO SERÁ CRIADO"
-    );
-    console.log(
-        "➡️ O cliente deve gerar o PIX primeiro"
-    );
-    console.log(
-        "➡️ O pedido será criado pelo webhook"
-    );
-    console.log(
-        "========================================"
-    );
 
-    return res.status(409).json({
+        if (
+            formaPagamento === "PIX"
+        ) {
 
-        sucesso: false,
+            console.log("");
+            console.log(
+                "========================================"
+            );
 
-        codigo:
-            "PIX_PAGAMENTO_PRIMEIRO",
+            console.log(
+                "🚫 FOODJET - PIX BLOQUEADO NO /api/orders"
+            );
 
-        erro:
-            "Para pagamento via PIX, o pagamento deve ser realizado antes da criação do pedido.",
+            console.log(
+                "🚫 PEDIDO NÃO SERÁ CRIADO"
+            );
 
-        mensagem:
-            "Gere o PIX primeiro. O pedido será criado automaticamente após a confirmação do pagamento."
-    });
-}
+            console.log(
+                "➡️ O cliente deve gerar o PIX primeiro"
+            );
 
+            console.log(
+                "➡️ O pedido será criado pelo webhook"
+            );
+
+            console.log(
+                "========================================"
+            );
+
+
+            return res.status(409).json({
+
+                sucesso:
+                    false,
+
+                codigo:
+                    "PIX_PAGAMENTO_PRIMEIRO",
+
+                erro:
+                    "Para pagamento via PIX, o pagamento deve ser realizado antes da criação do pedido.",
+
+                mensagem:
+                    "Gere o PIX primeiro. O pedido será criado automaticamente após a confirmação do pagamento.",
+
+            });
+        }
+
+
+        // ==================================================
+        // CRIAR
+        // ==================================================
 
         const pedido =
             await Order.criar({
@@ -1119,6 +2114,7 @@ if (formaPagamento === "PIX") {
                     Number(
                         body.valorTroco
                     ) || 0,
+
             });
 
 
@@ -1157,7 +2153,8 @@ if (formaPagamento === "PIX") {
 
         return res.status(201).json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             mensagem:
                 "Pedido criado com sucesso.",
@@ -1166,7 +2163,9 @@ if (formaPagamento === "PIX") {
 
             pedidoId:
                 pedido.id,
+
         });
+
 
     } catch (error) {
 
@@ -1175,15 +2174,18 @@ if (formaPagamento === "PIX") {
             error
         );
 
+
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao criar pedido",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -1200,24 +2202,30 @@ async function list(req, res) {
         const pedidos =
             await Order.listar();
 
+
         return res.json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             pedidos,
+
         });
+
 
     } catch (error) {
 
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao listar pedidos",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -1236,35 +2244,44 @@ async function getById(req, res) {
                 req.params.id
             );
 
+
         if (!pedido) {
 
             return res.status(404).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Pedido não encontrado.",
+
             });
         }
 
+
         return res.json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             pedido,
+
         });
+
 
     } catch (error) {
 
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao buscar pedido",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -1286,10 +2303,12 @@ async function updateStatus(req, res) {
 
             return res.status(400).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Status não informado.",
+
             });
         }
 
@@ -1308,10 +2327,12 @@ async function updateStatus(req, res) {
 
             return res.status(404).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Pedido não encontrado.",
+
             });
         }
 
@@ -1347,7 +2368,9 @@ async function updateStatus(req, res) {
         // ESTORNO
         // ==================================================
 
-        if (vaiCancelar) {
+        if (
+            vaiCancelar
+        ) {
 
             console.log("");
             console.log(
@@ -1380,10 +2403,12 @@ async function updateStatus(req, res) {
                         pedidoAtual
                     );
 
+
                 console.log(
                     "📊 RESULTADO ESTORNO:",
                     resultadoEstorno
                 );
+
 
             } catch (erroEstorno) {
 
@@ -1395,13 +2420,15 @@ async function updateStatus(req, res) {
 
                 return res.status(500).json({
 
-                    sucesso: false,
+                    sucesso:
+                        false,
 
                     erro:
                         "Não foi possível estornar o pagamento. O pedido não foi cancelado.",
 
                     detalhes:
                         erroEstorno.message,
+
                 });
             }
 
@@ -1422,6 +2449,7 @@ async function updateStatus(req, res) {
                 req.params.id,
 
                 statusNormalizado
+
             );
 
 
@@ -1429,16 +2457,18 @@ async function updateStatus(req, res) {
 
             return res.status(404).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Pedido não encontrado.",
+
             });
         }
 
 
         // ==================================================
-        // SOCKET.IO
+        // SOCKET
         // ==================================================
 
         emitirAtualizacaoPedido(
@@ -1448,14 +2478,116 @@ async function updateStatus(req, res) {
 
 
         // ==================================================
+        // DISTRIBUIÇÃO AUTOMÁTICA
+        // ==================================================
+        //
+        // SOMENTE quando:
+        //
+        // PRONTO
+        //
+        // E ainda não existe entregador.
+        //
+        // ==================================================
+
+        if (
+            statusNormalizado === "PRONTO" &&
+            (
+                pedido.entregadorId === undefined ||
+                pedido.entregadorId === null ||
+                String(
+                    pedido.entregadorId
+                ).trim() === ""
+            )
+        ) {
+
+            console.log("");
+            console.log(
+                "========================================"
+            );
+
+            console.log(
+                "🏍️ PEDIDO PRONTO → INICIANDO DISTRIBUIÇÃO"
+            );
+
+            console.log(
+                "📦 PEDIDO:",
+                pedido.id
+            );
+
+            console.log(
+                "🏪 RESTAURANTE:",
+                pedido.restauranteId
+            );
+
+            console.log(
+                "========================================"
+            );
+
+
+            // Não bloqueia a resposta do restaurante.
+            //
+            // O pedido já foi salvo como PRONTO.
+            //
+            // A distribuição acontece em seguida.
+
+            distribuirPedidoParaEntregador(
+                pedido
+            )
+                .then(
+                    pedidoDistribuido => {
+
+                        if (
+                            pedidoDistribuido
+                        ) {
+
+                            console.log(
+                                "✅ DISTRIBUIÇÃO CONCLUÍDA:"
+                            );
+
+                            console.log(
+                                "📦 PEDIDO:",
+                                pedidoDistribuido.id
+                            );
+
+                            console.log(
+                                "🏍️ ENTREGADOR:",
+                                pedidoDistribuido.entregadorId
+                            );
+
+                        } else {
+
+                            console.log(
+                                "ℹ️ NENHUM ENTREGADOR FOI RESERVADO."
+                            );
+
+                        }
+
+                    }
+                )
+                .catch(
+                    erroDistribuicao => {
+
+                        console.error(
+                            "❌ ERRO ASSÍNCRONO NA DISTRIBUIÇÃO:",
+                            erroDistribuicao.message
+                        );
+
+                    }
+                );
+        }
+
+
+        // ==================================================
         // RESPOSTA
         // ==================================================
 
         return res.json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             pedido,
+
         });
 
 
@@ -1466,15 +2598,18 @@ async function updateStatus(req, res) {
             error
         );
 
+
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao atualizar status",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -1493,24 +2628,30 @@ async function restaurantOrders(req, res) {
                 req.params.id
             );
 
+
         return res.json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             pedidos,
+
         });
+
 
     } catch (error) {
 
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao buscar pedidos do restaurante",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -1529,24 +2670,30 @@ async function clientOrders(req, res) {
                 req.params.id
             );
 
+
         return res.json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             pedidos,
+
         });
+
 
     } catch (error) {
 
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao buscar pedidos do cliente",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -1563,24 +2710,30 @@ async function availableDeliveries(req, res) {
         const pedidos =
             await Order.listarDisponiveisEntrega();
 
+
         return res.json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             pedidos,
+
         });
+
 
     } catch (error) {
 
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao buscar pedidos disponíveis",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -1613,10 +2766,6 @@ async function acceptRestaurant(req, res) {
         );
 
 
-        // ==================================================
-        // ACEITAR NO BANCO
-        // ==================================================
-
         const pedido =
             await Order.aceitarPedidoRestaurante(
                 req.params.id
@@ -1627,10 +2776,12 @@ async function acceptRestaurant(req, res) {
 
             return res.status(400).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Pedido não encontrado ou não está aguardando o restaurante.",
+
             });
         }
 
@@ -1650,29 +2801,24 @@ async function acceptRestaurant(req, res) {
         );
 
 
-        // ==================================================
-        // SOCKET.IO → CLIENTE
-        // ==================================================
-
         emitirAtualizacaoPedido(
             pedido,
             "status_pedido_atualizado"
         );
 
 
-        // ==================================================
-        // RESPOSTA
-        // ==================================================
-
         return res.json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             mensagem:
                 "Pedido aceito pelo restaurante.",
 
             pedido,
+
         });
+
 
     } catch (error) {
 
@@ -1681,15 +2827,18 @@ async function acceptRestaurant(req, res) {
             error
         );
 
+
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao aceitar pedido",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -1717,10 +2866,6 @@ async function rejectRestaurant(req, res) {
         );
 
 
-        // ==================================================
-        // BUSCAR ANTES DA RECUSA
-        // ==================================================
-
         const pedidoAtual =
             await Order.buscarPorId(
                 req.params.id
@@ -1731,10 +2876,12 @@ async function rejectRestaurant(req, res) {
 
             return res.status(404).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Pedido não encontrado.",
+
             });
         }
 
@@ -1750,10 +2897,6 @@ async function rejectRestaurant(req, res) {
         );
 
 
-        // ==================================================
-        // ESTORNO
-        // ==================================================
-
         try {
 
             const resultadoEstorno =
@@ -1761,10 +2904,12 @@ async function rejectRestaurant(req, res) {
                     pedidoAtual
                 );
 
+
             console.log(
                 "📊 RESULTADO ESTORNO:",
                 resultadoEstorno
             );
+
 
         } catch (erroEstorno) {
 
@@ -1776,20 +2921,18 @@ async function rejectRestaurant(req, res) {
 
             return res.status(500).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Não foi possível estornar o pagamento. O pedido não foi recusado.",
 
                 detalhes:
                     erroEstorno.message,
+
             });
         }
 
-
-        // ==================================================
-        // RECUSAR NO BANCO
-        // ==================================================
 
         const pedido =
             await Order.recusarPedidoRestaurante(
@@ -1797,6 +2940,7 @@ async function rejectRestaurant(req, res) {
                 req.params.id,
 
                 req.body?.motivo
+
             );
 
 
@@ -1804,10 +2948,12 @@ async function rejectRestaurant(req, res) {
 
             return res.status(400).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Pedido não encontrado ou não está aguardando o restaurante.",
+
             });
         }
 
@@ -1827,10 +2973,6 @@ async function rejectRestaurant(req, res) {
         );
 
 
-        // ==================================================
-        // SOCKET.IO → CLIENTE
-        // ==================================================
-
         emitirAtualizacaoPedido(
             pedido,
             "status_pedido_atualizado"
@@ -1844,12 +2986,14 @@ async function rejectRestaurant(req, res) {
 
         return res.json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             mensagem:
                 "Pedido recusado. Pagamento estornado quando aplicável.",
 
             pedido,
+
         });
 
 
@@ -1863,13 +3007,15 @@ async function rejectRestaurant(req, res) {
 
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao recusar pedido",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -1889,6 +3035,7 @@ async function acceptDelivery(req, res) {
                 req.params.id,
 
                 req.body.entregadorId
+
             );
 
 
@@ -1896,17 +3043,15 @@ async function acceptDelivery(req, res) {
 
             return res.status(400).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Pedido não encontrado ou não está disponível para entrega.",
+
             });
         }
 
-
-        // ==================================================
-        // SOCKET.IO
-        // ==================================================
 
         emitirAtualizacaoPedido(
             pedido,
@@ -1916,25 +3061,30 @@ async function acceptDelivery(req, res) {
 
         return res.json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             mensagem:
                 "Entrega aceita.",
 
             pedido,
+
         });
+
 
     } catch (error) {
 
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao aceitar entrega",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -1958,17 +3108,15 @@ async function completeDelivery(req, res) {
 
             return res.status(400).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Pedido não encontrado ou não está em entrega.",
+
             });
         }
 
-
-        // ==================================================
-        // SOCKET.IO
-        // ==================================================
 
         emitirAtualizacaoPedido(
             pedido,
@@ -1978,25 +3126,30 @@ async function completeDelivery(req, res) {
 
         return res.json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             mensagem:
                 "Entrega finalizada.",
 
             pedido,
+
         });
+
 
     } catch (error) {
 
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao finalizar entrega",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -2018,10 +3171,12 @@ async function openSupport(req, res) {
 
             return res.status(401).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Usuário não identificado.",
+
             });
         }
 
@@ -2038,6 +3193,7 @@ async function openSupport(req, res) {
                 req.body.mensagem,
 
                 req.body.motivo
+
             );
 
 
@@ -2045,17 +3201,15 @@ async function openSupport(req, res) {
 
             return res.status(404).json({
 
-                sucesso: false,
+                sucesso:
+                    false,
 
                 erro:
                     "Pedido não encontrado.",
+
             });
         }
 
-
-        // ==================================================
-        // SOCKET.IO
-        // ==================================================
 
         emitirAtualizacaoPedido(
             pedido,
@@ -2065,25 +3219,30 @@ async function openSupport(req, res) {
 
         return res.json({
 
-            sucesso: true,
+            sucesso:
+                true,
 
             mensagem:
                 "Suporte aberto.",
 
             pedido,
+
         });
+
 
     } catch (error) {
 
         return res.status(500).json({
 
-            sucesso: false,
+            sucesso:
+                false,
 
             erro:
                 "Erro ao abrir suporte",
 
             detalhes:
                 error.message,
+
         });
     }
 }
@@ -2120,4 +3279,3 @@ module.exports = {
     openSupport,
 
 };
-
