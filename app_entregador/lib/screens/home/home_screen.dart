@@ -27,8 +27,32 @@ class _HomeScreenState extends State<HomeScreen> {
 
   int paginaAtual = 0;
 
+  // ============================================================
+  // FINANCEIRO
+  // ============================================================
+
   double ganhosHoje = 0.0;
   int entregasHoje = 0;
+
+  double saldoCarteira = 0.0;
+  double dinheiroEmMaos = 0.0;
+  double recebidoHoje = 0.0;
+
+  double ganhosTotais = 0.0;
+  int entregasTotais = 0;
+  double recebidoTotal = 0.0;
+
+  double totalDevidoRestaurante = 0.0;
+  double totalDevidoFoodjet = 0.0;
+  double limiteNegativo = 200.0;
+
+  List<Map<String, dynamic>> extratoCarteira = [];
+
+  bool carregandoCarteira = false;
+
+  // ============================================================
+  // OFERTAS
+  // ============================================================
 
   Timer? _timerOfertas;
 
@@ -81,18 +105,22 @@ class _HomeScreenState extends State<HomeScreen> {
       }
 
       final id =
-          usuario['id'] ?? usuario['usuario_id'] ?? usuario['entregador_id'];
+          usuario['id'] ??
+          usuario['usuario_id'] ??
+          usuario['entregador_id'];
 
-      final nome = usuario['nome'] ?? usuario['name'] ?? 'Entregador';
+      final nome =
+          usuario['nome'] ??
+          usuario['name'] ??
+          'Entregador';
 
-      final online = usuario['online'] == true ||
+      final online =
+          usuario['online'] == true ||
           usuario['online']?.toString().toLowerCase() == 'true';
 
       setState(() {
         entregadorId = id?.toString();
-
         nomeEntregador = nome.toString();
-
         disponivel = online;
       });
 
@@ -109,84 +137,161 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // RESUMO
+  // RESUMO FINANCEIRO / CARTEIRA
   // ============================================================
 
   Future<void> _carregarResumo() async {
+    if (entregadorId == null ||
+        entregadorId!.trim().isEmpty) {
+      debugPrint(
+        '⚠️ Não foi possível carregar carteira: ID do entregador vazio.',
+      );
+      return;
+    }
+
+    if (carregandoCarteira) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        carregandoCarteira = true;
+      });
+    }
+
     try {
-      final pedidos = await DeliveryService.meusPedidos();
+      debugPrint(
+        '💰 Consultando carteira do entregador: $entregadorId',
+      );
+
+      final dados = await DeliveryService.carteira(
+        entregadorId!,
+      );
 
       if (!mounted) return;
 
-      double total = 0;
-      int quantidade = 0;
-
-      final agora = DateTime.now();
-
-      for (final pedido in pedidos) {
-        final status = (pedido['status'] ?? '').toString().toUpperCase();
-
-        if (status != 'ENTREGUE') {
-          continue;
+      double numero(dynamic valor) {
+        if (valor == null) {
+          return 0.0;
         }
-
-        final dataTexto = pedido['entregue_em'] ??
-            pedido['atualizado_em'] ??
-            pedido['criado_em'];
-
-        DateTime? data;
-
-        if (dataTexto != null) {
-          data = DateTime.tryParse(
-            dataTexto.toString(),
-          );
-        }
-
-        if (data != null) {
-          if (data.year != agora.year ||
-              data.month != agora.month ||
-              data.day != agora.day) {
-            continue;
-          }
-        }
-
-        final valor = pedido['valor_entrega'] ??
-            pedido['taxa_entrega'] ??
-            pedido['valor_entregador'] ??
-            pedido['ganho_entregador'];
-
-        double? valorNumerico;
 
         if (valor is num) {
-          valorNumerico = valor.toDouble();
-        } else if (valor != null) {
-          valorNumerico = double.tryParse(
-            valor
-                .toString()
-                .replaceAll('R\$', '')
-                .replaceAll('.', '')
-                .replaceAll(',', '.')
-                .trim(),
-          );
+          return valor.toDouble();
         }
 
-        if (valorNumerico != null) {
-          total += valorNumerico;
-        }
+        final texto = valor
+            .toString()
+            .trim()
+            .replaceAll(',', '.');
 
-        quantidade++;
+        return double.tryParse(texto) ?? 0.0;
       }
 
-      if (!mounted) return;
+      int inteiro(dynamic valor) {
+        if (valor == null) {
+          return 0;
+        }
+
+        if (valor is num) {
+          return valor.toInt();
+        }
+
+        return int.tryParse(
+              valor.toString(),
+            ) ??
+            0;
+      }
+
+      final extrato = dados['extrato'];
 
       setState(() {
-        ganhosHoje = total;
-        entregasHoje = quantidade;
+        ganhosHoje = numero(
+          dados['ganhosHoje'],
+        );
+
+        entregasHoje = inteiro(
+          dados['entregasHoje'],
+        );
+
+        recebidoHoje = numero(
+          dados['recebidoHoje'],
+        );
+
+        ganhosTotais = numero(
+          dados['ganhosTotais'],
+        );
+
+        entregasTotais = inteiro(
+          dados['entregasTotais'],
+        );
+
+        recebidoTotal = numero(
+          dados['recebidoTotal'],
+        );
+
+        // IMPORTANTE:
+        // Saldo da carteira é diferente dos ganhos de hoje.
+        saldoCarteira = numero(
+          dados['saldo'],
+        );
+
+        dinheiroEmMaos = numero(
+          dados['dinheiroEmMaos'],
+        );
+
+        totalDevidoRestaurante = numero(
+          dados['totalDevidoRestaurante'],
+        );
+
+        totalDevidoFoodjet = numero(
+          dados['totalDevidoFoodjet'],
+        );
+
+        limiteNegativo = numero(
+          dados['limiteNegativo'],
+        );
+
+        if (extrato is List) {
+          extratoCarteira = extrato
+              .whereType<Map>()
+              .map(
+                (item) => Map<String, dynamic>.from(item),
+              )
+              .toList();
+        } else {
+          extratoCarteira = [];
+        }
       });
+
+      debugPrint(
+        '💰 CARTEIRA OK',
+      );
+
+      debugPrint(
+        '   Saldo: R\$ ${saldoCarteira.toStringAsFixed(2)}',
+      );
+
+      debugPrint(
+        '   Ganhos hoje: R\$ ${ganhosHoje.toStringAsFixed(2)}',
+      );
+
+      debugPrint(
+        '   Recebido hoje: R\$ ${recebidoHoje.toStringAsFixed(2)}',
+      );
+
+      debugPrint(
+        '   Entregas hoje: $entregasHoje',
+      );
     } catch (e) {
       debugPrint(
-        '⚠️ Não foi possível carregar resumo: $e',
+        '❌ Erro ao carregar carteira: $e',
       );
+    } finally {
+      if (mounted) {
+        setState(() {
+          carregandoCarteira = false;
+        });
+      }
     }
   }
 
@@ -197,7 +302,8 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> alternarDisponibilidade() async {
     if (alterandoDisponibilidade) return;
 
-    if (entregadorId == null || entregadorId!.isEmpty) {
+    if (entregadorId == null ||
+        entregadorId!.isEmpty) {
       _mostrarMensagem(
         'ID do entregador não encontrado.',
         erro: true,
@@ -212,7 +318,8 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     try {
-      final entregador = await DeliveryService.alterarStatus(
+      final entregador =
+          await DeliveryService.alterarStatus(
         id: entregadorId!,
         online: novoStatus,
       );
@@ -256,7 +363,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // BUSCAR OFERTAS REAIS
+  // BUSCAR OFERTAS
   // ============================================================
 
   Future<void> _verificarOfertas() async {
@@ -264,18 +371,21 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (!disponivel) return;
 
-    if (entregadorId == null || entregadorId!.isEmpty) {
+    if (entregadorId == null ||
+        entregadorId!.isEmpty) {
       return;
     }
 
-    if (_buscandoOferta || _ofertaAberta) {
+    if (_buscandoOferta ||
+        _ofertaAberta) {
       return;
     }
 
     _buscandoOferta = true;
 
     try {
-      final pedidos = await DeliveryService.buscarPedidosDisponiveis();
+      final pedidos =
+          await DeliveryService.buscarPedidosDisponiveis();
 
       if (!mounted || pedidos.isEmpty) {
         return;
@@ -283,9 +393,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
       final oferta = pedidos.first;
 
-      final pedidoId = _obterPedidoId(oferta);
+      final pedidoId = _obterPedidoId(
+        oferta,
+      );
 
-      if (pedidoId == null || pedidoId.isEmpty) {
+      if (pedidoId == null ||
+          pedidoId.isEmpty) {
         debugPrint(
           '⚠️ Pedido sem ID: $oferta',
         );
@@ -303,12 +416,15 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (!mounted) return;
 
-      final resultado = await showGeneralDialog<bool>(
+      final resultado =
+          await showGeneralDialog<bool>(
         context: context,
         barrierDismissible: false,
         barrierLabel: 'Nova oferta',
-        barrierColor: Colors.black.withOpacity(0.72),
-        transitionDuration: const Duration(
+        barrierColor:
+            Colors.black.withOpacity(0.72),
+        transitionDuration:
+            const Duration(
           milliseconds: 300,
         ),
         pageBuilder: (
@@ -327,7 +443,8 @@ class _HomeScreenState extends State<HomeScreen> {
           secondaryAnimation,
           child,
         ) {
-          final curva = CurvedAnimation(
+          final curva =
+              CurvedAnimation(
             parent: animation,
             curve: Curves.easeOutBack,
           );
@@ -390,7 +507,10 @@ class _HomeScreenState extends State<HomeScreen> {
   String? _obterPedidoId(
     Map<String, dynamic> pedido,
   ) {
-    final id = pedido['id'] ?? pedido['pedido_id'] ?? pedido['order_id'];
+    final id =
+        pedido['id'] ??
+        pedido['pedido_id'] ??
+        pedido['order_id'];
 
     if (id == null) {
       return null;
@@ -416,13 +536,16 @@ class _HomeScreenState extends State<HomeScreen> {
           content: Text(
             mensagem,
           ),
-          backgroundColor: erro ? vermelho : verde,
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.all(16),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(
-              14,
-            ),
+          backgroundColor:
+              erro ? vermelho : verde,
+          behavior:
+              SnackBarBehavior.floating,
+          margin:
+              const EdgeInsets.all(16),
+          shape:
+              RoundedRectangleBorder(
+            borderRadius:
+                BorderRadius.circular(14),
           ),
         ),
       );
@@ -459,7 +582,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNavigation(),
+      bottomNavigationBar:
+          _buildBottomNavigation(),
     );
   }
 
@@ -474,8 +598,10 @@ class _HomeScreenState extends State<HomeScreen> {
         await _carregarDados();
       },
       child: ListView(
-        physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.only(bottom: 30),
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        padding:
+            const EdgeInsets.only(bottom: 30),
         children: [
           _buildHeader(),
           const SizedBox(height: 14),
@@ -498,7 +624,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildHeader() {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding:
+          const EdgeInsets.fromLTRB(
         18,
         14,
         18,
@@ -509,11 +636,12 @@ class _HomeScreenState extends State<HomeScreen> {
           Container(
             width: 48,
             height: 48,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFEBDD),
-              borderRadius: BorderRadius.circular(
-                16,
-              ),
+            decoration:
+                BoxDecoration(
+              color:
+                  const Color(0xFFFFEBDD),
+              borderRadius:
+                  BorderRadius.circular(16),
             ),
             child: const Icon(
               Icons.delivery_dining,
@@ -522,50 +650,56 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const SizedBox(width: 12),
-
-
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(top: 1),
+              padding:
+                  const EdgeInsets.only(
+                top: 1,
+              ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   const Text(
                     'Olá, entregador! 🛵',
                     style: TextStyle(
                       fontSize: 18,
                       color: Colors.black87,
-                      fontWeight: FontWeight.w800,
+                      fontWeight:
+                          FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 3),
                   Text(
                     nomeEntregador,
                     maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
+                    overflow:
+                        TextOverflow.ellipsis,
+                    style:
+                        const TextStyle(
                       fontSize: 14,
-                      color: Colors.black54,
-                      fontWeight: FontWeight.w500,
+                      color:
+                          Colors.black54,
+                      fontWeight:
+                          FontWeight.w500,
                     ),
                   ),
                 ],
               ),
             ),
           ),
-         
-         
           Container(
             width: 42,
             height: 42,
-            decoration: BoxDecoration(
+            decoration:
+                BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(
-                14,
-              ),
+              borderRadius:
+                  BorderRadius.circular(14),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(
+                  color:
+                      Colors.black.withOpacity(
                     0.05,
                   ),
                   blurRadius: 10,
@@ -595,35 +729,41 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildStatusCard() {
     return Padding(
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         horizontal: 18,
       ),
       child: Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
+        padding:
+            const EdgeInsets.all(18),
+        decoration:
+            BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(
-            22,
-          ),
+          borderRadius:
+              BorderRadius.circular(22),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(
+              color:
+                  Colors.black.withOpacity(
                 0.05,
               ),
               blurRadius: 15,
-              offset: const Offset(0, 5),
+              offset:
+                  const Offset(0, 5),
             ),
           ],
         ),
         child: Row(
           children: [
             AnimatedContainer(
-              duration: const Duration(
+              duration:
+                  const Duration(
                 milliseconds: 250,
               ),
               width: 52,
               height: 52,
-              decoration: BoxDecoration(
+              decoration:
+                  BoxDecoration(
                 color: disponivel
                     ? const Color(
                         0xFFE9F9EF,
@@ -635,22 +775,31 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               child: Icon(
                 disponivel
-                    ? Icons.radio_button_checked
-                    : Icons.radio_button_off,
-                color: disponivel ? verde : Colors.grey,
+                    ? Icons
+                        .radio_button_checked
+                    : Icons
+                        .radio_button_off,
+                color: disponivel
+                    ? verde
+                    : Colors.grey,
                 size: 28,
               ),
             ),
             const SizedBox(width: 13),
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Text(
-                    disponivel ? 'Você está online' : 'Você está offline',
-                    style: const TextStyle(
+                    disponivel
+                        ? 'Você está online'
+                        : 'Você está offline',
+                    style:
+                        const TextStyle(
                       fontSize: 17,
-                      fontWeight: FontWeight.w800,
+                      fontWeight:
+                          FontWeight.w800,
                     ),
                   ),
                   const SizedBox(height: 3),
@@ -658,9 +807,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     disponivel
                         ? 'Aguardando novas ofertas'
                         : 'Fique online para receber ofertas',
-                    style: const TextStyle(
+                    style:
+                        const TextStyle(
                       fontSize: 12,
-                      color: Colors.black54,
+                      color:
+                          Colors.black54,
                     ),
                   ),
                 ],
@@ -669,11 +820,12 @@ class _HomeScreenState extends State<HomeScreen> {
             Switch.adaptive(
               value: disponivel,
               activeColor: laranja,
-              onChanged: alterandoDisponibilidade
-                  ? null
-                  : (_) {
-                      alternarDisponibilidade();
-                    },
+              onChanged:
+                  alterandoDisponibilidade
+                      ? null
+                      : (_) {
+                          alternarDisponibilidade();
+                        },
             ),
           ],
         ),
@@ -687,24 +839,28 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildMapa() {
     return Padding(
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         horizontal: 18,
       ),
       child: Container(
         height: 285,
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(
+        clipBehavior:
+            Clip.antiAlias,
+        decoration:
+            BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.circular(
-            24,
-          ),
+          borderRadius:
+              BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(
+              color:
+                  Colors.black.withOpacity(
                 0.06,
               ),
               blurRadius: 16,
-              offset: const Offset(0, 5),
+              offset:
+                  const Offset(0, 5),
             ),
           ],
         ),
@@ -717,18 +873,22 @@ class _HomeScreenState extends State<HomeScreen> {
               top: 14,
               left: 14,
               child: Container(
-                padding: const EdgeInsets.symmetric(
+                padding:
+                    const EdgeInsets.symmetric(
                   horizontal: 12,
                   vertical: 9,
                 ),
-                decoration: BoxDecoration(
+                decoration:
+                    BoxDecoration(
                   color: Colors.white,
-                  borderRadius: BorderRadius.circular(
+                  borderRadius:
+                      BorderRadius.circular(
                     14,
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(
+                      color: Colors.black
+                          .withOpacity(
                         0.12,
                       ),
                       blurRadius: 10,
@@ -736,24 +896,33 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
+                  mainAxisSize:
+                      MainAxisSize.min,
                   children: [
                     Container(
                       width: 8,
                       height: 8,
-                      decoration: BoxDecoration(
-                        color: disponivel ? verde : Colors.grey,
-                        shape: BoxShape.circle,
+                      decoration:
+                          BoxDecoration(
+                        color: disponivel
+                            ? verde
+                            : Colors.grey,
+                        shape:
+                            BoxShape.circle,
                       ),
                     ),
                     const SizedBox(
                       width: 7,
                     ),
                     Text(
-                      disponivel ? 'Procurando entregas' : 'Offline',
-                      style: const TextStyle(
+                      disponivel
+                          ? 'Procurando entregas'
+                          : 'Offline',
+                      style:
+                          const TextStyle(
                         fontSize: 12,
-                        fontWeight: FontWeight.w700,
+                        fontWeight:
+                            FontWeight.w700,
                       ),
                     ),
                   ],
@@ -767,12 +936,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   // ============================================================
-  // RESUMO
+  // RESUMO HOJE
   // ============================================================
 
   Widget _buildResumoHoje() {
     return Padding(
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         horizontal: 18,
       ),
       child: Row(
@@ -782,15 +952,18 @@ class _HomeScreenState extends State<HomeScreen> {
               titulo: 'Ganhos hoje',
               valor:
                   'R\$ ${ganhosHoje.toStringAsFixed(2).replaceAll('.', ',')}',
-              icone: Icons.account_balance_wallet_outlined,
+              icone:
+                  Icons.account_balance_wallet_outlined,
             ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: _buildResumoCard(
               titulo: 'Entregas',
-              valor: entregasHoje.toString(),
-              icone: Icons.local_shipping_outlined,
+              valor:
+                  entregasHoje.toString(),
+              icone:
+                  Icons.local_shipping_outlined,
             ),
           ),
         ],
@@ -804,15 +977,17 @@ class _HomeScreenState extends State<HomeScreen> {
     required IconData icone,
   }) {
     return Container(
-      padding: const EdgeInsets.all(17),
-      decoration: BoxDecoration(
+      padding:
+          const EdgeInsets.all(17),
+      decoration:
+          BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(
-          20,
-        ),
+        borderRadius:
+            BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(
+            color:
+                Colors.black.withOpacity(
               0.04,
             ),
             blurRadius: 12,
@@ -820,16 +995,18 @@ class _HomeScreenState extends State<HomeScreen> {
         ],
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           Container(
             width: 38,
             height: 38,
-            decoration: BoxDecoration(
-              color: const Color(0xFFFFF1E8),
-              borderRadius: BorderRadius.circular(
-                12,
-              ),
+            decoration:
+                BoxDecoration(
+              color:
+                  const Color(0xFFFFF1E8),
+              borderRadius:
+                  BorderRadius.circular(12),
             ),
             child: Icon(
               icone,
@@ -840,7 +1017,8 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 13),
           Text(
             titulo,
-            style: const TextStyle(
+            style:
+                const TextStyle(
               fontSize: 12,
               color: Colors.black54,
             ),
@@ -848,9 +1026,11 @@ class _HomeScreenState extends State<HomeScreen> {
           const SizedBox(height: 4),
           Text(
             valor,
-            style: const TextStyle(
+            style:
+                const TextStyle(
               fontSize: 21,
-              fontWeight: FontWeight.w900,
+              fontWeight:
+                  FontWeight.w900,
             ),
           ),
         ],
@@ -864,13 +1044,13 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildSos() {
     return Padding(
-      padding: const EdgeInsets.symmetric(
+      padding:
+          const EdgeInsets.symmetric(
         horizontal: 18,
       ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(
-          20,
-        ),
+        borderRadius:
+            BorderRadius.circular(20),
         onTap: () {
           showDialog(
             context: context,
@@ -879,15 +1059,18 @@ class _HomeScreenState extends State<HomeScreen> {
                 title: const Text(
                   'SOS FoodJet',
                 ),
-                content: const Text(
+                content:
+                    const Text(
                   'Em uma situação de emergência, procure um local seguro e acione os serviços de emergência.',
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () => Navigator.pop(
+                    onPressed: () =>
+                        Navigator.pop(
                       context,
                     ),
-                    child: const Text(
+                    child:
+                        const Text(
                       'Fechar',
                     ),
                   ),
@@ -897,25 +1080,28 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
         child: Container(
-          padding: const EdgeInsets.all(
-            17,
-          ),
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFF0F0),
-            borderRadius: BorderRadius.circular(
-              20,
-            ),
+          padding:
+              const EdgeInsets.all(17),
+          decoration:
+              BoxDecoration(
+            color:
+                const Color(0xFFFFF0F0),
+            borderRadius:
+                BorderRadius.circular(20),
           ),
           child: Row(
             children: [
               Container(
                 width: 44,
                 height: 44,
-                decoration: const BoxDecoration(
+                decoration:
+                    const BoxDecoration(
                   color: vermelho,
-                  shape: BoxShape.circle,
+                  shape:
+                      BoxShape.circle,
                 ),
-                child: const Icon(
+                child:
+                    const Icon(
                   Icons.emergency,
                   color: Colors.white,
                 ),
@@ -925,14 +1111,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
                   children: [
                     Text(
                       'SOS',
                       style: TextStyle(
-                        fontWeight: FontWeight.w900,
+                        fontWeight:
+                            FontWeight.w900,
                         fontSize: 15,
-                        color: vermelho,
+                        color:
+                            vermelho,
                       ),
                     ),
                     SizedBox(
@@ -942,7 +1132,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       'Precisa de ajuda?',
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.black54,
+                        color:
+                            Colors.black54,
                       ),
                     ),
                   ],
@@ -950,7 +1141,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               const Icon(
                 Icons.chevron_right,
-                color: Colors.black38,
+                color:
+                    Colors.black38,
               ),
             ],
           ),
@@ -964,85 +1156,1081 @@ class _HomeScreenState extends State<HomeScreen> {
   // ============================================================
 
   Widget _buildGanhos() {
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(
-        18,
-        20,
-        18,
-        30,
-      ),
-      children: [
-        const Text(
-          'Meus ganhos',
-          style: TextStyle(
-            fontSize: 27,
-            fontWeight: FontWeight.w900,
-          ),
+    // CORREÇÃO:
+    // saldo disponível é o saldo da carteira,
+    // e não os ganhos de hoje.
+    final saldo = saldoCarteira;
+
+    final saldoFormatado =
+        'R\$ ${saldo.toStringAsFixed(2).replaceAll('.', ',')}';
+
+    final ganhosHojeFormatado =
+        'R\$ ${ganhosHoje.toStringAsFixed(2).replaceAll('.', ',')}';
+
+    final recebidoHojeFormatado =
+        'R\$ ${recebidoHoje.toStringAsFixed(2).replaceAll('.', ',')}';
+
+    return RefreshIndicator(
+      color: laranja,
+      onRefresh: () async {
+        await _carregarResumo();
+      },
+      child: ListView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        padding:
+            const EdgeInsets.fromLTRB(
+          18,
+          20,
+          18,
+          30,
         ),
-        const SizedBox(height: 6),
-        const Text(
-          'Acompanhe seus ganhos e entregas.',
-          style: TextStyle(
-            color: Colors.black54,
-          ),
-        ),
-        const SizedBox(height: 20),
-        Container(
-          padding: const EdgeInsets.all(
-            22,
-          ),
-          decoration: BoxDecoration(
-            color: laranja,
-            borderRadius: BorderRadius.circular(
-              25,
-            ),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // ======================================================
+          // CABEÇALHO
+          // ======================================================
+
+          Row(
+            crossAxisAlignment:
+                CrossAxisAlignment.center,
             children: [
-              const Text(
-                'Ganhos de hoje',
-                style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: 13,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Meus ganhos',
+                      style:
+                          TextStyle(
+                        fontSize: 28,
+                        fontWeight:
+                            FontWeight.w900,
+                        letterSpacing:
+                            -0.6,
+                      ),
+                    ),
+                    const SizedBox(
+                      height: 5,
+                    ),
+                    Text(
+                      'Seu dinheiro, seu ritmo.',
+                      style:
+                          TextStyle(
+                        color:
+                            Colors.grey.shade600,
+                        fontSize: 13,
+                        fontWeight:
+                            FontWeight.w500,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(
-                height: 5,
-              ),
-              Text(
-                'R\$ ${ganhosHoje.toStringAsFixed(2).replaceAll('.', ',')}',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 34,
-                  fontWeight: FontWeight.w900,
+              Container(
+                width: 46,
+                height: 46,
+                decoration:
+                    BoxDecoration(
+                  color:
+                      const Color(0xFFFFEBDD),
+                  borderRadius:
+                      BorderRadius.circular(
+                    15,
+                  ),
                 ),
-              ),
-              const SizedBox(
-                height: 12,
-              ),
-              Text(
-                '$entregasHoje entregas concluídas',
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 13,
+                child:
+                    const Icon(
+                  Icons
+                      .account_balance_wallet_rounded,
+                  color: laranja,
+                  size: 24,
                 ),
               ),
             ],
           ),
-        ),
-        const SizedBox(height: 18),
-        _buildInfoLinha(
-          Icons.today,
-          'Entregas hoje',
-          '$entregasHoje',
-        ),
-        _buildInfoLinha(
-          Icons.account_balance_wallet_outlined,
-          'Total recebido',
-          'R\$ ${ganhosHoje.toStringAsFixed(2).replaceAll('.', ',')}',
-        ),
-      ],
+
+          const SizedBox(
+            height: 20,
+          ),
+
+          // ======================================================
+          // CARD PRINCIPAL - SALDO
+          // ======================================================
+
+          Container(
+            padding:
+                const EdgeInsets.fromLTRB(
+              22,
+              22,
+              22,
+              20,
+            ),
+            decoration:
+                BoxDecoration(
+              gradient:
+                  const LinearGradient(
+                begin:
+                    Alignment.topLeft,
+                end: Alignment
+                    .bottomRight,
+                colors: [
+                  Color(0xFFFF8A3D),
+                  Color(0xFFF97316),
+                  Color(0xFFE85D04),
+                ],
+              ),
+              borderRadius:
+                  BorderRadius.circular(28),
+              boxShadow: [
+                BoxShadow(
+                  color:
+                      laranja.withOpacity(
+                    0.24,
+                  ),
+                  blurRadius: 22,
+                  offset:
+                      const Offset(
+                    0,
+                    10,
+                  ),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 38,
+                      height: 38,
+                      decoration:
+                          BoxDecoration(
+                        color: Colors.white
+                            .withOpacity(
+                          0.18,
+                        ),
+                        borderRadius:
+                            BorderRadius
+                                .circular(
+                          12,
+                        ),
+                      ),
+                      child:
+                          const Icon(
+                        Icons
+                            .payments_rounded,
+                        color:
+                            Colors.white,
+                        size: 21,
+                      ),
+                    ),
+                    const SizedBox(
+                      width: 10,
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Saldo disponível',
+                        style:
+                            TextStyle(
+                          color:
+                              Colors.white,
+                          fontSize: 14,
+                          fontWeight:
+                              FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding:
+                          const EdgeInsets
+                              .symmetric(
+                        horizontal: 9,
+                        vertical: 5,
+                      ),
+                      decoration:
+                          BoxDecoration(
+                        color: Colors.white
+                            .withOpacity(
+                          0.16,
+                        ),
+                        borderRadius:
+                            BorderRadius
+                                .circular(
+                          20,
+                        ),
+                      ),
+                      child:
+                          const Row(
+                        mainAxisSize:
+                            MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons
+                                .lock_open_rounded,
+                            color:
+                                Colors.white,
+                            size: 12,
+                          ),
+                          SizedBox(
+                            width: 4,
+                          ),
+                          Text(
+                            'Disponível',
+                            style:
+                                TextStyle(
+                              color:
+                                  Colors.white,
+                              fontSize:
+                                  10,
+                              fontWeight:
+                                  FontWeight
+                                      .w700,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(
+                  height: 20,
+                ),
+
+                // ==================================================
+                // SALDO
+                // ==================================================
+
+                carregandoCarteira
+                    ? const SizedBox(
+                        height: 43,
+                        child:
+                            Align(
+                          alignment:
+                              Alignment
+                                  .centerLeft,
+                          child:
+                              SizedBox(
+                            width: 30,
+                            height: 30,
+                            child:
+                                CircularProgressIndicator(
+                              strokeWidth:
+                                  3,
+                              color:
+                                  Colors.white,
+                            ),
+                          ),
+                        ),
+                      )
+                    : Text(
+                        saldoFormatado,
+                        style:
+                            const TextStyle(
+                          color:
+                              Colors.white,
+                          fontSize: 36,
+                          fontWeight:
+                              FontWeight.w900,
+                          letterSpacing:
+                              -1,
+                        ),
+                      ),
+
+                const SizedBox(
+                  height: 4,
+                ),
+
+                const Text(
+                  'Saldo atual da carteira',
+                  style:
+                      TextStyle(
+                    color:
+                        Colors.white70,
+                    fontSize: 12,
+                    fontWeight:
+                        FontWeight.w500,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 20,
+                ),
+
+                // ==================================================
+                // PIX
+                // ==================================================
+
+                SizedBox(
+                  width:
+                      double.infinity,
+                  height: 54,
+                  child:
+                      ElevatedButton(
+                    onPressed:
+                        (!carregandoCarteira &&
+                                saldo > 0)
+                            ? _abrirSaquePix
+                            : null,
+                    style:
+                        ElevatedButton.styleFrom(
+                      backgroundColor:
+                          Colors.white,
+                      disabledBackgroundColor:
+                          Colors.white
+                              .withOpacity(
+                        0.45,
+                      ),
+                      foregroundColor:
+                          laranja,
+                      elevation: 0,
+                      shape:
+                          RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius
+                                .circular(
+                          17,
+                        ),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment:
+                          MainAxisAlignment
+                              .center,
+                      children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration:
+                              BoxDecoration(
+                            color:
+                                const Color(
+                              0xFFFFEBDD,
+                            ),
+                            borderRadius:
+                                BorderRadius
+                                    .circular(
+                              9,
+                            ),
+                          ),
+                          child:
+                              const Icon(
+                            Icons.pix,
+                            color:
+                                laranja,
+                            size: 19,
+                          ),
+                        ),
+                        const SizedBox(
+                          width: 9,
+                        ),
+                        const Text(
+                          'SACAR VIA PIX',
+                          style:
+                              TextStyle(
+                            fontSize: 14,
+                            fontWeight:
+                                FontWeight
+                                    .w900,
+                            letterSpacing:
+                                0.3,
+                          ),
+                        ),
+                        const SizedBox(
+                          width: 6,
+                        ),
+                        const Icon(
+                          Icons
+                              .arrow_forward_rounded,
+                          size: 19,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(
+            height: 16,
+          ),
+
+          // ======================================================
+          // RESUMO
+          // ======================================================
+
+          Row(
+            children: [
+              Expanded(
+                child:
+                    _buildGanhoMiniCard(
+                  icone: Icons
+                      .local_shipping_rounded,
+                  titulo:
+                      'Entregas',
+                  valor:
+                      '$entregasHoje',
+                  subtitulo:
+                      'hoje',
+                ),
+              ),
+              const SizedBox(
+                width: 12,
+              ),
+              Expanded(
+                child:
+                    _buildGanhoMiniCard(
+                  icone: Icons
+                      .trending_up_rounded,
+                  titulo:
+                      'Média',
+                  valor:
+                      entregasHoje > 0
+                          ? 'R\$ ${(ganhosHoje / entregasHoje).toStringAsFixed(2).replaceAll('.', ',')}'
+                          : 'R\$ 0,00',
+                  subtitulo:
+                      'por entrega',
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(
+            height: 20,
+          ),
+
+          // ======================================================
+          // PIX
+          // ======================================================
+
+          Container(
+            padding:
+                const EdgeInsets.all(17),
+            decoration:
+                BoxDecoration(
+              color: Colors.white,
+              borderRadius:
+                  BorderRadius.circular(
+                21,
+              ),
+              border: Border.all(
+                color:
+                    const Color(
+                  0xFFEFEFEF,
+                ),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black
+                      .withOpacity(
+                    0.035,
+                  ),
+                  blurRadius: 12,
+                  offset:
+                      const Offset(
+                    0,
+                    4,
+                  ),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 45,
+                  height: 45,
+                  decoration:
+                      BoxDecoration(
+                    color:
+                        const Color(
+                      0xFFE9F9EF,
+                    ),
+                    borderRadius:
+                        BorderRadius.circular(
+                      14,
+                    ),
+                  ),
+                  child:
+                      const Icon(
+                    Icons.pix,
+                    color:
+                        Color(0xFF16A34A),
+                    size: 25,
+                  ),
+                ),
+                const SizedBox(
+                  width: 12,
+                ),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment:
+                        CrossAxisAlignment
+                            .start,
+                    children: [
+                      Text(
+                        'Receba via PIX',
+                        style:
+                            TextStyle(
+                          fontSize: 14,
+                          fontWeight:
+                              FontWeight.w800,
+                        ),
+                      ),
+                      SizedBox(
+                        height: 3,
+                      ),
+                      Text(
+                        'Cadastre sua chave PIX para receber seus ganhos.',
+                        style:
+                            TextStyle(
+                          fontSize:
+                              11.5,
+                          color:
+                              Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(
+                  Icons
+                      .chevron_right_rounded,
+                  color:
+                      Colors.black38,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(
+            height: 20,
+          ),
+
+          // ======================================================
+          // RESUMO FINANCEIRO
+          // ======================================================
+
+          const Text(
+            'Resumo de hoje',
+            style:
+                TextStyle(
+              fontSize: 18,
+              fontWeight:
+                  FontWeight.w900,
+            ),
+          ),
+
+          const SizedBox(
+            height: 10,
+          ),
+
+          _buildInfoLinha(
+            Icons.local_shipping_rounded,
+            'Entregas concluídas',
+            '$entregasHoje',
+          ),
+
+          _buildInfoLinha(
+            Icons.payments_rounded,
+            'Total recebido',
+            recebidoHojeFormatado,
+          ),
+
+          _buildInfoLinha(
+            Icons.account_balance_wallet_outlined,
+            'Saldo disponível',
+            saldoFormatado,
+          ),
+
+          _buildInfoLinha(
+            Icons.trending_up_rounded,
+            'Ganhos hoje',
+            ganhosHojeFormatado,
+          ),
+
+          _buildInfoLinha(
+            Icons.account_balance_rounded,
+            'Dinheiro em mãos',
+            'R\$ ${dinheiroEmMaos.toStringAsFixed(2).replaceAll('.', ',')}',
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // MINI CARD GANHOS
+  // ============================================================
+
+  Widget _buildGanhoMiniCard({
+    required IconData icone,
+    required String titulo,
+    required String valor,
+    required String subtitulo,
+  }) {
+    return Container(
+      padding:
+          const EdgeInsets.all(16),
+      decoration:
+          BoxDecoration(
+        color: Colors.white,
+        borderRadius:
+            BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color:
+                Colors.black.withOpacity(
+              0.04,
+            ),
+            blurRadius: 12,
+            offset:
+                const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 38,
+            height: 38,
+            decoration:
+                BoxDecoration(
+              color:
+                  const Color(0xFFFFF1E8),
+              borderRadius:
+                  BorderRadius.circular(
+                12,
+              ),
+            ),
+            child: Icon(
+              icone,
+              color: laranja,
+              size: 20,
+            ),
+          ),
+          const SizedBox(
+            height: 12,
+          ),
+          Text(
+            titulo,
+            style:
+                const TextStyle(
+              fontSize: 11,
+              color: Colors.black54,
+              fontWeight:
+                  FontWeight.w600,
+            ),
+          ),
+          const SizedBox(
+            height: 3,
+          ),
+          Text(
+            valor,
+            style:
+                const TextStyle(
+              fontSize: 19,
+              fontWeight:
+                  FontWeight.w900,
+            ),
+          ),
+          const SizedBox(
+            height: 2,
+          ),
+          Text(
+            subtitulo,
+            style:
+                const TextStyle(
+              fontSize: 10,
+              color: Colors.black45,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ============================================================
+  // SAQUE PIX
+  // ============================================================
+
+  Future<void> _abrirSaquePix() async {
+    final controller =
+        TextEditingController();
+
+    final saldoDisponivel =
+        saldoCarteira;
+
+    final valor =
+        await showModalBottomSheet<double>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor:
+          Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding:
+              EdgeInsets.only(
+            bottom:
+                MediaQuery.of(context)
+                    .viewInsets
+                    .bottom,
+          ),
+          child: Container(
+            padding:
+                const EdgeInsets.fromLTRB(
+              22,
+              12,
+              22,
+              28,
+            ),
+            decoration:
+                const BoxDecoration(
+              color: Colors.white,
+              borderRadius:
+                  BorderRadius.vertical(
+                top: Radius.circular(30),
+              ),
+            ),
+            child: Column(
+              mainAxisSize:
+                  MainAxisSize.min,
+              crossAxisAlignment:
+                  CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 42,
+                    height: 5,
+                    decoration:
+                        BoxDecoration(
+                      color:
+                          Colors.black12,
+                      borderRadius:
+                          BorderRadius.circular(
+                        10,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 22,
+                ),
+
+                Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration:
+                          BoxDecoration(
+                        color:
+                            const Color(
+                          0xFFE9F9EF,
+                        ),
+                        borderRadius:
+                            BorderRadius.circular(
+                          15,
+                        ),
+                      ),
+                      child:
+                          const Icon(
+                        Icons.pix,
+                        color:
+                            Color(
+                          0xFF16A34A,
+                        ),
+                        size: 27,
+                      ),
+                    ),
+                    const SizedBox(
+                      width: 12,
+                    ),
+                    const Column(
+                      crossAxisAlignment:
+                          CrossAxisAlignment
+                              .start,
+                      children: [
+                        Text(
+                          'Saque via PIX',
+                          style:
+                              TextStyle(
+                            fontSize: 20,
+                            fontWeight:
+                                FontWeight
+                                    .w900,
+                          ),
+                        ),
+                        SizedBox(
+                          height: 2,
+                        ),
+                        Text(
+                          'Receba seus ganhos',
+                          style:
+                              TextStyle(
+                            fontSize: 12,
+                            color:
+                                Colors.black54,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+
+                const SizedBox(
+                  height: 24,
+                ),
+
+                const Text(
+                  'Saldo disponível',
+                  style:
+                      TextStyle(
+                    fontSize: 12,
+                    color:
+                        Colors.black54,
+                    fontWeight:
+                        FontWeight.w600,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 4,
+                ),
+
+                Text(
+                  'R\$ ${saldoDisponivel.toStringAsFixed(2).replaceAll('.', ',')}',
+                  style:
+                      const TextStyle(
+                    fontSize: 25,
+                    fontWeight:
+                        FontWeight.w900,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 20,
+                ),
+
+                const Text(
+                  'Quanto deseja sacar?',
+                  style:
+                      TextStyle(
+                    fontSize: 13,
+                    fontWeight:
+                        FontWeight.w800,
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 8,
+                ),
+
+                TextField(
+                  controller:
+                      controller,
+                  keyboardType:
+                      const TextInputType
+                          .numberWithOptions(
+                    decimal: true,
+                  ),
+                  decoration:
+                      InputDecoration(
+                    prefixText:
+                        'R\$ ',
+                    hintText:
+                        '0,00',
+                    filled: true,
+                    fillColor:
+                        const Color(
+                      0xFFF7F7F7,
+                    ),
+                    border:
+                        OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius
+                              .circular(
+                        16,
+                      ),
+                      borderSide:
+                          BorderSide.none,
+                    ),
+                    focusedBorder:
+                        OutlineInputBorder(
+                      borderRadius:
+                          BorderRadius
+                              .circular(
+                        16,
+                      ),
+                      borderSide:
+                          const BorderSide(
+                        color:
+                            laranja,
+                        width: 1.5,
+                      ),
+                    ),
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 14,
+                ),
+
+                Container(
+                  padding:
+                      const EdgeInsets.all(
+                    13,
+                  ),
+                  decoration:
+                      BoxDecoration(
+                    color:
+                        const Color(
+                      0xFFF0FDF4,
+                    ),
+                    borderRadius:
+                        BorderRadius.circular(
+                      14,
+                    ),
+                  ),
+                  child:
+                      const Row(
+                    children: [
+                      Icon(
+                        Icons
+                            .verified_user_outlined,
+                        color:
+                            Color(
+                          0xFF16A34A,
+                        ),
+                        size: 19,
+                      ),
+                      SizedBox(
+                        width: 8,
+                      ),
+                      Expanded(
+                        child: Text(
+                          'O saque será enviado para sua chave PIX cadastrada.',
+                          style:
+                              TextStyle(
+                            fontSize:
+                                11,
+                            color:
+                                Color(
+                              0xFF166534,
+                            ),
+                            fontWeight:
+                                FontWeight
+                                    .w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(
+                  height: 18,
+                ),
+
+                SizedBox(
+                  width:
+                      double.infinity,
+                  height: 55,
+                  child:
+                      ElevatedButton(
+                    onPressed: () {
+                      final texto =
+                          controller
+                              .text
+                              .replaceAll(
+                                '.',
+                                '',
+                              )
+                              .replaceAll(
+                                ',',
+                                '.',
+                              )
+                              .trim();
+
+                      final valorDigitado =
+                          double.tryParse(
+                        texto,
+                      );
+
+                      if (valorDigitado ==
+                              null ||
+                          valorDigitado <=
+                              0) {
+                        _mostrarMensagem(
+                          'Digite um valor válido.',
+                          erro: true,
+                        );
+                        return;
+                      }
+
+                      if (valorDigitado >
+                          saldoDisponivel) {
+                        _mostrarMensagem(
+                          'O valor do saque é maior que seu saldo disponível.',
+                          erro: true,
+                        );
+                        return;
+                      }
+
+                      Navigator.pop(
+                        context,
+                        valorDigitado,
+                      );
+                    },
+                    style:
+                        ElevatedButton.styleFrom(
+                      backgroundColor:
+                          laranja,
+                      foregroundColor:
+                          Colors.white,
+                      elevation: 0,
+                      shape:
+                          RoundedRectangleBorder(
+                        borderRadius:
+                            BorderRadius.circular(
+                          17,
+                        ),
+                      ),
+                    ),
+                    child:
+                        const Text(
+                      'CONTINUAR COM O SAQUE',
+                      style:
+                          TextStyle(
+                        fontSize: 14,
+                        fontWeight:
+                            FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    controller.dispose();
+
+    if (!mounted ||
+        valor == null) {
+      return;
+    }
+
+    _mostrarMensagem(
+      'Saque de R\$ ${valor.toStringAsFixed(2).replaceAll('.', ',')} solicitado.',
     );
   }
 
@@ -1052,7 +2240,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildAjuda() {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
+      padding:
+          const EdgeInsets.fromLTRB(
         18,
         20,
         18,
@@ -1061,19 +2250,26 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         const Text(
           'Ajuda',
-          style: TextStyle(
+          style:
+              TextStyle(
             fontSize: 27,
-            fontWeight: FontWeight.w900,
+            fontWeight:
+                FontWeight.w900,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(
+          height: 8,
+        ),
         const Text(
           'Como podemos ajudar?',
-          style: TextStyle(
+          style:
+              TextStyle(
             color: Colors.black54,
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(
+          height: 20,
+        ),
         _buildAjudaItem(
           Icons.local_shipping_outlined,
           'Como funciona uma entrega?',
@@ -1099,24 +2295,26 @@ class _HomeScreenState extends State<HomeScreen> {
     String titulo,
   ) {
     return Container(
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 10,
       ),
-      decoration: BoxDecoration(
+      decoration:
+          BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(
-          18,
-        ),
+        borderRadius:
+            BorderRadius.circular(18),
       ),
       child: ListTile(
         leading: Container(
           width: 42,
           height: 42,
-          decoration: BoxDecoration(
-            color: const Color(0xFFFFF1E8),
-            borderRadius: BorderRadius.circular(
-              13,
-            ),
+          decoration:
+              BoxDecoration(
+            color:
+                const Color(0xFFFFF1E8),
+            borderRadius:
+                BorderRadius.circular(13),
           ),
           child: Icon(
             icone,
@@ -1125,11 +2323,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         title: Text(
           titulo,
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
+          style:
+              const TextStyle(
+            fontWeight:
+                FontWeight.w700,
           ),
         ),
-        trailing: const Icon(
+        trailing:
+            const Icon(
           Icons.chevron_right,
         ),
         onTap: () {
@@ -1147,7 +2348,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildMenu() {
     return ListView(
-      padding: const EdgeInsets.fromLTRB(
+      padding:
+          const EdgeInsets.fromLTRB(
         18,
         20,
         18,
@@ -1156,32 +2358,39 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         const Text(
           'Menu',
-          style: TextStyle(
+          style:
+              TextStyle(
             fontSize: 27,
-            fontWeight: FontWeight.w900,
+            fontWeight:
+                FontWeight.w900,
           ),
         ),
-        const SizedBox(height: 20),
+        const SizedBox(
+          height: 20,
+        ),
         Container(
-          padding: const EdgeInsets.all(
-            18,
-          ),
-          decoration: BoxDecoration(
+          padding:
+              const EdgeInsets.all(18),
+          decoration:
+              BoxDecoration(
             color: Colors.white,
-            borderRadius: BorderRadius.circular(
-              22,
-            ),
+            borderRadius:
+                BorderRadius.circular(22),
           ),
           child: Row(
             children: [
               Container(
                 width: 58,
                 height: 58,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFFFEBDD),
-                  shape: BoxShape.circle,
+                decoration:
+                    const BoxDecoration(
+                  color:
+                      Color(0xFFFFEBDD),
+                  shape:
+                      BoxShape.circle,
                 ),
-                child: const Icon(
+                child:
+                    const Icon(
                   Icons.person,
                   color: laranja,
                   size: 30,
@@ -1192,13 +2401,17 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               Expanded(
                 child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment
+                          .start,
                   children: [
                     Text(
                       nomeEntregador,
-                      style: const TextStyle(
+                      style:
+                          const TextStyle(
                         fontSize: 17,
-                        fontWeight: FontWeight.w800,
+                        fontWeight:
+                            FontWeight.w800,
                       ),
                     ),
                     const SizedBox(
@@ -1206,8 +2419,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     const Text(
                       'Entregador FoodJet',
-                      style: TextStyle(
-                        color: Colors.black54,
+                      style:
+                          TextStyle(
+                        color:
+                            Colors.black54,
                         fontSize: 12,
                       ),
                     ),
@@ -1217,13 +2432,16 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(
+          height: 14,
+        ),
         _buildMenuItem(
           Icons.person_outline,
           'Meu perfil',
         ),
         _buildMenuItem(
-          Icons.account_balance_wallet_outlined,
+          Icons
+              .account_balance_wallet_outlined,
           'Financeiro',
         ),
         _buildMenuItem(
@@ -1249,30 +2467,37 @@ class _HomeScreenState extends State<HomeScreen> {
     Color? cor,
   ]) {
     return Container(
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 8,
       ),
-      decoration: BoxDecoration(
+      decoration:
+          BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(
-          17,
-        ),
+        borderRadius:
+            BorderRadius.circular(17),
       ),
       child: ListTile(
         leading: Icon(
           icone,
-          color: cor ?? Colors.black87,
+          color:
+              cor ?? Colors.black87,
         ),
         title: Text(
           titulo,
-          style: TextStyle(
-            fontWeight: FontWeight.w600,
-            color: cor ?? Colors.black87,
+          style:
+              TextStyle(
+            fontWeight:
+                FontWeight.w600,
+            color:
+                cor ?? Colors.black87,
           ),
         ),
-        trailing: const Icon(
+        trailing:
+            const Icon(
           Icons.chevron_right,
-          color: Colors.black38,
+          color:
+              Colors.black38,
         ),
         onTap: () {
           _mostrarMensagem(
@@ -1293,17 +2518,17 @@ class _HomeScreenState extends State<HomeScreen> {
     String valor,
   ) {
     return Container(
-      margin: const EdgeInsets.only(
+      margin:
+          const EdgeInsets.only(
         bottom: 10,
       ),
-      padding: const EdgeInsets.all(
-        16,
-      ),
-      decoration: BoxDecoration(
+      padding:
+          const EdgeInsets.all(16),
+      decoration:
+          BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(
-          17,
-        ),
+        borderRadius:
+            BorderRadius.circular(17),
       ),
       child: Row(
         children: [
@@ -1317,15 +2542,19 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: Text(
               titulo,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
+              style:
+                  const TextStyle(
+                fontWeight:
+                    FontWeight.w600,
               ),
             ),
           ),
           Text(
             valor,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
+            style:
+                const TextStyle(
+              fontWeight:
+                  FontWeight.w800,
             ),
           ),
         ],
@@ -1339,25 +2568,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBottomNavigation() {
     return NavigationBar(
-      selectedIndex: paginaAtual,
-      onDestinationSelected: (index) {
+      selectedIndex:
+          paginaAtual,
+      onDestinationSelected:
+          (index) {
         setState(() {
           paginaAtual = index;
         });
 
+        // Atualiza Home
         if (index == 0) {
           _carregarDados();
         }
+
+        // CORREÇÃO:
+        // Ao entrar em Ganhos, consulta novamente
+        // a carteira no backend.
+        if (index == 1) {
+          _carregarResumo();
+        }
       },
-      backgroundColor: Colors.white,
+      backgroundColor:
+          Colors.white,
       elevation: 8,
-      indicatorColor: const Color(0xFFFFEBDD),
+      indicatorColor:
+          const Color(0xFFFFEBDD),
       destinations: const [
         NavigationDestination(
           icon: Icon(
             Icons.home_outlined,
           ),
-          selectedIcon: Icon(
+          selectedIcon:
+              Icon(
             Icons.home,
             color: laranja,
           ),
@@ -1365,10 +2607,13 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         NavigationDestination(
           icon: Icon(
-            Icons.account_balance_wallet_outlined,
+            Icons
+                .account_balance_wallet_outlined,
           ),
-          selectedIcon: Icon(
-            Icons.account_balance_wallet,
+          selectedIcon:
+              Icon(
+            Icons
+                .account_balance_wallet,
             color: laranja,
           ),
           label: 'Ganhos',
@@ -1377,7 +2622,8 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icon(
             Icons.help_outline,
           ),
-          selectedIcon: Icon(
+          selectedIcon:
+              Icon(
             Icons.help,
             color: laranja,
           ),
@@ -1387,7 +2633,8 @@ class _HomeScreenState extends State<HomeScreen> {
           icon: Icon(
             Icons.menu,
           ),
-          selectedIcon: Icon(
+          selectedIcon:
+              Icon(
             Icons.menu,
             color: laranja,
           ),
@@ -1402,7 +2649,8 @@ class _HomeScreenState extends State<HomeScreen> {
 // DIALOG DA OFERTA
 // ==================================================================
 
-class _OfertaEntregaDialog extends StatefulWidget {
+class _OfertaEntregaDialog
+    extends StatefulWidget {
   final Map<String, dynamic> pedido;
   final String entregadorId;
 
@@ -1412,13 +2660,17 @@ class _OfertaEntregaDialog extends StatefulWidget {
   });
 
   @override
-  State<_OfertaEntregaDialog> createState() => _OfertaEntregaDialogState();
+  State<_OfertaEntregaDialog>
+      createState() =>
+          _OfertaEntregaDialogState();
 }
 
-class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
+class _OfertaEntregaDialogState
+    extends State<_OfertaEntregaDialog> {
   static const int tempoInicial = 20;
 
-  int segundos = tempoInicial;
+  int segundos =
+      tempoInicial;
 
   Timer? timer;
 
@@ -1438,7 +2690,8 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
         if (segundos <= 1) {
           timer?.cancel();
 
-          Navigator.of(context).pop();
+          Navigator.of(context)
+              .pop();
 
           return;
         }
@@ -1464,11 +2717,13 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
   Future<void> aceitar() async {
     if (processando) return;
 
-    final pedidoId = obterPedidoId();
+    final pedidoId =
+        obterPedidoId();
 
     if (pedidoId == null) {
       setState(() {
-        erro = 'Não foi possível identificar o pedido.';
+        erro =
+            'Não foi possível identificar o pedido.';
       });
 
       return;
@@ -1480,22 +2735,28 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
     });
 
     try {
-      await DeliveryService.aceitarEntrega(
-        entregadorId: widget.entregadorId,
-        pedidoId: pedidoId,
+      await DeliveryService
+          .aceitarEntrega(
+        entregadorId:
+            widget.entregadorId,
+        pedidoId:
+            pedidoId,
       );
 
       if (!mounted) return;
 
       timer?.cancel();
 
-      Navigator.of(context).pop(true);
+      Navigator.of(context)
+          .pop(true);
     } catch (e) {
       if (!mounted) return;
 
       setState(() {
         processando = false;
-        erro = e.toString().replaceFirst(
+        erro = e
+            .toString()
+            .replaceFirst(
               'Exception: ',
               '',
             );
@@ -1512,7 +2773,8 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
 
     timer?.cancel();
 
-    Navigator.of(context).pop(false);
+    Navigator.of(context)
+        .pop(false);
   }
 
   // ============================================================
@@ -1520,7 +2782,8 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
   // ============================================================
 
   String? obterPedidoId() {
-    final id = widget.pedido['id'] ??
+    final id =
+        widget.pedido['id'] ??
         widget.pedido['pedido_id'] ??
         widget.pedido['order_id'];
 
@@ -1540,9 +2803,11 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
       return '';
     }
 
-    final resultado = valor.toString().trim();
+    final resultado =
+        valor.toString().trim();
 
-    if (resultado.isEmpty || resultado == 'null') {
+    if (resultado.isEmpty ||
+        resultado == 'null') {
       return '';
     }
 
@@ -1553,7 +2818,8 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
     List<String> nomes,
   ) {
     for (final nome in nomes) {
-      final valor = texto(widget.pedido[nome]);
+      final valor =
+          texto(widget.pedido[nome]);
 
       if (valor.isNotEmpty) {
         return valor;
@@ -1577,10 +2843,13 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
       return direto;
     }
 
-    final restaurante = widget.pedido['restaurante'];
+    final restaurante =
+        widget.pedido['restaurante'];
 
     if (restaurante is Map) {
-      final nome = restaurante['nome'] ?? restaurante['name'];
+      final nome =
+          restaurante['nome'] ??
+          restaurante['name'];
 
       if (nome != null) {
         return nome.toString();
@@ -1602,10 +2871,13 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
       return direto;
     }
 
-    final restaurante = widget.pedido['restaurante'];
+    final restaurante =
+        widget.pedido['restaurante'];
 
     if (restaurante is Map) {
-      final endereco = restaurante['endereco'] ?? restaurante['address'];
+      final endereco =
+          restaurante['endereco'] ??
+          restaurante['address'];
 
       if (endereco != null) {
         return endereco.toString();
@@ -1631,10 +2903,13 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
       return direto;
     }
 
-    final cliente = widget.pedido['cliente'];
+    final cliente =
+        widget.pedido['cliente'];
 
     if (cliente is Map) {
-      final nome = cliente['nome'] ?? cliente['name'];
+      final nome =
+          cliente['nome'] ??
+          cliente['name'];
 
       if (nome != null) {
         return nome.toString();
@@ -1656,10 +2931,13 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
       return direto;
     }
 
-    final cliente = widget.pedido['cliente'];
+    final cliente =
+        widget.pedido['cliente'];
 
     if (cliente is Map) {
-      final endereco = cliente['endereco'] ?? cliente['address'];
+      final endereco =
+          cliente['endereco'] ??
+          cliente['address'];
 
       if (endereco != null) {
         return endereco.toString();
@@ -1674,10 +2952,13 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
   // ============================================================
 
   double? valorEntrega() {
-    final valor = widget.pedido['valor_entrega'] ??
+    final valor =
+        widget.pedido['valor_entrega'] ??
         widget.pedido['taxa_entrega'] ??
-        widget.pedido['valor_entregador'] ??
-        widget.pedido['ganho_entregador'];
+        widget.pedido[
+            'valor_entregador'] ??
+        widget.pedido[
+            'ganho_entregador'];
 
     if (valor == null) {
       return null;
@@ -1709,7 +2990,8 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
   }
 
   String valorFormatado() {
-    final valor = valorEntrega();
+    final valor =
+        valorEntrega();
 
     if (valor == null) {
       return 'R\$ --';
@@ -1733,7 +3015,9 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
       return '';
     }
 
-    if (valor.toLowerCase().contains('km')) {
+    if (valor
+        .toLowerCase()
+        .contains('km')) {
       return valor;
     }
 
@@ -1750,39 +3034,51 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
   ) {
     final km = distancia();
 
-    final urgente = segundos <= 5;
+    final urgente =
+        segundos <= 5;
 
     return Material(
-      color: Colors.transparent,
+      color:
+          Colors.transparent,
       child: SafeArea(
         child: Align(
-          alignment: Alignment.bottomCenter,
+          alignment:
+              Alignment.bottomCenter,
           child: Padding(
-            padding: const EdgeInsets.all(
+            padding:
+                const EdgeInsets.all(
               14,
             ),
             child: Container(
-              width: double.infinity,
-              constraints: const BoxConstraints(
+              width:
+                  double.infinity,
+              constraints:
+                  const BoxConstraints(
                 maxWidth: 500,
               ),
-              padding: const EdgeInsets.fromLTRB(
+              padding:
+                  const EdgeInsets.fromLTRB(
                 20,
                 18,
                 20,
                 20,
               ),
-              decoration: BoxDecoration(
+              decoration:
+                  BoxDecoration(
                 color: Colors.white,
-                borderRadius: BorderRadius.circular(
+                borderRadius:
+                    BorderRadius.circular(
                   28,
                 ),
-                boxShadow: const [
+                boxShadow:
+                    const [
                   BoxShadow(
-                    color: Colors.black38,
+                    color:
+                        Colors.black38,
                     blurRadius: 30,
                     spreadRadius: 5,
-                    offset: Offset(
+                    offset:
+                        Offset(
                       0,
                       -8,
                     ),
@@ -1790,8 +3086,11 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                 ],
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize:
+                    MainAxisSize.min,
+                crossAxisAlignment:
+                    CrossAxisAlignment
+                        .start,
                 children: [
                   // ------------------------------------------------
                   // TOPO
@@ -1800,25 +3099,36 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(
+                        padding:
+                            const EdgeInsets
+                                .symmetric(
                           horizontal: 12,
                           vertical: 8,
                         ),
-                        decoration: BoxDecoration(
-                          color: const Color(
+                        decoration:
+                            BoxDecoration(
+                          color:
+                              const Color(
                             0xFFFFF1E8,
                           ),
-                          borderRadius: BorderRadius.circular(
+                          borderRadius:
+                              BorderRadius
+                                  .circular(
                             30,
                           ),
                         ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
+                        child:
+                            const Row(
+                          mainAxisSize:
+                              MainAxisSize
+                                  .min,
                           children: [
                             Icon(
-                              Icons.local_shipping,
+                              Icons
+                                  .local_shipping,
                               size: 17,
-                              color: Color(
+                              color:
+                                  Color(
                                 0xFFF97316,
                               ),
                             ),
@@ -1827,12 +3137,17 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                             ),
                             Text(
                               'NOVA OFERTA',
-                              style: TextStyle(
-                                color: Color(
+                              style:
+                                  TextStyle(
+                                color:
+                                    Color(
                                   0xFFF97316,
                                 ),
-                                fontWeight: FontWeight.w900,
-                                fontSize: 12,
+                                fontWeight:
+                                    FontWeight
+                                        .w900,
+                                fontSize:
+                                    12,
                               ),
                             ),
                           ],
@@ -1842,14 +3157,20 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                       Container(
                         width: 52,
                         height: 52,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
+                        decoration:
+                            BoxDecoration(
+                          shape:
+                              BoxShape
+                                  .circle,
                           color: urgente
-                              ? Colors.red.shade50
+                              ? Colors
+                                  .red
+                                  .shade50
                               : const Color(
                                   0xFFFFF1E8,
                                 ),
-                          border: Border.all(
+                          border:
+                              Border.all(
                             color: urgente
                                 ? Colors.red
                                 : const Color(
@@ -1858,14 +3179,21 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                             width: 3,
                           ),
                         ),
-                        child: Center(
-                          child: Text(
+                        child:
+                            Center(
+                          child:
+                              Text(
                             '$segundos',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w900,
+                            style:
+                                TextStyle(
+                              fontSize:
+                                  18,
+                              fontWeight:
+                                  FontWeight
+                                      .w900,
                               color: urgente
-                                  ? Colors.red
+                                  ? Colors
+                                      .red
                                   : const Color(
                                       0xFFF97316,
                                     ),
@@ -1888,17 +3216,24 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                     children: [
                       const Text(
                         'Você recebe',
-                        style: TextStyle(
-                          color: Colors.black54,
-                          fontSize: 14,
+                        style:
+                            TextStyle(
+                          color:
+                              Colors.black54,
+                          fontSize:
+                              14,
                         ),
                       ),
                       const Spacer(),
                       Text(
                         valorFormatado(),
-                        style: const TextStyle(
-                          fontSize: 30,
-                          fontWeight: FontWeight.w900,
+                        style:
+                            const TextStyle(
+                          fontSize:
+                              30,
+                          fontWeight:
+                              FontWeight
+                                  .w900,
                         ),
                       ),
                     ],
@@ -1913,16 +3248,21 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                         const Icon(
                           Icons.route,
                           size: 17,
-                          color: Colors.black54,
+                          color:
+                              Colors.black54,
                         ),
                         const SizedBox(
                           width: 6,
                         ),
                         Text(
                           km,
-                          style: const TextStyle(
-                            color: Colors.black54,
-                            fontWeight: FontWeight.w700,
+                          style:
+                              const TextStyle(
+                            color:
+                                Colors.black54,
+                            fontWeight:
+                                FontWeight
+                                    .w700,
                           ),
                         ),
                       ],
@@ -1938,23 +3278,32 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                   // ------------------------------------------------
 
                   _local(
-                    icone: Icons.storefront,
-                    titulo: 'Retirar em',
-                    nome: nomeRestaurante(),
-                    endereco: enderecoRestaurante(),
-                    cor: const Color(
+                    icone:
+                        Icons.storefront,
+                    titulo:
+                        'Retirar em',
+                    nome:
+                        nomeRestaurante(),
+                    endereco:
+                        enderecoRestaurante(),
+                    cor:
+                        const Color(
                       0xFFF97316,
                     ),
                   ),
 
                   Padding(
-                    padding: const EdgeInsets.only(
+                    padding:
+                        const EdgeInsets
+                            .only(
                       left: 19,
                     ),
-                    child: Container(
+                    child:
+                        Container(
                       width: 2,
                       height: 20,
-                      color: Colors.black12,
+                      color:
+                          Colors.black12,
                     ),
                   ),
 
@@ -1963,11 +3312,16 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                   // ------------------------------------------------
 
                   _local(
-                    icone: Icons.person,
-                    titulo: 'Entregar para',
-                    nome: nomeCliente(),
-                    endereco: enderecoEntrega(),
-                    cor: const Color(
+                    icone:
+                        Icons.person,
+                    titulo:
+                        'Entregar para',
+                    nome:
+                        nomeCliente(),
+                    endereco:
+                        enderecoEntrega(),
+                    cor:
+                        const Color(
                       0xFF333333,
                     ),
                   ),
@@ -1981,22 +3335,37 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                       height: 14,
                     ),
                     Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(
+                      width:
+                          double.infinity,
+                      padding:
+                          const EdgeInsets
+                              .all(
                         12,
                       ),
-                      decoration: BoxDecoration(
-                        color: Colors.red.shade50,
-                        borderRadius: BorderRadius.circular(
+                      decoration:
+                          BoxDecoration(
+                        color: Colors
+                            .red
+                            .shade50,
+                        borderRadius:
+                            BorderRadius
+                                .circular(
                           12,
                         ),
                       ),
-                      child: Text(
+                      child:
+                          Text(
                         erro!,
-                        style: TextStyle(
-                          color: Colors.red.shade700,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
+                        style:
+                            TextStyle(
+                          color: Colors
+                              .red
+                              .shade700,
+                          fontWeight:
+                              FontWeight
+                                  .w600,
+                          fontSize:
+                              13,
                         ),
                       ),
                     ),
@@ -2013,26 +3382,43 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                   Row(
                     children: [
                       Expanded(
-                        child: SizedBox(
+                        child:
+                            SizedBox(
                           height: 56,
-                          child: OutlinedButton(
-                            onPressed: processando ? null : recusar,
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(
-                                color: Colors.black12,
+                          child:
+                              OutlinedButton(
+                            onPressed:
+                                processando
+                                    ? null
+                                    : recusar,
+                            style:
+                                OutlinedButton
+                                    .styleFrom(
+                              side:
+                                  const BorderSide(
+                                color:
+                                    Colors.black12,
                               ),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
+                              shape:
+                                  RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(
                                   16,
                                 ),
                               ),
                             ),
-                            child: const Text(
+                            child:
+                                const Text(
                               'Recusar',
-                              style: TextStyle(
-                                color: Colors.black87,
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
+                              style:
+                                  TextStyle(
+                                color:
+                                    Colors.black87,
+                                fontSize:
+                                    16,
+                                fontWeight:
+                                    FontWeight
+                                        .w700,
                               ),
                             ),
                           ),
@@ -2043,36 +3429,56 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
                       ),
                       Expanded(
                         flex: 2,
-                        child: SizedBox(
+                        child:
+                            SizedBox(
                           height: 56,
-                          child: ElevatedButton(
-                            onPressed: processando ? null : aceitar,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(
+                          child:
+                              ElevatedButton(
+                            onPressed:
+                                processando
+                                    ? null
+                                    : aceitar,
+                            style:
+                                ElevatedButton
+                                    .styleFrom(
+                              backgroundColor:
+                                  const Color(
                                 0xFFF97316,
                               ),
-                              foregroundColor: Colors.white,
+                              foregroundColor:
+                                  Colors.white,
                               elevation: 0,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(
+                              shape:
+                                  RoundedRectangleBorder(
+                                borderRadius:
+                                    BorderRadius.circular(
                                   16,
                                 ),
                               ),
                             ),
                             child: processando
                                 ? const SizedBox(
-                                    width: 23,
-                                    height: 23,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2.5,
-                                      color: Colors.white,
+                                    width:
+                                        23,
+                                    height:
+                                        23,
+                                    child:
+                                        CircularProgressIndicator(
+                                      strokeWidth:
+                                          2.5,
+                                      color:
+                                          Colors.white,
                                     ),
                                   )
                                 : const Text(
                                     'ACEITAR ENTREGA',
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      fontWeight: FontWeight.w900,
+                                    style:
+                                        TextStyle(
+                                      fontSize:
+                                          15,
+                                      fontWeight:
+                                          FontWeight
+                                              .w900,
                                     ),
                                   ),
                           ),
@@ -2101,16 +3507,18 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
     required Color cor,
   }) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      crossAxisAlignment:
+          CrossAxisAlignment.start,
       children: [
         Container(
           width: 40,
           height: 40,
-          decoration: BoxDecoration(
-            color: cor.withOpacity(
-              0.10,
-            ),
-            shape: BoxShape.circle,
+          decoration:
+              BoxDecoration(
+            color:
+                cor.withOpacity(0.10),
+            shape:
+                BoxShape.circle,
           ),
           child: Icon(
             icone,
@@ -2123,14 +3531,19 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
         ),
         Expanded(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment:
+                CrossAxisAlignment
+                    .start,
             children: [
               Text(
                 titulo,
-                style: const TextStyle(
+                style:
+                    const TextStyle(
                   fontSize: 12,
-                  color: Colors.black45,
-                  fontWeight: FontWeight.w600,
+                  color:
+                      Colors.black45,
+                  fontWeight:
+                      FontWeight.w600,
                 ),
               ),
               const SizedBox(
@@ -2139,10 +3552,13 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
               Text(
                 nome,
                 maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                overflow:
+                    TextOverflow.ellipsis,
+                style:
+                    const TextStyle(
                   fontSize: 15,
-                  fontWeight: FontWeight.w800,
+                  fontWeight:
+                      FontWeight.w800,
                 ),
               ),
               const SizedBox(
@@ -2151,10 +3567,13 @@ class _OfertaEntregaDialogState extends State<_OfertaEntregaDialog> {
               Text(
                 endereco,
                 maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: const TextStyle(
+                overflow:
+                    TextOverflow.ellipsis,
+                style:
+                    const TextStyle(
                   fontSize: 13,
-                  color: Colors.black54,
+                  color:
+                      Colors.black54,
                 ),
               ),
             ],

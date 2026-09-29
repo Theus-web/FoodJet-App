@@ -1,5 +1,4 @@
-const fs = require("fs");
-const path = require("path");
+
 const { Pool } = require("pg");
 
 // ============================================================
@@ -12,7 +11,7 @@ if (!process.env.DATABASE_URL) {
 
 if (!process.env.DATABASE_URL) {
     throw new Error(
-        "❌ DATABASE_URL não encontrada."
+        "❌ DATABASE_URL não encontrada no arquivo .env."
     );
 }
 
@@ -24,154 +23,19 @@ const pool = new Pool({
 });
 
 // ============================================================
-// CAMINHO DO FOODJET.JSON
+// CRIAR / VERIFICAR ESTRUTURA
 // ============================================================
 
-const caminhoBanco = path.join(
-    __dirname,
-    "..",
-    "foodjet.json"
-);
-
-// ============================================================
-// LER JSON
-// ============================================================
-
-function carregarBancoJson() {
-
-    if (!fs.existsSync(caminhoBanco)) {
-
-        throw new Error(
-            `❌ foodjet.json não encontrado em:\n${caminhoBanco}`
-        );
-    }
-
-    const conteudo =
-        fs.readFileSync(
-            caminhoBanco,
-            "utf8"
-        );
-
-    return JSON.parse(conteudo);
-}
-
-// ============================================================
-// NORMALIZAR ID
-// ============================================================
-
-function idTexto(valor) {
-
-    if (
-        valor === undefined ||
-        valor === null ||
-        valor === ""
-    ) {
-        return null;
-    }
-
-    return String(valor);
-}
-
-// ============================================================
-// NORMALIZAR DATA
-// ============================================================
-
-function dataOuNull(valor) {
-
-    if (
-        valor === undefined ||
-        valor === null ||
-        valor === ""
-    ) {
-        return null;
-    }
-
-    const data = new Date(valor);
-
-    if (Number.isNaN(data.getTime())) {
-        return null;
-    }
-
-    return data;
-}
-
-// ============================================================
-// NORMALIZAR NÚMERO
-// ============================================================
-
-function numeroOuZero(valor) {
-
-    if (
-        valor === undefined ||
-        valor === null ||
-        valor === ""
-    ) {
-        return 0;
-    }
-
-    const numero = Number(valor);
-
-    return Number.isFinite(numero)
-        ? numero
-        : 0;
-}
-
-// ============================================================
-// NORMALIZAR JSONB
-// ============================================================
-
-function jsonb(valor, padrao = null) {
-
-    if (
-        valor === undefined ||
-        valor === null
-    ) {
-        return padrao === null
-            ? null
-            : JSON.stringify(padrao);
-    }
-
-    // Se já for objeto/array, transforma explicitamente
-    // em JSON para o PostgreSQL.
-    if (
-        typeof valor === "object"
-    ) {
-        return JSON.stringify(valor);
-    }
-
-    // Se for string, tenta descobrir se já é JSON.
-    if (
-        typeof valor === "string"
-    ) {
-
-        try {
-
-            const convertido =
-                JSON.parse(valor);
-
-            return JSON.stringify(convertido);
-
-        } catch (_) {
-
-            // É uma string comum.
-            // Também é válida como JSON string.
-            return JSON.stringify(valor);
-        }
-    }
-
-    return JSON.stringify(valor);
-}
-
-// ============================================================
-// CRIAR TABELAS
-// ============================================================
-
-async function criarTabelas(client) {
+async function criarEstrutura(client) {
 
     console.log("");
     console.log("============================================");
-    console.log("🗄️ CRIANDO TABELAS POSTGRESQL");
+    console.log("🗄️ VERIFICANDO ESTRUTURA POSTGRESQL");
     console.log("============================================");
+
+    // ========================================================
+    // USUÁRIOS
+    // ========================================================
 
     await client.query(`
         CREATE TABLE IF NOT EXISTS usuarios (
@@ -189,6 +53,12 @@ async function criarTabelas(client) {
             dados JSONB NOT NULL DEFAULT '{}'::jsonb
         );
     `);
+
+    console.log("✅ usuarios");
+
+    // ========================================================
+    // RESTAURANTES
+    // ========================================================
 
     await client.query(`
         CREATE TABLE IF NOT EXISTS restaurantes (
@@ -212,6 +82,12 @@ async function criarTabelas(client) {
         );
     `);
 
+    console.log("✅ restaurantes");
+
+    // ========================================================
+    // PRODUTOS
+    // ========================================================
+
     await client.query(`
         CREATE TABLE IF NOT EXISTS produtos (
             id TEXT PRIMARY KEY,
@@ -224,9 +100,16 @@ async function criarTabelas(client) {
             destaque BOOLEAN,
             imagem TEXT,
             criado_em TIMESTAMPTZ,
+            atualizado_em TIMESTAMPTZ,
             dados JSONB NOT NULL DEFAULT '{}'::jsonb
         );
     `);
+
+    console.log("✅ produtos");
+
+    // ========================================================
+    // PEDIDOS
+    // ========================================================
 
     await client.query(`
         CREATE TABLE IF NOT EXISTS pedidos (
@@ -256,6 +139,12 @@ async function criarTabelas(client) {
         );
     `);
 
+    console.log("✅ pedidos");
+
+    // ========================================================
+    // ENTREGADORES
+    // ========================================================
+
     await client.query(`
         CREATE TABLE IF NOT EXISTS entregadores (
             id TEXT PRIMARY KEY,
@@ -269,6 +158,12 @@ async function criarTabelas(client) {
         );
     `);
 
+    console.log("✅ entregadores");
+
+    // ========================================================
+    // PAGAMENTOS
+    // ========================================================
+
     await client.query(`
         CREATE TABLE IF NOT EXISTS pagamentos (
             id TEXT PRIMARY KEY,
@@ -279,6 +174,12 @@ async function criarTabelas(client) {
             criado_em TIMESTAMPTZ
         );
     `);
+
+    console.log("✅ pagamentos");
+
+    // ========================================================
+    // PAGAMENTOS ASAAS
+    // ========================================================
 
     await client.query(`
         CREATE TABLE IF NOT EXISTS pagamentos_asaas (
@@ -293,6 +194,12 @@ async function criarTabelas(client) {
             atualizado_em TIMESTAMPTZ
         );
     `);
+
+    console.log("✅ pagamentos_asaas");
+
+    // ========================================================
+    // PROMOÇÕES
+    // ========================================================
 
     await client.query(`
         CREATE TABLE IF NOT EXISTS promocoes (
@@ -312,6 +219,12 @@ async function criarTabelas(client) {
         );
     `);
 
+    console.log("✅ promocoes");
+
+    // ========================================================
+    // FAVORITOS
+    // ========================================================
+
     await client.query(`
         CREATE TABLE IF NOT EXISTS favoritos (
             id TEXT PRIMARY KEY,
@@ -325,729 +238,297 @@ async function criarTabelas(client) {
         );
     `);
 
-    console.log("✅ Tabelas criadas/verificadas.");
-}
+    console.log("✅ favoritos");
 
-// ============================================================
-// USUÁRIOS
-// ============================================================
-
-async function migrarUsuarios(client, dados) {
-
-    const lista =
-        Array.isArray(dados.usuarios)
-            ? dados.usuarios
-            : [];
-
-    for (const usuario of lista) {
-
-        const id = idTexto(usuario.id);
-
-        if (!id) {
-            console.log(
-                "⚠️ Usuário ignorado: sem ID."
-            );
-            continue;
-        }
-
-        await client.query(
-            `
-            INSERT INTO usuarios (
-                id,
-                nome,
-                email,
-                senha,
-                tipo,
-                restaurante_id,
-                telefone,
-                cpf,
-                endereco,
-                criado_em,
-                atualizado_em,
-                dados
-            )
-            VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12
-            )
-            ON CONFLICT (id)
-            DO UPDATE SET
-                nome = EXCLUDED.nome,
-                email = EXCLUDED.email,
-                senha = EXCLUDED.senha,
-                tipo = EXCLUDED.tipo,
-                restaurante_id = EXCLUDED.restaurante_id,
-                telefone = EXCLUDED.telefone,
-                cpf = EXCLUDED.cpf,
-                endereco = EXCLUDED.endereco,
-                criado_em = EXCLUDED.criado_em,
-                atualizado_em = EXCLUDED.atualizado_em,
-                dados = EXCLUDED.dados
-            `,
-            [
-                id,
-                usuario.nome || null,
-                usuario.email || null,
-                usuario.senha || null,
-                usuario.tipo || null,
-                idTexto(usuario.restauranteId),
-                usuario.telefone || null,
-                usuario.cpf || null,
-                jsonb(usuario.endereco),
-                dataOuNull(usuario.criadoEm),
-                dataOuNull(usuario.atualizadoEm),
-                jsonb(usuario),
-            ]
-        );
-    }
-
-    console.log(
-        `👥 Usuários migrados: ${lista.length}`
-    );
-}
-
-// ============================================================
-// RESTAURANTES
-// ============================================================
-
-async function migrarRestaurantes(client, dados) {
-
-    const lista =
-        Array.isArray(dados.restaurantes)
-            ? dados.restaurantes
-            : [];
-
-    for (const restaurante of lista) {
-
-        const id = idTexto(restaurante.id);
-
-        if (!id) {
-            continue;
-        }
-
-        await client.query(
-            `
-            INSERT INTO restaurantes (
-                id,
-                nome,
-                cnpj,
-                categoria,
-                email,
-                telefone,
-                responsavel,
-                cpf,
-                endereco,
-                pagamento,
-                status,
-                online,
-                aberto,
-                imagem,
-                criado_em,
-                atualizado_em,
-                dados
-            )
-            VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                $11,$12,$13,$14,$15,$16,$17
-            )
-            ON CONFLICT (id)
-            DO UPDATE SET
-                nome = EXCLUDED.nome,
-                cnpj = EXCLUDED.cnpj,
-                categoria = EXCLUDED.categoria,
-                email = EXCLUDED.email,
-                telefone = EXCLUDED.telefone,
-                responsavel = EXCLUDED.responsavel,
-                cpf = EXCLUDED.cpf,
-                endereco = EXCLUDED.endereco,
-                pagamento = EXCLUDED.pagamento,
-                status = EXCLUDED.status,
-                online = EXCLUDED.online,
-                aberto = EXCLUDED.aberto,
-                imagem = EXCLUDED.imagem,
-                criado_em = EXCLUDED.criado_em,
-                atualizado_em = EXCLUDED.atualizado_em,
-                dados = EXCLUDED.dados
-            `,
-            [
-                id,
-                restaurante.nome || null,
-                restaurante.cnpj || null,
-                restaurante.categoria || null,
-                restaurante.email || null,
-                restaurante.telefone || null,
-                restaurante.responsavel || null,
-                restaurante.cpf || null,
-                jsonb(restaurante.endereco),
-jsonb(restaurante.pagamento),
-                restaurante.status || null,
-                Boolean(restaurante.online),
-                Boolean(restaurante.aberto),
-                restaurante.imagem || null,
-                dataOuNull(restaurante.criadoEm),
-                dataOuNull(restaurante.atualizadoEm),
-                jsonb(restaurante),
-            ]
-        );
-    }
-
-    console.log(
-        `🏪 Restaurantes migrados: ${lista.length}`
-    );
-}
-
-// ============================================================
-// PRODUTOS
-// ============================================================
-
-async function migrarProdutos(client, dados) {
-
-    const lista =
-        Array.isArray(dados.produtos)
-            ? dados.produtos
-            : [];
-
-    for (const produto of lista) {
-
-        const id = idTexto(produto.id);
-
-        if (!id) {
-            continue;
-        }
-
-        await client.query(
-            `
-            INSERT INTO produtos (
-                id,
-                restaurante_id,
-                nome,
-                descricao,
-                preco,
-                categoria,
-                disponivel,
-                destaque,
-                imagem,
-                criado_em,
-                dados
-            )
-            VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11
-            )
-            ON CONFLICT (id)
-            DO UPDATE SET
-                restaurante_id = EXCLUDED.restaurante_id,
-                nome = EXCLUDED.nome,
-                descricao = EXCLUDED.descricao,
-                preco = EXCLUDED.preco,
-                categoria = EXCLUDED.categoria,
-                disponivel = EXCLUDED.disponivel,
-                destaque = EXCLUDED.destaque,
-                imagem = EXCLUDED.imagem,
-                criado_em = EXCLUDED.criado_em,
-                dados = EXCLUDED.dados
-            `,
-            [
-                id,
-                idTexto(produto.restauranteId),
-                produto.nome || null,
-                produto.descricao || produto.descrição || null,
-                numeroOuZero(produto.preco),
-                produto.categoria || null,
-                produto.disponivel !== false,
-                Boolean(produto.destaque),
-                produto.imagem || null,
-                dataOuNull(
-                    produto.criadoEm ||
-                    produto.createdAt
-                ),
-                produto,
-            ]
-        );
-    }
-
-    console.log(
-        `🍕 Produtos migrados: ${lista.length}`
-    );
-}
-
-// ============================================================
-// PEDIDOS
-// ============================================================
-
-async function migrarPedidos(client, dados) {
-
-    const lista =
-        Array.isArray(dados.pedidos)
-            ? dados.pedidos
-            : [];
-
-    // --------------------------------------------------------
-    // Descobrir maior ID existente
-    // --------------------------------------------------------
-
-    let maiorId = 0;
-
-    for (const pedido of lista) {
-
-        const numero =
-            Number(pedido.id);
-
-        if (
-            Number.isSafeInteger(numero) &&
-            numero > maiorId
-        ) {
-            maiorId = numero;
-        }
-    }
-
-    for (const pedido of lista) {
-
-        let id =
-            Number(pedido.id);
-
-        // ----------------------------------------------------
-        // Pedido sem ID
-        // ----------------------------------------------------
-
-        if (
-            !Number.isSafeInteger(id) ||
-            id <= 0
-        ) {
-
-            maiorId++;
-
-            id = maiorId;
-
-            console.log(
-                `⚠️ Pedido sem ID encontrado. ` +
-                `Novo ID atribuído: ${id}`
-            );
-        }
-
-        await client.query(
-            `
-            INSERT INTO pedidos (
-                id,
-                cliente_id,
-                restaurante_id,
-                itens,
-                endereco,
-                pagamento,
-                pagamento_status,
-                status_pagamento,
-                pagamento_aprovado,
-                subtotal,
-                taxa_servico,
-                taxa_entrega,
-                total,
-                precisa_troco,
-                troco_para,
-                valor_troco,
-                external_reference,
-                referencia_pagamento,
-                status,
-                suporte,
-                criado_em,
-                atualizado_em,
-                dados
-            )
-            VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,
-                $11,$12,$13,$14,$15,$16,$17,$18,
-                $19,$20,$21,$22,$23
-            )
-            ON CONFLICT (id)
-            DO UPDATE SET
-                cliente_id = EXCLUDED.cliente_id,
-                restaurante_id = EXCLUDED.restaurante_id,
-                itens = EXCLUDED.itens,
-                endereco = EXCLUDED.endereco,
-                pagamento = EXCLUDED.pagamento,
-                pagamento_status = EXCLUDED.pagamento_status,
-                status_pagamento = EXCLUDED.status_pagamento,
-                pagamento_aprovado = EXCLUDED.pagamento_aprovado,
-                subtotal = EXCLUDED.subtotal,
-                taxa_servico = EXCLUDED.taxa_servico,
-                taxa_entrega = EXCLUDED.taxa_entrega,
-                total = EXCLUDED.total,
-                precisa_troco = EXCLUDED.precisa_troco,
-                troco_para = EXCLUDED.troco_para,
-                valor_troco = EXCLUDED.valor_troco,
-                external_reference = EXCLUDED.external_reference,
-                referencia_pagamento = EXCLUDED.referencia_pagamento,
-                status = EXCLUDED.status,
-                suporte = EXCLUDED.suporte,
-                criado_em = EXCLUDED.criado_em,
-                atualizado_em = EXCLUDED.atualizado_em,
-                dados = EXCLUDED.dados
-            `,
-            [
-                id,
-                idTexto(pedido.clienteId),
-                idTexto(pedido.restauranteId),
-                jsonb(
-    Array.isArray(pedido.itens)
-        ? pedido.itens
-        : []
-),
-
-jsonb(pedido.endereco),
-                pedido.pagamento || null,
-                pedido.pagamentoStatus || null,
-                pedido.statusPagamento || null,
-                pedido.pagamentoAprovado === true,
-                numeroOuZero(pedido.subtotal),
-                numeroOuZero(pedido.taxaServico),
-                numeroOuZero(pedido.taxaEntrega),
-                numeroOuZero(pedido.total),
-                pedido.precisaTroco === true,
-                pedido.trocoPara !== undefined
-                    ? numeroOuZero(pedido.trocoPara)
-                    : null,
-                pedido.valorTroco !== undefined
-                    ? numeroOuZero(pedido.valorTroco)
-                    : null,
-                pedido.externalReference
-                    ? String(pedido.externalReference)
-                    : null,
-                pedido.referenciaPagamento
-                    ? String(pedido.referenciaPagamento)
-                    : null,
-                pedido.status || null,
-                jsonb(pedido.suporte),
-                dataOuNull(
-                    pedido.criadoEm ||
-                    pedido.createdAt ||
-                    pedido.data
-                ),
-                dataOuNull(
-                    pedido.atualizadoEm ||
-                    pedido.updatedAt
-                ),
-                jsonb(pedido),
-            ]
-        );
-    }
-
-    // --------------------------------------------------------
-    // Ajustar sequência
-    // --------------------------------------------------------
+    // ========================================================
+    // CARTEIRAS DOS ENTREGADORES
+    // ========================================================
 
     await client.query(`
-        SELECT setval(
-            pg_get_serial_sequence(
-                'pedidos',
-                'id'
-            ),
-            COALESCE(
-                (SELECT MAX(id) FROM pedidos),
-                1
-            ),
-            true
-        )
+        CREATE TABLE IF NOT EXISTS carteiras_entregadores (
+            id BIGSERIAL PRIMARY KEY,
+
+            entregador_id TEXT NOT NULL UNIQUE,
+
+            saldo NUMERIC(12,4)
+                NOT NULL DEFAULT 0,
+
+            limite_negativo NUMERIC(12,4)
+                NOT NULL DEFAULT 200,
+
+            dinheiro_em_maos NUMERIC(12,4)
+                NOT NULL DEFAULT 0,
+
+            total_comissoes NUMERIC(12,4)
+                NOT NULL DEFAULT 0,
+
+            total_recebido_clientes NUMERIC(12,4)
+                NOT NULL DEFAULT 0,
+
+            total_devido_restaurante NUMERIC(12,4)
+                NOT NULL DEFAULT 0,
+
+            total_devido_foodjet NUMERIC(12,4)
+                NOT NULL DEFAULT 0,
+
+            criado_em TIMESTAMPTZ
+                NOT NULL DEFAULT NOW(),
+
+            atualizado_em TIMESTAMPTZ
+                NOT NULL DEFAULT NOW(),
+
+            dados JSONB
+                NOT NULL DEFAULT '{}'::jsonb,
+
+            CONSTRAINT fk_carteira_entregador
+                FOREIGN KEY (entregador_id)
+                REFERENCES entregadores(id)
+                ON DELETE CASCADE
+        );
     `);
 
-    console.log(
-        `📦 Pedidos migrados: ${lista.length}`
-    );
+    console.log("✅ carteiras_entregadores");
+
+    // ========================================================
+    // MOVIMENTAÇÕES DA CARTEIRA
+    // ========================================================
+
+    await client.query(`
+        CREATE TABLE IF NOT EXISTS movimentacoes_carteira (
+            id BIGSERIAL PRIMARY KEY,
+
+            carteira_id BIGINT NOT NULL,
+
+            entregador_id TEXT NOT NULL,
+
+            pedido_id BIGINT,
+
+            tipo TEXT NOT NULL,
+
+            descricao TEXT,
+
+            forma_pagamento TEXT,
+
+            valor NUMERIC(12,4) NOT NULL,
+
+            saldo_anterior NUMERIC(12,4) NOT NULL,
+
+            saldo_posterior NUMERIC(12,4) NOT NULL,
+
+            valor_restaurante NUMERIC(12,4)
+                NOT NULL DEFAULT 0,
+
+            valor_foodjet NUMERIC(12,4)
+                NOT NULL DEFAULT 0,
+
+            valor_entregador NUMERIC(12,4)
+                NOT NULL DEFAULT 0,
+
+            dinheiro_em_maos_anterior NUMERIC(12,4)
+                NOT NULL DEFAULT 0,
+
+            dinheiro_em_maos_posterior NUMERIC(12,4)
+                NOT NULL DEFAULT 0,
+
+            referencia TEXT,
+
+            dados JSONB
+                NOT NULL DEFAULT '{}'::jsonb,
+
+            criado_em TIMESTAMPTZ
+                NOT NULL DEFAULT NOW(),
+
+            CONSTRAINT fk_movimentacao_carteira
+                FOREIGN KEY (carteira_id)
+                REFERENCES carteiras_entregadores(id)
+                ON DELETE CASCADE,
+
+            CONSTRAINT fk_movimentacao_entregador
+                FOREIGN KEY (entregador_id)
+                REFERENCES entregadores(id)
+                ON DELETE CASCADE,
+
+            CONSTRAINT fk_movimentacao_pedido
+                FOREIGN KEY (pedido_id)
+                REFERENCES pedidos(id)
+                ON DELETE SET NULL
+        );
+    `);
+
+    console.log("✅ movimentacoes_carteira");
+
+    // ========================================================
+    // ÍNDICES
+    // ========================================================
+
+    await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_carteiras_entregador
+        ON carteiras_entregadores(entregador_id);
+    `);
+
+    await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_movimentacoes_carteira
+        ON movimentacoes_carteira(carteira_id);
+    `);
+
+    await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_movimentacoes_entregador
+        ON movimentacoes_carteira(entregador_id);
+    `);
+
+    await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_movimentacoes_pedido
+        ON movimentacoes_carteira(pedido_id);
+    `);
+
+    await client.query(`
+        CREATE INDEX IF NOT EXISTS idx_movimentacoes_criado
+        ON movimentacoes_carteira(criado_em DESC);
+    `);
+
+    // ========================================================
+    // REFERÊNCIA ÚNICA
+    //
+    // Impede que uma mesma movimentação financeira seja
+    // lançada duas vezes por acidente.
+    // ========================================================
+
+    await client.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS
+        idx_movimentacoes_referencia_unica
+        ON movimentacoes_carteira(
+            entregador_id,
+            referencia
+        )
+        WHERE referencia IS NOT NULL;
+    `);
+
+    console.log("✅ Índices financeiros");
+
+    console.log("");
+    console.log("🎯 Estrutura PostgreSQL verificada.");
 }
 
 // ============================================================
-// ENTREGADORES
+// GARANTIR CARTEIRAS DOS ENTREGADORES
 // ============================================================
 
-async function migrarEntregadores(client, dados) {
+async function garantirCarteiras(client) {
 
-    const lista =
-        Array.isArray(dados.entregadores)
-            ? dados.entregadores
-            : [];
+    console.log("");
+    console.log("============================================");
+    console.log("💰 VERIFICANDO CARTEIRAS DOS ENTREGADORES");
+    console.log("============================================");
 
-    for (const entregador of lista) {
+    // ========================================================
+    // CONTAR ENTREGADORES
+    // ========================================================
 
-        const id =
-            idTexto(entregador.id);
+    const entregadores =
+        await client.query(`
+            SELECT
+                COUNT(*)::int AS total
+            FROM entregadores
+        `);
 
-        if (!id) {
-            continue;
-        }
+    const totalEntregadores =
+        entregadores.rows[0].total;
 
-        await client.query(
-            `
-            INSERT INTO entregadores (
-                id,
-                nome,
-                email,
-                telefone,
-                cpf,
-                status,
-                online,
-                dados
+    console.log(
+        `🏍️ Entregadores encontrados: ${totalEntregadores}`
+    );
+
+    // ========================================================
+    // CRIAR CARTEIRA PARA QUEM AINDA NÃO POSSUI
+    // ========================================================
+
+    const resultado =
+        await client.query(`
+            INSERT INTO carteiras_entregadores (
+                entregador_id,
+                saldo,
+                limite_negativo,
+                dinheiro_em_maos,
+                total_comissoes,
+                total_recebido_clientes,
+                total_devido_restaurante,
+                total_devido_foodjet
             )
-            VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8
-            )
-            ON CONFLICT (id)
-            DO UPDATE SET
-                nome = EXCLUDED.nome,
-                email = EXCLUDED.email,
-                telefone = EXCLUDED.telefone,
-                cpf = EXCLUDED.cpf,
-                status = EXCLUDED.status,
-                online = EXCLUDED.online,
-                dados = EXCLUDED.dados
-            `,
-            [
-                id,
-                entregador.nome || null,
-                entregador.email || null,
-                entregador.telefone || null,
-                entregador.cpf || null,
-                entregador.status || null,
-                Boolean(entregador.online),
-                jsonb(entregador),
-            ]
+            SELECT
+                e.id,
+                0,
+                200,
+                0,
+                0,
+                0,
+                0,
+                0
+            FROM entregadores e
+            LEFT JOIN carteiras_entregadores c
+                ON c.entregador_id = e.id
+            WHERE c.id IS NULL
+            RETURNING id, entregador_id
+        `);
+
+    console.log(
+        `💰 Novas carteiras criadas: ${resultado.rowCount}`
+    );
+
+    // ========================================================
+    // CONTAR CARTEIRAS
+    // ========================================================
+
+    const carteiras =
+        await client.query(`
+            SELECT
+                COUNT(*)::int AS total
+            FROM carteiras_entregadores
+        `);
+
+    console.log(
+        `💰 Carteiras existentes: ${carteiras.rows[0].total}`
+    );
+
+    // ========================================================
+    // VERIFICAR ENTREGADORES SEM CARTEIRA
+    // ========================================================
+
+    const semCarteira =
+        await client.query(`
+            SELECT
+                COUNT(*)::int AS total
+            FROM entregadores e
+            LEFT JOIN carteiras_entregadores c
+                ON c.entregador_id = e.id
+            WHERE c.id IS NULL
+        `);
+
+    const faltantes =
+        semCarteira.rows[0].total;
+
+    if (faltantes === 0) {
+
+        console.log(
+            "✅ Todos os entregadores possuem carteira."
+        );
+
+    } else {
+
+        throw new Error(
+            `❌ Existem ${faltantes} entregadores sem carteira.`
         );
     }
-
-    console.log(
-        `🏍️ Entregadores migrados: ${lista.length}`
-    );
 }
 
 // ============================================================
-// PAGAMENTOS
-// ============================================================
-
-async function migrarPagamentos(client, dados) {
-
-    const lista =
-        Array.isArray(dados.pagamentos)
-            ? dados.pagamentos
-            : [];
-
-    for (let i = 0; i < lista.length; i++) {
-
-        const pagamento = lista[i];
-
-        const id =
-            idTexto(
-                pagamento.id ||
-                pagamento.paymentId ||
-                `legacy_${i + 1}`
-            );
-
-        await client.query(
-            `
-            INSERT INTO pagamentos (
-                id,
-                pedido_id,
-                status,
-                valor,
-                dados,
-                criado_em
-            )
-            VALUES (
-                $1,$2,$3,$4,$5,$6
-            )
-            ON CONFLICT (id)
-            DO UPDATE SET
-                pedido_id = EXCLUDED.pedido_id,
-                status = EXCLUDED.status,
-                valor = EXCLUDED.valor,
-                dados = EXCLUDED.dados,
-                criado_em = EXCLUDED.criado_em
-            `,
-            [
-                id,
-                idTexto(
-                    pagamento.pedidoId ||
-                    pagamento.orderId
-                ),
-                pagamento.status || null,
-                pagamento.valor !== undefined
-                    ? numeroOuZero(pagamento.valor)
-                    : null,
-                jsonb(pagamento),
-                dataOuNull(
-                    pagamento.criadoEm ||
-                    pagamento.createdAt
-                ),
-            ]
-        );
-    }
-
-    console.log(
-        `💳 Pagamentos migrados: ${lista.length}`
-    );
-}
-
-// ============================================================
-// PROMOÇÕES
-// ============================================================
-
-async function migrarPromocoes(client, dados) {
-
-    const lista =
-        Array.isArray(dados.promocoes)
-            ? dados.promocoes
-            : [];
-
-    for (const promocao of lista) {
-
-        const id =
-            idTexto(promocao.id);
-
-        if (!id) {
-            continue;
-        }
-
-        await client.query(
-            `
-            INSERT INTO promocoes (
-                id,
-                restaurante_id,
-                produto_id,
-                titulo,
-                descricao,
-                preco_original,
-                preco_promocional,
-                desconto,
-                inicio,
-                fim,
-                ativa,
-                criado_em,
-                dados
-            )
-            VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13
-            )
-            ON CONFLICT (id)
-            DO UPDATE SET
-                restaurante_id = EXCLUDED.restaurante_id,
-                produto_id = EXCLUDED.produto_id,
-                titulo = EXCLUDED.titulo,
-                descricao = EXCLUDED.descricao,
-                preco_original = EXCLUDED.preco_original,
-                preco_promocional = EXCLUDED.preco_promocional,
-                desconto = EXCLUDED.desconto,
-                inicio = EXCLUDED.inicio,
-                fim = EXCLUDED.fim,
-                ativa = EXCLUDED.ativa,
-                criado_em = EXCLUDED.criado_em,
-                dados = EXCLUDED.dados
-            `,
-            [
-                id,
-                idTexto(promocao.restauranteId),
-                idTexto(promocao.produtoId),
-                promocao.titulo ||
-                    promocao.nome ||
-                    promocao.title ||
-                    null,
-                promocao.descricao ||
-                    promocao.description ||
-                    null,
-                numeroOuZero(
-                    promocao.precoOriginal
-                ),
-                numeroOuZero(
-                    promocao.precoPromocional
-                ),
-                numeroOuZero(
-                    promocao.desconto
-                ),
-                dataOuNull(promocao.inicio),
-                dataOuNull(promocao.fim),
-                promocao.ativa !== false,
-                dataOuNull(
-                    promocao.criadoEm ||
-                    promocao.createdAt
-                ),
-                jsonb(promocao),
-            ]
-        );
-    }
-
-    console.log(
-        `🎟️ Promoções migradas: ${lista.length}`
-    );
-}
-
-// ============================================================
-// FAVORITOS
-// ============================================================
-
-async function migrarFavoritos(client, dados) {
-
-    const lista =
-        Array.isArray(dados.favoritos)
-            ? dados.favoritos
-            : [];
-
-    for (let i = 0; i < lista.length; i++) {
-
-        const favorito = lista[i];
-
-        const id =
-            idTexto(
-                favorito.id ||
-                `legacy_favorito_${i + 1}`
-            );
-
-        await client.query(
-            `
-            INSERT INTO favoritos (
-                id,
-                usuario_id,
-                restaurante_id,
-                nome,
-                descricao,
-                avaliacao,
-                logo,
-                dados
-            )
-            VALUES (
-                $1,$2,$3,$4,$5,$6,$7,$8
-            )
-            ON CONFLICT (id)
-            DO UPDATE SET
-                usuario_id = EXCLUDED.usuario_id,
-                restaurante_id = EXCLUDED.restaurante_id,
-                nome = EXCLUDED.nome,
-                descricao = EXCLUDED.descricao,
-                avaliacao = EXCLUDED.avaliacao,
-                logo = EXCLUDED.logo,
-                dados = EXCLUDED.dados
-            `,
-            [
-                id,
-                idTexto(favorito.usuarioId),
-                idTexto(favorito.restauranteId),
-                favorito.nome || null,
-                favorito.descricao || null,
-                favorito.avaliacao !== undefined
-                    ? String(favorito.avaliacao)
-                    : null,
-                favorito.logo || null,
-                jsonb(favorito),
-            ]
-        );
-    }
-
-    console.log(
-        `❤️ Favoritos migrados: ${lista.length}`
-    );
-}
-
-// ============================================================
-// RESUMO
+// RESUMO DAS TABELAS
 // ============================================================
 
 async function mostrarResumo(client) {
 
     console.log("");
     console.log("============================================");
-    console.log("📊 RESUMO POSTGRESQL");
+    console.log("📊 RESUMO ATUAL DO POSTGRESQL");
     console.log("============================================");
 
     const tabelas = [
@@ -1056,6 +537,8 @@ async function mostrarResumo(client) {
         ["produtos", "🍕"],
         ["pedidos", "📦"],
         ["entregadores", "🏍️"],
+        ["carteiras_entregadores", "💰"],
+        ["movimentacoes_carteira", "📒"],
         ["pagamentos", "💳"],
         ["pagamentos_asaas", "💰"],
         ["promocoes", "🎟️"],
@@ -1065,123 +548,253 @@ async function mostrarResumo(client) {
     for (const [tabela, emoji] of tabelas) {
 
         const resultado =
-            await client.query(
-                `SELECT COUNT(*)::int AS total FROM ${tabela}`
-            );
+            await client.query(`
+                SELECT COUNT(*)::int AS total
+                FROM ${tabela}
+            `);
 
         console.log(
-            `${emoji} ${tabela}:`,
-            resultado.rows[0].total
+            `${emoji} ${tabela}: ${resultado.rows[0].total}`
         );
     }
+
+    // ========================================================
+    // RESUMO FINANCEIRO
+    // ========================================================
+
+    const financeiro =
+        await client.query(`
+            SELECT
+                COUNT(*)::int AS entregadores,
+
+                COALESCE(
+                    SUM(saldo),
+                    0
+                ) AS saldo_total,
+
+                COALESCE(
+                    SUM(dinheiro_em_maos),
+                    0
+                ) AS dinheiro_em_maos,
+
+                COALESCE(
+                    SUM(total_comissoes),
+                    0
+                ) AS total_comissoes,
+
+                COALESCE(
+                    SUM(total_recebido_clientes),
+                    0
+                ) AS total_recebido_clientes,
+
+                COALESCE(
+                    SUM(total_devido_restaurante),
+                    0
+                ) AS total_devido_restaurante,
+
+                COALESCE(
+                    SUM(total_devido_foodjet),
+                    0
+                ) AS total_devido_foodjet
+
+            FROM carteiras_entregadores
+        `);
+
+    const dados =
+        financeiro.rows[0];
+
+    console.log("");
+    console.log("============================================");
+    console.log("💰 RESUMO FINANCEIRO");
+    console.log("============================================");
+
+    console.log(
+        "🏍️ Entregadores:",
+        dados.entregadores
+    );
+
+    console.log(
+        "💵 Saldo digital:",
+        dados.saldo_total
+    );
+
+    console.log(
+        "💰 Dinheiro em mãos:",
+        dados.dinheiro_em_maos
+    );
+
+    console.log(
+        "🟢 Total de comissões:",
+        dados.total_comissoes
+    );
+
+    console.log(
+        "💳 Total recebido de clientes:",
+        dados.total_recebido_clientes
+    );
+
+    console.log(
+        "🏪 Total devido aos restaurantes:",
+        dados.total_devido_restaurante
+    );
+
+    console.log(
+        "🟠 Total devido ao FoodJet:",
+        dados.total_devido_foodjet
+    );
 
     console.log("");
 }
 
 // ============================================================
-// MIGRAÇÃO PRINCIPAL
+// VERIFICAR POSTGRESQL
+// ============================================================
+
+async function verificarConexao(client) {
+
+    const resultado =
+        await client.query(`
+            SELECT
+                NOW() AS agora
+        `);
+
+    console.log(
+        "✅ Conexão PostgreSQL OK."
+    );
+
+    console.log(
+        "🕐 Banco:",
+        resultado.rows[0].agora
+    );
+}
+
+// ============================================================
+// EXECUÇÃO PRINCIPAL
 // ============================================================
 
 async function migrar() {
 
-    const client =
-        await pool.connect();
+    let client;
 
     try {
 
         console.log("");
         console.log("============================================");
-        console.log("🚀 MIGRAÇÃO FOODJET");
+        console.log("🚀 ATUALIZAÇÃO ESTRUTURAL FOODJET");
         console.log("============================================");
 
         console.log(
-            "📂 Arquivo:",
-            caminhoBanco
-        );
-
-        const dados =
-            carregarBancoJson();
-
-        console.log("✅ foodjet.json carregado.");
-
-        await client.query("BEGIN");
-
-        await criarTabelas(client);
-
-        await migrarUsuarios(
-            client,
-            dados
-        );
-
-        await migrarRestaurantes(
-            client,
-            dados
-        );
-
-        await migrarProdutos(
-            client,
-            dados
-        );
-
-        await migrarPedidos(
-            client,
-            dados
-        );
-
-        await migrarEntregadores(
-            client,
-            dados
-        );
-
-        await migrarPagamentos(
-            client,
-            dados
-        );
-
-        await migrarPromocoes(
-            client,
-            dados
-        );
-
-        await migrarFavoritos(
-            client,
-            dados
-        );
-
-        await client.query("COMMIT");
-
-        await mostrarResumo(client);
-
-        console.log(
-            "============================================"
+            "🐘 PostgreSQL será usado como fonte de dados."
         );
 
         console.log(
-            "🎉 MIGRAÇÃO CONCLUÍDA COM SUCESSO!"
+            "🚫 foodjet.json não será utilizado."
         );
 
-        console.log(
-            "============================================"
+        console.log("");
+
+        // ====================================================
+        // CONECTAR
+        // ====================================================
+
+        client =
+            await pool.connect();
+
+        await verificarConexao(
+            client
         );
+
+        // ====================================================
+        // INICIAR TRANSAÇÃO
+        // ====================================================
+
+        await client.query(
+            "BEGIN"
+        );
+
+        // ====================================================
+        // CRIAR / VERIFICAR ESTRUTURA
+        // ====================================================
+
+        await criarEstrutura(
+            client
+        );
+
+        // ====================================================
+        // GARANTIR CARTEIRAS
+        // ====================================================
+
+        await garantirCarteiras(
+            client
+        );
+
+        // ====================================================
+        // COMMIT
+        // ====================================================
+
+        await client.query(
+            "COMMIT"
+        );
+
+        console.log("");
+        console.log("============================================");
+        console.log("✅ ALTERAÇÕES CONFIRMADAS");
+        console.log("============================================");
+
+        // ====================================================
+        // RESUMO
+        // ====================================================
+
+        await mostrarResumo(
+            client
+        );
+
+        console.log("");
+        console.log("============================================");
+        console.log("🎉 ESTRUTURA FOODJET ATUALIZADA!");
+        console.log("============================================");
 
     } catch (error) {
 
-        try {
-            await client.query("ROLLBACK");
-        } catch (_) {}
+        if (client) {
+
+            try {
+
+                await client.query(
+                    "ROLLBACK"
+                );
+
+                console.log(
+                    "↩️ ROLLBACK executado."
+                );
+
+            } catch (rollbackError) {
+
+                console.error(
+                    "❌ Erro no ROLLBACK:",
+                    rollbackError.message
+                );
+            }
+        }
 
         console.error("");
         console.error(
-            "❌ ERRO DURANTE A MIGRAÇÃO:"
+            "❌ ERRO DURANTE A ATUALIZAÇÃO:"
         );
 
-        console.error(error);
+        console.error(
+            error.message
+        );
+
+        console.error("");
 
         process.exitCode = 1;
 
     } finally {
 
-        client.release();
+        if (client) {
+            client.release();
+        }
 
         await pool.end();
     }
@@ -1192,3 +805,4 @@ async function migrar() {
 // ============================================================
 
 migrar();
+

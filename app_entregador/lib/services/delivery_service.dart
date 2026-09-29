@@ -22,6 +22,83 @@ class DeliveryService {
   }
 
   // ==========================================================
+  // CARTEIRA DO ENTREGADOR
+  // ==========================================================
+
+  static Future<Map<String, dynamic>> carteira(
+  dynamic entregadorId,
+) async {
+  if (entregadorId == null ||
+      entregadorId.toString().trim().isEmpty) {
+    throw Exception(
+      'ID do entregador não informado.',
+    );
+  }
+
+  final id = entregadorId.toString().trim();
+
+  final url =
+      '${Api.baseUrl}/delivery/$id/wallet';
+
+  try {
+    final response = await http.get(
+      Uri.parse(url),
+      headers: await _headers(),
+    );
+
+    dynamic body;
+
+    try {
+      body = jsonDecode(response.body);
+    } catch (_) {
+      throw Exception(
+        'Resposta inválida do servidor.',
+      );
+    }
+
+    if (response.statusCode >= 200 &&
+        response.statusCode < 300) {
+      if (body is Map) {
+        if (body['sucesso'] == true) {
+          final dados = body['dados'];
+
+          if (dados is Map) {
+            return Map<String, dynamic>.from(dados);
+          }
+
+          return {};
+        }
+
+        return Map<String, dynamic>.from(body);
+      }
+    }
+
+    String mensagem =
+        'Não foi possível carregar a carteira.';
+
+    if (body is Map) {
+      mensagem =
+          body['mensagem']?.toString() ??
+          body['erro']?.toString() ??
+          body['message']?.toString() ??
+          mensagem;
+    }
+
+    throw Exception(
+      '$mensagem (HTTP ${response.statusCode})',
+    );
+  } catch (e) {
+    if (e is Exception) {
+      rethrow;
+    }
+
+    throw Exception(
+      'Erro ao conectar com o servidor.',
+    );
+  }
+}
+
+  // ==========================================================
   // BUSCAR DADOS DO ENTREGADOR
   // ==========================================================
 
@@ -29,25 +106,40 @@ class DeliveryService {
     final usuario = await AuthService.getUsuario();
 
     if (usuario == null) {
-      throw Exception('Usuário não encontrado.');
+      throw Exception(
+        'Usuário não encontrado.',
+      );
     }
 
-    final id = usuario['id']?.toString();
+    final id =
+        usuario['id']?.toString() ??
+        usuario['usuario_id']?.toString() ??
+        usuario['entregador_id']?.toString();
 
     if (id == null || id.isEmpty) {
-      throw Exception('ID do entregador não encontrado.');
+      throw Exception(
+        'ID do entregador não encontrado.',
+      );
     }
 
     final headers = await _headers();
 
+    // ========================================================
+    // PRIMEIRA TENTATIVA
+    // ========================================================
+
     try {
       final response = await http.get(
-        Uri.parse('${Api.entregadores}/$id'),
+        Uri.parse(
+          '${Api.entregadores}/$id',
+        ),
         headers: headers,
       );
 
       if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
+        final decoded = jsonDecode(
+          response.body,
+        );
 
         if (decoded is Map<String, dynamic>) {
           final dados =
@@ -65,11 +157,11 @@ class DeliveryService {
         }
       }
     } catch (_) {
-      // Continua para o fallback abaixo.
+      // Continua para o fallback.
     }
 
     // ========================================================
-    // FALLBACK
+    // FALLBACK PELO PERFIL
     // ========================================================
 
     try {
@@ -104,15 +196,20 @@ class DeliveryService {
     required dynamic id,
     required bool online,
   }) async {
-    if (id == null || id.toString().trim().isEmpty) {
-      throw Exception('ID do entregador não informado.');
+    if (id == null ||
+        id.toString().trim().isEmpty) {
+      throw Exception(
+        'ID do entregador não informado.',
+      );
     }
 
     final headers = await _headers();
 
     final response = await http.put(
       Uri.parse(
-        Api.statusEntregador(id.toString()),
+        Api.statusEntregador(
+          id.toString(),
+        ),
       ),
       headers: headers,
       body: jsonEncode({
@@ -123,10 +220,14 @@ class DeliveryService {
     Map<String, dynamic> data = {};
 
     try {
-      final decoded = jsonDecode(response.body);
+      final decoded = jsonDecode(
+        response.body,
+      );
 
       if (decoded is Map) {
-        data = Map<String, dynamic>.from(decoded);
+        data = Map<String, dynamic>.from(
+          decoded,
+        );
       }
     } catch (_) {}
 
@@ -152,12 +253,14 @@ class DeliveryService {
 
     if (entregador is Map) {
       return Entregador.fromJson(
-        Map<String, dynamic>.from(entregador),
+        Map<String, dynamic>.from(
+          entregador,
+        ),
       );
     }
 
     // ========================================================
-    // SE O BACKEND NÃO RETORNAR O ENTREGADOR
+    // FALLBACK
     // ========================================================
 
     return buscarEntregador();
@@ -183,8 +286,11 @@ class DeliveryService {
         return [];
       }
 
-      final data = jsonDecode(response.body);
+      final data = jsonDecode(
+        response.body,
+      );
 
+      // Backend retorna lista diretamente
       if (data is List) {
         return data
             .whereType<Map>()
@@ -195,6 +301,7 @@ class DeliveryService {
             .toList();
       }
 
+      // Backend retorna objeto
       if (data is Map) {
         final pedidos =
             data['pedidos'] ??
@@ -223,13 +330,17 @@ class DeliveryService {
 
   static Future<List<Map<String, dynamic>>>
       meusPedidos() async {
-    final usuario = await AuthService.getUsuario();
+    final usuario =
+        await AuthService.getUsuario();
 
     if (usuario == null) {
       return [];
     }
 
-    final id = usuario['id']?.toString();
+    final id =
+        usuario['id']?.toString() ??
+        usuario['usuario_id']?.toString() ??
+        usuario['entregador_id']?.toString();
 
     if (id == null || id.isEmpty) {
       return [];
@@ -249,9 +360,11 @@ class DeliveryService {
         return [];
       }
 
-      final data = jsonDecode(response.body);
+      final data = jsonDecode(
+        response.body,
+      );
 
-      // Backend retornando diretamente uma lista
+      // Backend retorna lista
       if (data is List) {
         return data
             .whereType<Map>()
@@ -262,7 +375,7 @@ class DeliveryService {
             .toList();
       }
 
-      // Backend retornando objeto
+      // Backend retorna objeto
       if (data is Map) {
         final pedidos =
             data['pedidos'] ??
@@ -327,7 +440,9 @@ class DeliveryService {
         'Não foi possível aceitar a entrega.';
 
     try {
-      final data = jsonDecode(response.body);
+      final data = jsonDecode(
+        response.body,
+      );
 
       if (data is Map) {
         mensagem =
@@ -372,6 +487,7 @@ class DeliveryService {
 
       case 'CHEGUEI_RESTAURANTE':
       case 'CHEGUEI':
+      case 'COLETANDO_PEDIDO':
         endpoint =
             '${Api.baseUrl}/delivery/orders/'
             '$pedidoId/arrived';
@@ -384,6 +500,7 @@ class DeliveryService {
       case 'EM_ENTREGA':
       case 'SAIU_RESTAURANTE':
       case 'INICIAR_ENTREGA':
+      case 'SAIU_PARA_ENTREGA':
         endpoint =
             '${Api.baseUrl}/delivery/orders/'
             '$pedidoId/start';
@@ -421,7 +538,9 @@ class DeliveryService {
         'Não foi possível atualizar a entrega.';
 
     try {
-      final decoded = jsonDecode(response.body);
+      final decoded = jsonDecode(
+        response.body,
+      );
 
       if (decoded is Map) {
         mensagem =

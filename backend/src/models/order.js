@@ -1,4 +1,3 @@
-
 const { pool } = require("../config/database");
 
 // ======================================================
@@ -37,14 +36,6 @@ async function prepararBanco() {
 
 // ======================================================
 // CONVERTER VALOR PARA JSONB
-// ======================================================
-//
-// IMPORTANTE:
-// O node-postgres pode interpretar arrays JavaScript como
-// arrays PostgreSQL quando passados diretamente.
-//
-// Como nossas colunas são JSONB, serializamos explicitamente.
-//
 // ======================================================
 
 function prepararJsonB(valor, fallback) {
@@ -1002,7 +993,7 @@ async function criar(pedido) {
 
 
     // ==================================================
-    // DEBUG DOS CAMPOS JSONB
+    // DEBUG
     // ==================================================
 
     console.log(
@@ -1668,11 +1659,16 @@ async function aceitarPedidoRestaurante(
 
     }
 
+    // IMPORTANTE:
+    // O restaurante aceitou.
+    // Agora o pedido fica PRONTO para
+    // entrar na distribuição aos entregadores.
+
     return atualizarDadosPedido(
         id,
         {
             status:
-                "ACEITO",
+                "PRONTO",
 
             aceitoRestauranteEm:
                 new Date().toISOString(),
@@ -1752,6 +1748,20 @@ async function aceitarEntrega(
 
     }
 
+    if (
+        !entregadorId ||
+        String(
+            entregadorId
+        ).trim() === ""
+    ) {
+
+        return null;
+
+    }
+
+    // O pedido passa a pertencer ao entregador
+    // e inicia o deslocamento até o restaurante.
+
     return atualizarDadosPedido(
         id,
         {
@@ -1761,7 +1771,7 @@ async function aceitarEntrega(
                 ),
 
             status:
-                "EM_ENTREGA",
+                "ENTREGADOR_A_CAMINHO",
 
             aceitoEm:
                 new Date().toISOString(),
@@ -1862,7 +1872,9 @@ async function listarDisponiveisEntrega() {
             `
             SELECT *
             FROM pedidos
-            WHERE status = 'PRONTO'
+            WHERE
+                status = 'PRONTO'
+                AND entregador_id IS NULL
             ORDER BY id ASC
             `
         );
@@ -1892,7 +1904,7 @@ async function finalizarEntrega(
 
     if (
         pedido.status !==
-        "EM_ENTREGA"
+        "SAIU_PARA_ENTREGA"
     ) {
 
         return null;
@@ -2240,6 +2252,11 @@ function montarPedido(row) {
             row.restaurante_id ??
             dados.restauranteId,
 
+        entregadorId:
+            row.entregador_id ??
+            dados.entregadorId ??
+            null,
+
         itens:
             row.itens ??
             dados.itens ??
@@ -2422,4 +2439,3 @@ module.exports = {
     limparPedidosAntigos,
 
 };
-
