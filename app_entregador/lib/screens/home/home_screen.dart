@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
@@ -62,6 +63,11 @@ class _HomeScreenState extends State<HomeScreen> {
   Map<String, dynamic>? _ofertaAtual;
 
   final AudioPlayer _audioPlayer = AudioPlayer();
+
+  // Entrega em andamento
+  Map<String, dynamic>? _pedidoEmAndamento;
+  String _etapaEntrega = ''; // RESTAURANTE ou CLIENTE
+  bool get _temEntregaAtiva => _pedidoEmAndamento != null;
 
   // ============================================================
   // CORES FOODJET
@@ -302,6 +308,14 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> alternarDisponibilidade() async {
     if (alterandoDisponibilidade) return;
 
+    if (_pedidoEmAndamento != null) {
+      _mostrarMensagem(
+        'Finalize a entrega atual antes de ficar offline.',
+        erro: true,
+      );
+      return;
+    }
+
     if (entregadorId == null ||
         entregadorId!.isEmpty) {
       _mostrarMensagem(
@@ -370,6 +384,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (!mounted) return;
 
     if (!disponivel) return;
+
+    // Durante uma entrega o entregador fica reservado para este pedido.
+    if (_pedidoEmAndamento != null) return;
 
     if (entregadorId == null ||
         entregadorId!.isEmpty) {
@@ -459,10 +476,16 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) return;
 
       if (resultado == true) {
+        setState(() {
+          _pedidoEmAndamento = Map<String, dynamic>.from(oferta);
+          _etapaEntrega = 'RESTAURANTE';
+          disponivel = true;
+        });
+
         await _carregarResumo();
 
         _mostrarMensagem(
-          'Entrega aceita! Vá até o restaurante.',
+          'Entrega aceita! Rota até o restaurante iniciada.',
         );
       } else if (resultado == false) {
         debugPrint(
@@ -478,6 +501,382 @@ class _HomeScreenState extends State<HomeScreen> {
       _ofertaAberta = false;
       _buscandoOferta = false;
     }
+  }
+
+  // ============================================================
+  // ENTREGA EM ANDAMENTO
+  // ============================================================
+
+  Future<void> _avancarEntrega() async {
+    final pedido = _pedidoEmAndamento;
+    if (pedido == null) return;
+
+    final pedidoId = _obterPedidoId(pedido);
+    if (pedidoId == null || pedidoId.isEmpty) {
+      _mostrarMensagem('Pedido sem identificação.', erro: true);
+      return;
+    }
+
+    try {
+      if (_etapaEntrega == 'RESTAURANTE') {
+        await DeliveryService.updateStatus(
+          pedidoId,
+          'CHEGUEI',
+        );
+
+        if (!mounted) return;
+        setState(() {
+          _etapaEntrega = 'COLETANDO';
+        });
+
+        _mostrarMensagem(
+          'Você chegou. Retire o pedido no restaurante.',
+        );
+        return;
+      }
+
+      if (_etapaEntrega == 'COLETANDO') {
+        await DeliveryService.updateStatus(
+          pedidoId,
+          'COLETEI',
+        );
+
+        if (!mounted) return;
+        setState(() {
+          _etapaEntrega = 'CLIENTE';
+        });
+
+        _mostrarMensagem(
+          'Pedido coletado. Rota até o cliente iniciada.',
+        );
+        return;
+      }
+
+      await DeliveryService.updateStatus(
+        pedidoId,
+        'ENTREGUE',
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _pedidoEmAndamento = null;
+        _etapaEntrega = '';
+        disponivel = true;
+      });
+
+      await _carregarResumo();
+
+      _mostrarMensagem('Entrega finalizada com sucesso!');
+    } catch (e) {
+      debugPrint('❌ Erro ao avançar entrega: $e');
+      _mostrarMensagem(
+        e.toString().replaceFirst('Exception: ', ''),
+        erro: true,
+      );
+    }
+  }
+
+  String _tituloDestinoAtual() {
+    if (_etapaEntrega == 'RESTAURANTE' || _etapaEntrega == 'COLETANDO') {
+      return 'Restaurante';
+    }
+    if (_etapaEntrega == 'CLIENTE') {
+      return 'Cliente';
+    }
+    return 'Destino';
+  }
+
+  String _enderecoDestinoAtual() {
+    final pedido = _pedidoEmAndamento;
+    if (pedido == null) return '';
+
+    if (_etapaEntrega == 'RESTAURANTE' || _etapaEntrega == 'COLETANDO') {
+      return _extrairEndereco(
+        pedido,
+        const [
+          'enderecoRetirada',
+          'endereco_retirada',
+          'enderecoRestaurante',
+          'endereco_restaurante',
+          'endereco_coleta',
+          'enderecoOrigem',
+          'endereco_origem',
+        ],
+        pedido['restaurante'],
+      );
+    }
+
+    return _extrairEndereco(
+      pedido,
+      const [
+        'enderecoEntrega',
+        'endereco_entrega',
+        'enderecoDestino',
+        'endereco_destino',
+        'endereco',
+      ],
+      pedido['cliente'],
+    );
+  }
+
+  String _extrairEndereco(
+    Map<String, dynamic> pedido,
+    List<String> campos,
+    dynamic objeto,
+  ) {
+    for (final campo in campos) {
+      final valor = pedido[campo];
+      if (valor != null && valor.toString().trim().isNotEmpty) {
+        return _formatarEndereco(valor);
+      }
+    }
+
+    if (objeto is Map) {
+      for (final campo in const [
+        'endereco',
+        'address',
+        'endereco_completo',
+      ]) {
+        final valor = objeto[campo];
+        if (valor != null && valor.toString().trim().isNotEmpty) {
+          return _formatarEndereco(valor);
+        }
+      }
+    }
+
+    return '';
+  }
+
+  String _formatarEndereco(dynamic endereco) {
+    if (endereco == null) return '';
+
+    if (endereco is String) {
+      final texto = endereco.trim();
+
+      // Alguns registros antigos guardam o endereço como JSON em string.
+      if (texto.startsWith('{') && texto.endsWith('}')) {
+        try {
+          final decoded = jsonDecode(texto);
+          if (decoded is Map) {
+            return _formatarEndereco(decoded);
+          }
+        } catch (_) {}
+      }
+
+      return texto;
+    }
+
+    if (endereco is Map) {
+      final partes = <String>[];
+      final rua = endereco['logradouro'] ??
+          endereco['rua'] ??
+          endereco['endereco'];
+      final numero = endereco['numero'];
+      final complemento = endereco['complemento'];
+      final bairro = endereco['bairro'];
+      final cidade = endereco['cidade'];
+      final estado = endereco['estado'] ?? endereco['uf'];
+
+      void adicionar(dynamic valor) {
+        if (valor != null && valor.toString().trim().isNotEmpty) {
+          partes.add(valor.toString().trim());
+        }
+      }
+
+      adicionar(rua);
+      adicionar(numero);
+      adicionar(complemento);
+      adicionar(bairro);
+      adicionar(cidade);
+      adicionar(estado);
+
+      return partes.join(', ');
+    }
+
+    return endereco.toString();
+  }
+
+  Widget _buildEntregaAtiva() {
+    final restaurante = _nomeRestaurantePedido(_pedidoEmAndamento ?? {});
+    final cliente = _nomeClientePedido(_pedidoEmAndamento ?? {});
+    final indoRestaurante = _etapaEntrega == 'RESTAURANTE' || _etapaEntrega == 'COLETANDO';
+    final chegouRestaurante = _etapaEntrega == 'COLETANDO';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 18),
+      child: Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(22),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.07),
+              blurRadius: 18,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFFFEBDD),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: const Icon(
+                    Icons.delivery_dining_rounded,
+                    color: laranja,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        indoRestaurante
+                            ? (chegouRestaurante ? 'Pedido aguardando coleta' : 'A caminho do restaurante')
+                            : 'A caminho do cliente',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.w900,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        indoRestaurante
+                            ? (restaurante.isEmpty ? 'Restaurante' : restaurante)
+                            : (cliente.isEmpty ? 'Cliente' : cliente),
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 9,
+                    vertical: 6,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFEFFAF2),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'EM ROTA',
+                    style: TextStyle(
+                      color: verde,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 15),
+            Row(
+              children: [
+                const Icon(
+                  Icons.location_on_outlined,
+                  size: 19,
+                  color: laranja,
+                ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    _enderecoDestinoAtual().isEmpty
+                        ? 'Endereço do destino não informado'
+                        : _enderecoDestinoAtual(),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.black54,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 52,
+              child: ElevatedButton.icon(
+                onPressed: _avancarEntrega,
+                icon: Icon(
+                  indoRestaurante
+                      ? (chegouRestaurante ? Icons.shopping_bag_rounded : Icons.storefront_rounded)
+                      : Icons.check_circle_rounded,
+                ),
+                label: Text(
+                  indoRestaurante
+                      ? (chegouRestaurante ? 'COLETEI O PEDIDO' : 'CHEGUEI AO RESTAURANTE')
+                      : 'FINALIZAR ENTREGA',
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: laranja,
+                  foregroundColor: Colors.white,
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  textStyle: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  String _nomeRestaurantePedido(Map<String, dynamic> pedido) {
+    final direto = pedido['restauranteNome'] ??
+        pedido['restaurante_nome'] ??
+        pedido['nome_restaurante'];
+    if (direto != null && direto.toString().trim().isNotEmpty) {
+      return direto.toString().trim();
+    }
+
+    final restaurante = pedido['restaurante'];
+    if (restaurante is Map) {
+      final nome = restaurante['nome'] ??
+          restaurante['name'] ??
+          restaurante['nome_restaurante'];
+      if (nome != null) return nome.toString().trim();
+    }
+
+    return '';
+  }
+
+  String _nomeClientePedido(Map<String, dynamic> pedido) {
+    final direto = pedido['clienteNome'] ??
+        pedido['cliente_nome'] ??
+        pedido['nome_cliente'];
+    if (direto != null && direto.toString().trim().isNotEmpty) {
+      return direto.toString().trim();
+    }
+
+    final cliente = pedido['cliente'];
+    if (cliente is Map) {
+      final nome = cliente['nome'] ??
+          cliente['name'] ??
+          cliente['nome_cliente'];
+      if (nome != null) return nome.toString().trim();
+    }
+
+    return '';
   }
 
   // ============================================================
@@ -605,9 +1004,15 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           _buildHeader(),
           const SizedBox(height: 14),
-          _buildStatusCard(),
-          const SizedBox(height: 14),
+          if (_pedidoEmAndamento == null) ...[
+            _buildStatusCard(),
+            const SizedBox(height: 14),
+          ],
           _buildMapa(),
+          if (_pedidoEmAndamento != null) ...[
+            const SizedBox(height: 14),
+            _buildEntregaAtiva(),
+          ],
           const SizedBox(height: 14),
           _buildResumoHoje(),
           const SizedBox(height: 14),
@@ -821,7 +1226,7 @@ class _HomeScreenState extends State<HomeScreen> {
               value: disponivel,
               activeColor: laranja,
               onChanged:
-                  alterandoDisponibilidade
+                  alterandoDisponibilidade || _pedidoEmAndamento != null
                       ? null
                       : (_) {
                           alternarDisponibilidade();
@@ -866,8 +1271,14 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         child: Stack(
           children: [
-            const Positioned.fill(
-              child: MapWidget(),
+            Positioned.fill(
+              child: MapWidget(
+                key: ValueKey(
+                  '${_obterPedidoId(_pedidoEmAndamento ?? {})}-$_etapaEntrega',
+                ),
+                enderecoDestino: _enderecoDestinoAtual(),
+                tituloDestino: _tituloDestinoAtual(),
+              ),
             ),
             Positioned(
               top: 14,
